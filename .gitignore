@@ -1,0 +1,8 @@
+.cache
+.vscode
+
+build
+protocols
+
+subprojects/wlroots/
+*/.wraplock
