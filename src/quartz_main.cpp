@@ -49,6 +49,7 @@ void qz_init(struct qz_server* server)
     wlr_fractional_scale_manager_v1_create(server->wl_display, 1);
     wlr_presentation_create(server->wl_display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->wl_display);
+    wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
 
     server->output_layout = wlr_output_layout_create(server->wl_display);
 

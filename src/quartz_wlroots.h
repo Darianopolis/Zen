@@ -55,6 +55,7 @@ extern "C" {
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_viewporter.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 
 // xwayland
 #define class class_

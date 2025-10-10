@@ -25,6 +25,15 @@ bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel)
     return false;
 }
 
+void qz_toplevel_set_size(struct qz_toplevel* toplevel, int new_width, int new_height)
+{
+    if (toplevel->last_width != new_width || toplevel->last_height != new_height) {
+        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
+        toplevel->last_width = new_width;
+        toplevel->last_height = new_height;
+    }
+}
+
 void qz_focus_toplevel(struct qz_toplevel* toplevel)
 {
     if (!toplevel) return;
@@ -33,6 +42,8 @@ void qz_focus_toplevel(struct qz_toplevel* toplevel)
     struct wlr_seat* seat = server->seat;
     struct wlr_surface* prev_surface = seat->keyboard_state.focused_surface;
     struct wlr_surface* surface = qz_toplevel_get_surface(toplevel);
+
+    server->focused_toplevel = toplevel;
 
     if (prev_surface == surface) return;
 
@@ -82,9 +93,6 @@ void qz_xdg_toplevel_map(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, map);
 
-    wlr_log(WLR_ERROR, "TOPLEVEL prev = %p", toplevel->server->toplevels.prev);
-    wlr_log(WLR_ERROR, "TOPLEVEL next = %p", toplevel->server->toplevels.next);
-
     wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
 
     qz_focus_toplevel(toplevel);
@@ -114,6 +122,14 @@ void qz_xdg_toplevel_commit(struct wl_listener* listener, void*)
 void qz_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, destroy);
+
+    if (!toplevel->server) {
+        wlr_log(WLR_ERROR, "qz_toplevel destroyed that didn't have server reference!");
+    } else {
+        if (toplevel->server->focused_toplevel == toplevel) {
+            toplevel->server->focused_toplevel = nullptr;
+        }
+    }
 
 #ifdef QZ_XWAYLAND
     QZ_UNLISTEN(toplevel->x_activate);
@@ -191,7 +207,7 @@ void qz_xdg_toplevel_request_maximize(struct wl_listener* listener, void*)
 
 void qz_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_maximize);
+    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_fullscreen);
 
     // TODO: Support fullscreen
 
@@ -236,7 +252,7 @@ void qz_xdg_popup_commit(struct wl_listener* listener, void*)
     struct qz_popup* popup = wl_container_of(listener, popup, commit);
 
     if (popup->xdg_popup->base->initial_commit) {
-        // When an xdg_surface performs an initial commit, the compositor must reply with aconfigure so the client can map the surface.
+        // When an xdg_surface performs an initial commit, the compositor must reply with a configure so the client can map the surface.
         // TODO: Ensure good popup geometry (e.g. centered, on screen)
     }
 }

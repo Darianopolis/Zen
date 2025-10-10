@@ -28,6 +28,10 @@ Arch: `wayland-protocols` `seatd` `libliftoff` `xcb-util-errors`
 
 ### CMake
 
+Options
+
+ - `QUARTZ_XWAYLAND=ON/OFF` (default `OFF`) - Enables XWayland support (experimental)
+
 ```
 python configure.py
 cmake -B build [-G Ninja]

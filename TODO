@@ -6,24 +6,24 @@
    - ✅ Add wayland protocol generation python script
    - ✅ Move to CMake project
    - ✅ Build wlroots separately / use system package
-   - ✅ Convert to C++, use wlroots wrapping trick for C++
-- Avoid XWayland for now
-   - Remove broken XWayland code
+   - ✅ Convert to C++
+- ✅ Avoid direct XWayland integration for now
+   - ✅ Remove/disable broken XWayland code
    - ✅ Set environment variables (only for some applications)
-      - ELECTRON_OZONE_PLATFORM_HINT="auto"
-      - SDL_VIDEO_DRIVER="wayland"
-- Basic shortcuts
+      - ✅ ELECTRON_OZONE_PLATFORM_HINT="auto"
+      - ✅ SDL_VIDEO_DRIVER="wayland"
+- ✅ Basic shortcuts
    - ✅ Add "spawn" helper
    - ✅ Switch MOD between Super/Alt if running standalone/nested
    - ✅ MOD + T = Launching konsole
    - ✅ MOD + D = Launching fuzzel/wofi
-   - MOD + Q = Closing focused window
+   - ✅ MOD + Q = Closing focused window
 - Compositor authority for move/size
-   - MOD + LeftClick  - Move
-   - MOD + RightClick - Size
+   - ✅ MOD + LeftClick  - Move
+   - ✅ MOD + RightClick - Size
    - Disable client requested move/size operations
 - ✅ Enable viewporter protocol
-- Ensure that xwayland-satellite is sufficient for running Steam
+- ✅ Ensure that xwayland-satellite is sufficient for running Steam
 - Add drag'n'drop support (required for browser tab dragging functionality)
 
 ### Additional
@@ -36,6 +36,7 @@
 - Media control keybinds
 - Numlock default state
 - Window list/search/cycling
+- Add wayland output spawning for multi-window testing
 
 ### Portals
 

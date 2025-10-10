@@ -1,5 +1,16 @@
 #include "quartz.hpp"
 
+#include <libinput.h>
+#include <libevdev-1.0/libevdev/libevdev.h>
+
+bool qz_is_main_mod_down(struct qz_server* server)
+{
+    auto keyboard = wlr_seat_get_keyboard(server->seat);
+    if (!keyboard) return false;
+    uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard);
+    return modifiers & server->modifier_key;
+}
+
 bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
 {
     switch (sym)
@@ -24,6 +35,12 @@ bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
         case XKB_KEY_D:
         case XKB_KEY_d:
             qz_spawn("wofi", (const char* const[]){"wofi", "--show", "drun", nullptr});
+            break;
+        case XKB_KEY_Q:
+        case XKB_KEY_q:
+            if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel) {
+                wlr_xdg_toplevel_send_close(server->focused_toplevel->xdg_toplevel);
+            }
             break;
         default:
             return false;
@@ -57,8 +74,7 @@ void qz_keyboard_handle_key(struct wl_listener* listener, void* data)
     int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 
     bool handled = false;
-    uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-    if ((modifiers & server->modifier_key) && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && qz_is_main_mod_down(server)) {
         // If MOD key is held down and this button was pressed, we attempt to process it as a compositor keybinding...
 
         for (int i = 0; i < nsyms; ++i) {
@@ -229,7 +245,8 @@ void qz_process_cursor_resize(struct qz_server* server)
 
     int new_width = new_right - new_left;
     int new_height = new_bottom - new_top;
-    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
+    // TODO: Investigate issue with GLFW/SDL Vulkan windows slow resizing
+    qz_toplevel_set_size(toplevel, new_width, new_height);
 }
 
 void qz_process_cursor_motion(struct qz_server* server, uint32_t time)
@@ -251,6 +268,7 @@ void qz_process_cursor_motion(struct qz_server* server, uint32_t time)
     }
 
     if (surface) {
+        // TODO: If mouse button held down, send mouse motion events to window that button was pressed in
         wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
         wlr_seat_pointer_notify_motion(seat, time, sx, sy);
     } else {
@@ -283,17 +301,35 @@ void qz_server_cursor_button(struct wl_listener* listener, void* data)
     struct qz_server* server = wl_container_of(listener, server, cursor_button);
     struct wlr_pointer_button_event* event = static_cast<struct wlr_pointer_button_event*>(data);
 
-    wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
+    bool handled = false;
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-        // If you released any button, exit intreactive move/resize mode
+        // If you released any button, exit interactive move/resize mode
         qz_reset_cursor_mode(server);
     } else {
+
         // Focus client if any button was pressed
         // TODO: Focus follows mouse?
         double sx, sy;
         struct wlr_surface* surface = nullptr;
         struct qz_toplevel* toplevel = qz_desktop_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-        qz_focus_toplevel(toplevel);
+        if (toplevel) {
+            qz_focus_toplevel(toplevel);
+
+            if (qz_is_main_mod_down(server)) {
+                if (event->button == BTN_LEFT) {
+                    qz_begin_interactive(toplevel, QZ_CURSOR_MOVE, 0);
+                    handled = true;
+                } else if (event->button == BTN_RIGHT) {
+                    // TODO: Edges should be set based on where mouse is in toplevel
+                    qz_begin_interactive(toplevel, QZ_CURSOR_RESIZE, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+                    handled = true;
+                }
+            }
+        }
+    }
+
+    if (!handled) {
+        wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
     }
 }
 

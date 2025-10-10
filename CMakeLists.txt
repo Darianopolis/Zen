@@ -18,6 +18,10 @@ add_library(               pixman INTERFACE)
 target_link_libraries(     pixman INTERFACE pixman-1)
 target_include_directories(pixman INTERFACE /usr/include/pixman-1)
 
+# backward-cpp
+
+add_subdirectory(3rdparty/backward-cpp)
+
 # quartz
 
 option(QUARTZ_XWAYLAND OFF)
@@ -40,6 +44,7 @@ target_link_libraries(quartz PUBLIC
     xkbcommon
     wlroots
     pixman
+    Backward::Object
     )
 
 if(QUARTZ_XWAYLAND)

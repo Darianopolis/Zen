@@ -79,6 +79,8 @@ struct qz_server
     struct wlr_box grab_geobox;
     uint32_t resize_edges;
 
+    struct qz_toplevel* focused_toplevel;
+
     struct wlr_output_layout* output_layout;
     struct wl_list outputs;
     struct wl_listener new_output;
@@ -135,6 +137,9 @@ struct qz_toplevel
     struct wl_listener x_configure;
     struct wl_listener x_set_hints;
 #endif
+
+    int last_width = -1;
+    int last_height = -1;
 };
 
 struct qz_popup
@@ -165,6 +170,7 @@ auto qz_ptr(auto&& value) { return &value; }
 
 // Here we handle compositor keybindings. this is when the compositor is processing keys, rather than passing them on to the client for its own processing
 bool qz_handle_keybinding(struct qz_server*, xkb_keysym_t);
+bool qz_is_main_mod_down(struct qz_server* server);
 
 // ---- Keyboard ----
 
@@ -234,6 +240,8 @@ void qz_server_new_output(struct wl_listener*, void*);
 
 // This function only deals with keyboard focus
 void qz_focus_toplevel(struct qz_toplevel*);
+
+void qz_toplevel_set_size(struct qz_toplevel*, int width, int height);
 
 // This returns the topmost node in the scene at the given layout coords.
 // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a quartz_client
