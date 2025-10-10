@@ -1,9 +1,5 @@
 .cache
 .vscode
 
+3rdparty/*
 build
-protocols
-
-subprojects/wlroots/
-*/.wraplock
-*/.meson-subproject-wrap-hash.txt

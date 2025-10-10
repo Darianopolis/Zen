@@ -3,9 +3,9 @@
 ### Core
 
 - Update build
-   - Add wayland protocol generation python script
-   - Move to CMake project
-   - Build wlroots separately / use system package
+   - ✅ Add wayland protocol generation python script
+   - ✅ Move to CMake project
+   - ✅ Build wlroots separately / use system package
    - Convert to C++, use wlroots wrapping trick for C++
 - Avoid XWayland for now
    - Remove broken XWayland code
@@ -28,10 +28,18 @@
 
 ### Additional
 
-- ️✅ Window zone snapping logic
+- ️Window zone snapping logic
 - Add decoration manager to tell clients to prefer server side decorations
 - Add pointer constraint protocol
    - Add shortcut to grab all input back from any clients and ignore any constraints
 - Add layer shell protocol
+- Media control keybinds
+- Numlock default state
+- Window list/search/cycling
+
+### Portals
+
+- File chooser
 - Screencast portal
 - Screenshotting
+- Application theming
