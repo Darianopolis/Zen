@@ -1,6 +1,6 @@
-#include "quartz.h"
+#include "quartz.hpp"
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
 
 #define QZ_XTRACE_ENTER wlr_log(WLR_INFO, ">>>> %s", __func__);
 #define QZ_XTRACE_LEAVE wlr_log(WLR_INFO, "<<<< %s", __func__);
@@ -95,7 +95,7 @@ void qz_xwayland_request_configure(struct wl_listener* listener, void* data)
     QZ_XTRACE_ENTER
 
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, x_configure);
-    struct wlr_xwayland_surface_configure_event* event = data;
+    struct wlr_xwayland_surface_configure_event* event = static_cast<struct wlr_xwayland_surface_configure_event*>(data);
 
     if (!toplevel->xwayland_surface->surface || !toplevel->xwayland_surface->surface->mapped) {
         wlr_xwayland_surface_configure(toplevel->xwayland_surface, event->x, event->y, event->width, event->height);
@@ -122,11 +122,11 @@ void qz_new_xwayland_surface(struct wl_listener* listener, void* data)
     QZ_XTRACE_ENTER
 
     struct qz_server* server = wl_container_of(listener, server, new_xwayland_surface);
-    struct wlr_xwayland_surface* surface = data;
+    struct wlr_xwayland_surface* surface = static_cast<struct wlr_xwayland_surface*>(data);
 
     struct qz_toplevel* toplevel;
 
-    toplevel = calloc(1, sizeof(*toplevel));
+    toplevel = static_cast<struct qz_toplevel*>(calloc(1, sizeof(*toplevel)));
     toplevel->server = server;
     toplevel->xwayland_surface = surface;
     surface->data = toplevel;

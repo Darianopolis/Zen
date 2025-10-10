@@ -1,4 +1,4 @@
-#include "quartz.h"
+#include "quartz.hpp"
 
 void qz_init(struct qz_server* server)
 {
@@ -86,7 +86,7 @@ void qz_init(struct qz_server* server)
     // Make sure containing X server does not leak through
     unsetenv("DISPLAY");
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     qz_init_xwayland(server);
 #endif
 }
@@ -112,7 +112,7 @@ void qz_run(struct qz_server* server, char* startup_cmd)
     setenv("SDL_VIDEO_DRIVER", "wayland", true);
 
     if (startup_cmd) {
-        qz_spawn("/bin/sh", (char* const[]){"/bin/sh", "-c", startup_cmd, nullptr});
+        qz_spawn("/bin/sh", (const char* const[]){"/bin/sh", "-c", startup_cmd, nullptr});
     }
 
     wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
@@ -124,7 +124,7 @@ void qz_cleanup(struct qz_server* server)
     wl_display_destroy_clients(server->wl_display);
     // TODO: Wait for clients to die properly
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     qz_destroy_xwayland(server);
 #endif
 

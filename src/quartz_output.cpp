@@ -1,4 +1,4 @@
-#include "quartz.h"
+#include "quartz.hpp"
 
 void qz_output_frame(struct wl_listener* listener, void*)
 {
@@ -17,7 +17,7 @@ void qz_output_frame(struct wl_listener* listener, void*)
 void qz_output_request_state(struct wl_listener* listener, void* data)
 {
     struct qz_output* output = wl_container_of(listener, output, request_state);
-    const struct wlr_output_event_request_state* event = data;
+    const struct wlr_output_event_request_state* event = static_cast<struct wlr_output_event_request_state*>(data);
 
     wlr_output_commit_state(output->wlr_output, event->state);
 }
@@ -37,7 +37,7 @@ void qz_output_destroy(struct wl_listener* listener, void*)
 void qz_server_new_output(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, new_output);
-    struct wlr_output* wlr_output = data;
+    struct wlr_output* wlr_output = static_cast<struct wlr_output*>(data);
 
     wlr_output_init_render(wlr_output, server->allocator, server->renderer);
 
@@ -53,7 +53,7 @@ void qz_server_new_output(struct wl_listener* listener, void* data)
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
-    struct qz_output* output = calloc(1, sizeof(*output));
+    struct qz_output* output = static_cast<struct qz_output*>(calloc(1, sizeof(*output)));
     output->wlr_output = wlr_output;
     output->server = server;
 

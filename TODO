@@ -2,11 +2,11 @@
 
 ### Core
 
-- Update build
+- ✅ Update build
    - ✅ Add wayland protocol generation python script
    - ✅ Move to CMake project
    - ✅ Build wlroots separately / use system package
-   - Convert to C++, use wlroots wrapping trick for C++
+   - ✅ Convert to C++, use wlroots wrapping trick for C++
 - Avoid XWayland for now
    - Remove broken XWayland code
    - ✅ Set environment variables (only for some applications)
@@ -23,8 +23,8 @@
    - MOD + RightClick - Size
    - Disable client requested move/size operations
 - ✅ Enable viewporter protocol
--  Ensure that xwayland-satellite is sufficient for running Steam
--  Add drag'n'drop support (required for browser tab dragging functionality)
+- Ensure that xwayland-satellite is sufficient for running Steam
+- Add drag'n'drop support (required for browser tab dragging functionality)
 
 ### Additional
 

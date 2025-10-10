@@ -11,51 +11,14 @@
 
 #include <wayland-server-core.h>
 
-#include <wlr/backend.h>
-#include <wlr/backend/drm.h>
-#include <wlr/backend/wayland.h>
-#include <wlr/backend/x11.h>
-#include <wlr/backend/headless.h>
-
-#include <wlr/render/allocator.h>
-#include <wlr/render/wlr_renderer.h>
-
-#include <wlr/util/edges.h>
-#include <wlr/util/log.h>
-
-#include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_compositor.h>
-#include <wlr/types/wlr_data_device.h>
-#include <wlr/types/wlr_input_device.h>
-#include <wlr/types/wlr_keyboard.h>
-#include <wlr/types/wlr_output.h>
-#include <wlr/types/wlr_output_layout.h>
-#include <wlr/types/wlr_pointer.h>
-#include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_subcompositor.h>
-#include <wlr/types/wlr_xcursor_manager.h>
-#include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/types/wlr_export_dmabuf_v1.h>
-#include <wlr/types/wlr_screencopy_v1.h>
-#include <wlr/types/wlr_data_control_v1.h>
-#include <wlr/types/wlr_primary_selection_v1.h>
-#include <wlr/types/wlr_single_pixel_buffer_v1.h>
-#include <wlr/types/wlr_fractional_scale_v1.h>
-#include <wlr/types/wlr_presentation_time.h>
-#include <wlr/types/wlr_alpha_modifier_v1.h>
-#include <wlr/types/wlr_viewporter.h>
-
-#include <wlr/xwayland.h>
+#include "quartz_wlroots.h"
 
 #include <xkbcommon/xkbcommon.h>
-
-#define QZ_XWAYLAND 0
 
 #define QZ_LISTEN(Event, Listener, Handler) wl_signal_add(&(Event), ((Listener).notify = (Handler), &(Listener)))
 #define QZ_UNLISTEN(Listener)               qz_unlisten(&(Listener))
 
-static
+inline
 void qz_unlisten(struct wl_listener* listener)
 {
     if (listener->notify) {
@@ -84,7 +47,7 @@ struct qz_server
     struct wlr_compositor* compositor;
     struct wlr_subcompositor* subcompositor;
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     struct wlr_xwayland* xwayland;
     struct wl_listener xwayland_ready;
     struct wl_listener new_xwayland_surface;
@@ -136,7 +99,7 @@ struct qz_output
 // enum qz_client_type
 // {
 //     QZ_CLIENT_XDG_SHELL,
-// #if QZ_XWAYLAND
+// #ifdef QZ_XWAYLAND
 //     QZ_CLIENT_XWAYLAND,
 // #endif
 // };
@@ -150,7 +113,7 @@ struct qz_toplevel
     struct wlr_scene_tree* scene_tree;
 
     struct wlr_xdg_toplevel* xdg_toplevel;
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     struct wlr_xwayland_surface* xwayland_surface;
 #endif
 
@@ -165,7 +128,7 @@ struct qz_toplevel
     struct wl_listener request_maximize;
     struct wl_listener request_fullscreen;
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     struct wl_listener x_activate;
     struct wl_listener x_associate;
     struct wl_listener x_dissociate;
@@ -194,7 +157,9 @@ struct qz_keyboard
 
 // ---- Util ----
 
-void qz_spawn(const char* file, char* const argv[]);
+void qz_spawn(const char* file, const char* const argv[]);
+
+auto qz_ptr(auto&& value) { return &value; }
 
 // ---- Policy ----
 
@@ -302,7 +267,7 @@ void qz_server_new_xdg_popup(struct wl_listener*, void*);
 
 // ---- XWayland ---
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
 void qz_init_xwayland(struct qz_server* server);
 void qz_destroy_xwayland(struct qz_server* server);
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 4.1)
 project(quartz)
 
 # wayland
@@ -20,17 +20,29 @@ target_include_directories(pixman INTERFACE /usr/include/pixman-1)
 
 # quartz
 
+option(QUARTZ_XWAYLAND OFF)
+
 add_executable(        quartz)
 target_compile_options(quartz PUBLIC
-    -std=c23
-    -D_POSIX_C_SOURCE=200809L
+    -std=c++26
     )
 target_include_directories(quartz PUBLIC src)
-target_sources(            quartz PUBLIC src/quartz.c)
-target_link_libraries(     quartz PUBLIC
+target_sources(            quartz PUBLIC
+    src/quartz_client.cpp
+    src/quartz_input.cpp
+    src/quartz_main.cpp
+    src/quartz_output.cpp
+    src/quartz_util.cpp
+    )
+target_link_libraries(quartz PUBLIC
     wayland-server
     wayland-header
     xkbcommon
     wlroots
     pixman
     )
+
+if(QUARTZ_XWAYLAND)
+    target_sources(            quartz PUBLIC src/quartz_xwayland.cpp)
+    target_compile_definitions(quartz PUBLIC QZ_XWAYLAND)
+endif()

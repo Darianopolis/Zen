@@ -1,8 +1,8 @@
-#include "quartz.h"
+#include "quartz.hpp"
 
 struct wlr_surface* qz_toplevel_get_surface(struct qz_toplevel* toplevel)
 {
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     if (toplevel->xwayland_surface) return toplevel->xwayland_surface->surface;
 #endif
 
@@ -15,7 +15,7 @@ struct wlr_surface* qz_toplevel_get_surface(struct qz_toplevel* toplevel)
 
 bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel)
 {
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     if (toplevel->xwayland_surface && toplevel->xwayland_surface->override_redirect) {
         return true;
     }
@@ -75,7 +75,7 @@ struct qz_toplevel* qz_desktop_toplevel_at(struct qz_server* server, double lx, 
         tree = tree->node.parent;
     }
 
-    return tree->node.data;
+    return static_cast<struct qz_toplevel*>(tree->node.data);
 }
 
 void qz_xdg_toplevel_map(struct wl_listener* listener, void*)
@@ -115,7 +115,7 @@ void qz_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, destroy);
 
-#if QZ_XWAYLAND
+#ifdef QZ_XWAYLAND
     QZ_UNLISTEN(toplevel->x_activate);
     QZ_UNLISTEN(toplevel->x_associate);
     QZ_UNLISTEN(toplevel->x_dissociate);
@@ -173,7 +173,7 @@ void qz_xdg_toplevel_request_move(struct wl_listener* listener, void*)
 void qz_xdg_toplevel_request_resize(struct wl_listener* listener, void* data)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_resize);
-    struct wlr_xdg_toplevel_resize_event* event = data;
+    struct wlr_xdg_toplevel_resize_event* event = static_cast<struct wlr_xdg_toplevel_resize_event*>(data);
 
     qz_begin_interactive(toplevel, QZ_CURSOR_RESIZE, event->edges);
 }
@@ -203,9 +203,9 @@ void qz_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
 void qz_server_new_xdg_toplevel(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, new_xdg_toplevel);
-    struct wlr_xdg_toplevel* xdg_toplevel = data;
+    struct wlr_xdg_toplevel* xdg_toplevel = static_cast<struct wlr_xdg_toplevel*>(data);
 
-    struct qz_toplevel* toplevel = calloc(1, sizeof(*toplevel));
+    struct qz_toplevel* toplevel = static_cast<struct qz_toplevel*>(calloc(1, sizeof(*toplevel)));
     toplevel->server = server;
     toplevel->xdg_toplevel = xdg_toplevel;
     toplevel->scene_tree = wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
@@ -253,14 +253,14 @@ void qz_xdg_popup_destroy(struct wl_listener* listener, void*)
 
 void qz_server_new_xdg_popup(struct wl_listener*, void* data)
 {
-    struct wlr_xdg_popup* xdg_popup = data;
+    struct wlr_xdg_popup* xdg_popup = static_cast<struct wlr_xdg_popup*>(data);
 
-    struct qz_popup* popup = calloc(1, sizeof(*popup));
+    struct qz_popup* popup = static_cast<struct qz_popup*>(calloc(1, sizeof(*popup)));
     popup->xdg_popup = xdg_popup;
 
     struct wlr_xdg_surface* parent = wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
     assert(parent != nullptr);
-    struct wlr_scene_tree* parent_tree = parent->data;
+    struct wlr_scene_tree* parent_tree = static_cast<struct wlr_scene_tree*>(parent->data);
     xdg_popup->base->data = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
 
     QZ_LISTEN(xdg_popup->base->surface->events.commit,  popup->commit,  qz_xdg_popup_commit);

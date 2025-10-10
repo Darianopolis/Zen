@@ -82,7 +82,6 @@ def generate_wayland_protocols():
     wayland_include = ensure_dir(wayland_dir / "include") # Directory for generate headers
 
     cmake_target_name = "wayland-header"
-
     with open(wayland_dir / "CMakeLists.txt", "w") as cmakelists:
         cmakelists.write(f"add_library({cmake_target_name}\n")
 

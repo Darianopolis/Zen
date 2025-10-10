@@ -1,4 +1,4 @@
-#include "quartz.h"
+#include "quartz.hpp"
 
 bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
 {
@@ -7,7 +7,7 @@ bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
         case XKB_KEY_Escape:
             wl_display_terminate(server->wl_display);
             break;
-        case XKB_KEY_Tab:
+        case XKB_KEY_Tab: {
             if (wl_list_length(&server->toplevels) < 2) {
                 break;
             }
@@ -16,13 +16,14 @@ bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
             struct qz_toplevel* next_toplevel = wl_container_of(server->toplevels.prev, next_toplevel, link);
             qz_focus_toplevel(next_toplevel);
             break;
+        }
         case XKB_KEY_T:
         case XKB_KEY_t:
-            qz_spawn("konsole", (char* const[]){"konsole", nullptr});
+            qz_spawn("konsole", (const char* const[]){"konsole", nullptr});
             break;
         case XKB_KEY_D:
         case XKB_KEY_d:
-            qz_spawn("wofi", (char* const[]){"wofi", "--show", "drun", nullptr});
+            qz_spawn("wofi", (const char* const[]){"wofi", "--show", "drun", nullptr});
             break;
         default:
             return false;
@@ -46,7 +47,7 @@ void qz_keyboard_handle_key(struct wl_listener* listener, void* data)
     struct qz_keyboard* keyboard = wl_container_of(listener, keyboard, key);
     struct qz_server* server = keyboard->server;
     struct wlr_seat* seat = server->seat;
-    struct wlr_keyboard_key_event* event = data;
+    struct wlr_keyboard_key_event* event = static_cast<struct wlr_keyboard_key_event*>(data);
 
     // Translate libinput keycode -> xkbcommon
     uint32_t keycode = event->keycode + 8;
@@ -92,7 +93,7 @@ void qz_server_new_keyboard(struct qz_server* server, struct wlr_input_device* d
 {
     struct wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(device);
 
-    struct qz_keyboard* keyboard = calloc(1, sizeof(*keyboard));
+    struct qz_keyboard* keyboard = static_cast<struct qz_keyboard*>(calloc(1, sizeof(*keyboard)));
     keyboard->server = server;
     keyboard->wlr_keyboard = wlr_keyboard;
 
@@ -100,9 +101,9 @@ void qz_server_new_keyboard(struct qz_server* server, struct wlr_input_device* d
     // TODO: Configuration support for keyboard layout
 
     struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    struct xkb_keymap* keymap = xkb_keymap_new_from_names(context, &(struct xkb_rule_names){
+    struct xkb_keymap* keymap = xkb_keymap_new_from_names(context, qz_ptr(xkb_rule_names{
         .layout = "gb",
-    }, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    }), XKB_KEYMAP_COMPILE_NO_FLAGS);
 
     wlr_keyboard_set_keymap(wlr_keyboard, keymap);
     xkb_keymap_unref(keymap);
@@ -128,7 +129,7 @@ void qz_server_new_pointer(struct qz_server* server, struct wlr_input_device* de
 void qz_server_new_input(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, new_input);
-    struct wlr_input_device* device = data;
+    struct wlr_input_device* device = static_cast<struct wlr_input_device*>(data);
     switch (device->type) {
         case WLR_INPUT_DEVICE_KEYBOARD:
             qz_server_new_keyboard(server, device);
@@ -151,7 +152,7 @@ void qz_server_new_input(struct wl_listener* listener, void* data)
 void qz_seat_request_set_cursor(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, request_cursor);
-    struct wlr_seat_pointer_request_set_cursor_event* event = data;
+    struct wlr_seat_pointer_request_set_cursor_event* event = static_cast<struct wlr_seat_pointer_request_set_cursor_event*>(data);
     struct wlr_seat_client* focused_client = server->seat->pointer_state.focused_client;
 
     if (focused_client == event->seat_client) {
@@ -163,7 +164,7 @@ void qz_seat_pointer_focus_change(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, pointer_focus_change);
 
-    struct wlr_seat_pointer_focus_change_event* event = data;
+    struct wlr_seat_pointer_focus_change_event* event = static_cast<struct wlr_seat_pointer_focus_change_event*>(data);
     if (event->new_surface == NULL) {
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
     }
@@ -173,7 +174,7 @@ void qz_seat_request_set_selection(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, request_set_selection);
 
-    struct wlr_seat_request_set_selection_event* event = data;
+    struct wlr_seat_request_set_selection_event* event = static_cast<struct wlr_seat_request_set_selection_event*>(data);
     wlr_seat_set_selection(server->seat, event->source, event->serial);
 }
 
@@ -260,7 +261,7 @@ void qz_process_cursor_motion(struct qz_server* server, uint32_t time)
 void qz_server_cursor_motion(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, cursor_motion);
-    struct wlr_pointer_motion_event* event = data;
+    struct wlr_pointer_motion_event* event = static_cast<struct wlr_pointer_motion_event*>(data);
 
     // TODO: Handle custom acceleration here
 
@@ -271,7 +272,7 @@ void qz_server_cursor_motion(struct wl_listener* listener, void* data)
 void qz_server_cursor_motion_absolute(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, cursor_motion_absolute);
-    struct wlr_pointer_motion_absolute_event* event = data;
+    struct wlr_pointer_motion_absolute_event* event = static_cast<struct wlr_pointer_motion_absolute_event*>(data);
 
     wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
     qz_process_cursor_motion(server, event->time_msec);
@@ -280,7 +281,7 @@ void qz_server_cursor_motion_absolute(struct wl_listener* listener, void* data)
 void qz_server_cursor_button(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, cursor_button);
-    struct wlr_pointer_button_event* event = data;
+    struct wlr_pointer_button_event* event = static_cast<struct wlr_pointer_button_event*>(data);
 
     wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
@@ -299,7 +300,7 @@ void qz_server_cursor_button(struct wl_listener* listener, void* data)
 void qz_server_cursor_axis(struct wl_listener* listener, void* data)
 {
     struct qz_server* server = wl_container_of(listener, server, cursor_axis);
-    struct wlr_pointer_axis_event* event = data;
+    struct wlr_pointer_axis_event* event = static_cast<struct wlr_pointer_axis_event*>(data);
 
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
 }
