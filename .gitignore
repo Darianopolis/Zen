@@ -6,3 +6,4 @@ protocols
 
 subprojects/wlroots/
 */.wraplock
+*/.meson-subproject-wrap-hash.txt

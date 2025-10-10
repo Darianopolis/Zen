@@ -26,9 +26,9 @@ void qz_output_destroy(struct wl_listener* listener, void*)
 {
     struct qz_output* output = wl_container_of(listener, output, destroy);
 
-    wl_list_remove(&output->frame.link);
-    wl_list_remove(&output->request_state.link);
-    wl_list_remove(&output->destroy.link);
+    QZ_UNLISTEN(output->frame);
+    QZ_UNLISTEN(output->request_state);
+    QZ_UNLISTEN(output->destroy);
     wl_list_remove(&output->link);
 
     free(output);

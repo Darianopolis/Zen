@@ -1,5 +1,30 @@
 #include "quartz.h"
 
+struct wlr_surface* qz_toplevel_get_surface(struct qz_toplevel* toplevel)
+{
+#if QZ_XWAYLAND
+    if (toplevel->xwayland_surface) return toplevel->xwayland_surface->surface;
+#endif
+
+    if (toplevel->xdg_toplevel && toplevel->xdg_toplevel->base) {
+        return toplevel->xdg_toplevel->base->surface;
+    }
+
+    return nullptr;
+}
+
+bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel)
+{
+#if QZ_XWAYLAND
+    if (toplevel->xwayland_surface && toplevel->xwayland_surface->override_redirect) {
+        return true;
+    }
+#else
+    (void)toplevel;
+#endif
+    return false;
+}
+
 void qz_focus_toplevel(struct qz_toplevel* toplevel)
 {
     if (!toplevel) return;
@@ -7,7 +32,7 @@ void qz_focus_toplevel(struct qz_toplevel* toplevel)
     struct qz_server* server = toplevel->server;
     struct wlr_seat* seat = server->seat;
     struct wlr_surface* prev_surface = seat->keyboard_state.focused_surface;
-    struct wlr_surface* surface = toplevel->xdg_toplevel->base->surface;
+    struct wlr_surface* surface = qz_toplevel_get_surface(toplevel);
 
     if (prev_surface == surface) return;
 
@@ -57,6 +82,9 @@ void qz_xdg_toplevel_map(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, map);
 
+    wlr_log(WLR_ERROR, "TOPLEVEL prev = %p", toplevel->server->toplevels.prev);
+    wlr_log(WLR_ERROR, "TOPLEVEL next = %p", toplevel->server->toplevels.next);
+
     wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
 
     qz_focus_toplevel(toplevel);
@@ -87,14 +115,22 @@ void qz_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, destroy);
 
-    wl_list_remove(&toplevel->map.link);
-    wl_list_remove(&toplevel->unmap.link);
-    wl_list_remove(&toplevel->commit.link);
-    wl_list_remove(&toplevel->destroy.link);
-    wl_list_remove(&toplevel->request_move.link);
-    wl_list_remove(&toplevel->request_resize.link);
-    wl_list_remove(&toplevel->request_maximize.link);
-    wl_list_remove(&toplevel->request_fullscreen.link);
+#if QZ_XWAYLAND
+    QZ_UNLISTEN(toplevel->x_activate);
+    QZ_UNLISTEN(toplevel->x_associate);
+    QZ_UNLISTEN(toplevel->x_dissociate);
+    QZ_UNLISTEN(toplevel->x_configure);
+    QZ_UNLISTEN(toplevel->x_set_hints);
+#endif
+
+    QZ_UNLISTEN(toplevel->map);
+    QZ_UNLISTEN(toplevel->unmap);
+    QZ_UNLISTEN(toplevel->commit);
+    QZ_UNLISTEN(toplevel->destroy);
+    QZ_UNLISTEN(toplevel->request_move);
+    QZ_UNLISTEN(toplevel->request_resize);
+    QZ_UNLISTEN(toplevel->request_maximize);
+    QZ_UNLISTEN(toplevel->request_fullscreen);
 
     free(toplevel);
 }
@@ -209,8 +245,8 @@ void qz_xdg_popup_destroy(struct wl_listener* listener, void*)
 {
     struct qz_popup* popup = wl_container_of(listener, popup, destroy);
 
-    wl_list_remove(&popup->commit.link);
-    wl_list_remove(&popup->destroy.link);
+    QZ_UNLISTEN(popup->commit);
+    QZ_UNLISTEN(popup->destroy);
 
     free(popup);
 }

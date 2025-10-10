@@ -12,9 +12,17 @@
 #include <wayland-server-core.h>
 
 #include <wlr/backend.h>
+#include <wlr/backend/drm.h>
+#include <wlr/backend/wayland.h>
+#include <wlr/backend/x11.h>
+#include <wlr/backend/headless.h>
+
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
+
 #include <wlr/util/edges.h>
+#include <wlr/util/log.h>
+
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
@@ -28,14 +36,35 @@
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/util/log.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_data_control_v1.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
+#include <wlr/types/wlr_single_pixel_buffer_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_alpha_modifier_v1.h>
+#include <wlr/types/wlr_viewporter.h>
+
+#include <wlr/xwayland.h>
 
 #include <xkbcommon/xkbcommon.h>
 
-#define QZ_LISTEN(Event, Listener, Handler) \
-    wl_signal_add(&(Event), ((Listener).notify = (Handler), &(Listener)))
+#define QZ_XWAYLAND 0
 
-#define QZ_MODIFIER_KEY WLR_MODIFIER_LOGO
+#define QZ_LISTEN(Event, Listener, Handler) wl_signal_add(&(Event), ((Listener).notify = (Handler), &(Listener)))
+#define QZ_UNLISTEN(Listener)               qz_unlisten(&(Listener))
+
+static
+void qz_unlisten(struct wl_listener* listener)
+{
+    if (listener->notify) {
+        wl_list_remove(&listener->link);
+        listener->notify = nullptr;
+    } else {
+        wlr_log(WLR_INFO, "QUARTZ_TRACE: unlisten called on non-activated listener");
+    }
+}
 
 enum qz_cursor_mode
 {
@@ -52,6 +81,14 @@ struct qz_server
     struct wlr_allocator* allocator;
     struct wlr_scene* scene;
     struct wlr_scene_output_layout* scene_output_layout;
+    struct wlr_compositor* compositor;
+    struct wlr_subcompositor* subcompositor;
+
+#if QZ_XWAYLAND
+    struct wlr_xwayland* xwayland;
+    struct wl_listener xwayland_ready;
+    struct wl_listener new_xwayland_surface;
+#endif
 
     struct wlr_xdg_shell* xdg_shell;
     struct wl_listener new_xdg_toplevel;
@@ -82,6 +119,8 @@ struct qz_server
     struct wlr_output_layout* output_layout;
     struct wl_list outputs;
     struct wl_listener new_output;
+
+    uint32_t modifier_key;
 };
 
 struct qz_output
@@ -94,20 +133,45 @@ struct qz_output
     struct wl_listener destroy;
 };
 
+// enum qz_client_type
+// {
+//     QZ_CLIENT_XDG_SHELL,
+// #if QZ_XWAYLAND
+//     QZ_CLIENT_XWAYLAND,
+// #endif
+// };
+
 struct qz_toplevel
 {
+    // enum qz_client_type type;
+
     struct wl_list link;
     struct qz_server* server;
-    struct wlr_xdg_toplevel* xdg_toplevel;
     struct wlr_scene_tree* scene_tree;
+
+    struct wlr_xdg_toplevel* xdg_toplevel;
+#if QZ_XWAYLAND
+    struct wlr_xwayland_surface* xwayland_surface;
+#endif
+
     struct wl_listener map;
     struct wl_listener unmap;
     struct wl_listener commit;
+
     struct wl_listener destroy;
+
     struct wl_listener request_move;
     struct wl_listener request_resize;
     struct wl_listener request_maximize;
     struct wl_listener request_fullscreen;
+
+#if QZ_XWAYLAND
+    struct wl_listener x_activate;
+    struct wl_listener x_associate;
+    struct wl_listener x_dissociate;
+    struct wl_listener x_configure;
+    struct wl_listener x_set_hints;
+#endif
 };
 
 struct qz_popup
@@ -127,6 +191,10 @@ struct qz_keyboard
     struct wl_listener key;
     struct wl_listener destroy;
 };
+
+// ---- Util ----
+
+void qz_spawn(const char* file, char* const argv[]);
 
 // ---- Policy ----
 
@@ -152,7 +220,7 @@ void qz_seat_request_set_cursor(struct wl_listener*, void*);
 void qz_seat_pointer_focus_change(struct wl_listener*, void*);
 // Reset the cursor mode to passthrough
 void qz_reset_cursor_mode(struct qz_server*);
-// Resizing the grabbed toplevel can be a little bit complicated, because we could bre resizing from any corner or edge.
+// Resizing the grabbed toplevel can be a little bit complicated, because we could be resizing from any corner or edge.
 // This not only resizes the toplevel on one or two axes, but can also move the toplevel if you resize
 // From the top or left edges (or top-left corner)
 void qz_process_cursor_resize(struct qz_server*);
@@ -206,6 +274,9 @@ void qz_focus_toplevel(struct qz_toplevel*);
 // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a quartz_client
 struct qz_toplevel* qz_desktop_toplevel_at(struct qz_server*, double lx, double ly, struct wlr_surface**, double *sx, double *sy);
 
+struct wlr_surface* qz_toplevel_get_surface(struct qz_toplevel* toplevel);
+bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel);
+
 // Called when the surface is mapped, or ready to display on-screen
 void qz_xdg_toplevel_map(struct wl_listener*, void*);
 // Called when the surface is unmapped, and should no longer be shown
@@ -228,5 +299,15 @@ void qz_server_new_xdg_toplevel(struct wl_listener*, void*);
 void qz_xdg_popup_commit(struct wl_listener*, void*);
 void qz_xdg_popup_destroy(struct wl_listener*, void*);
 void qz_server_new_xdg_popup(struct wl_listener*, void*);
+
+// ---- XWayland ---
+
+#if QZ_XWAYLAND
+void qz_init_xwayland(struct qz_server* server);
+void qz_destroy_xwayland(struct qz_server* server);
+
+void qz_xwayland_ready(struct wl_listener*, void*);
+void qz_new_xwayland_surface(struct wl_listener*, void*);
+#endif
 
 #endif

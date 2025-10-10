@@ -16,6 +16,14 @@ bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
             struct qz_toplevel* next_toplevel = wl_container_of(server->toplevels.prev, next_toplevel, link);
             qz_focus_toplevel(next_toplevel);
             break;
+        case XKB_KEY_T:
+        case XKB_KEY_t:
+            qz_spawn("konsole", (char* const[]){"konsole", nullptr});
+            break;
+        case XKB_KEY_D:
+        case XKB_KEY_d:
+            qz_spawn("wofi", (char* const[]){"wofi", "--show", "drun", nullptr});
+            break;
         default:
             return false;
     }
@@ -49,7 +57,7 @@ void qz_keyboard_handle_key(struct wl_listener* listener, void* data)
 
     bool handled = false;
     uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-    if ((modifiers & QZ_MODIFIER_KEY) && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if ((modifiers & server->modifier_key) && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
         // If MOD key is held down and this button was pressed, we attempt to process it as a compositor keybinding...
 
         for (int i = 0; i < nsyms; ++i) {
@@ -71,9 +79,9 @@ void qz_keyboard_handle_destroy(struct wl_listener* listener, void*)
 {
     struct qz_keyboard* keyboard = wl_container_of(listener, keyboard, destroy);
 
-    wl_list_remove(&keyboard->modifiers.link);
-    wl_list_remove(&keyboard->key.link);
-    wl_list_remove(&keyboard->destroy.link);
+    QZ_UNLISTEN(keyboard->modifiers);
+    QZ_UNLISTEN(keyboard->key);
+    QZ_UNLISTEN(keyboard->destroy);
     wl_list_remove(&keyboard->link);
     free(keyboard);
 
