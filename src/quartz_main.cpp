@@ -56,7 +56,6 @@ void qz_init(qz_server* server)
     server->output_layout = wlr_output_layout_create(server->wl_display);
     server->listeners.listen(&server->output_layout->events.change, server, qz_server_output_layout_change);
 
-    wl_list_init(&server->outputs);
     server->listeners.listen(&server->backend->events.new_output, server, qz_server_new_output);
 
     server->scene = wlr_scene_create();
@@ -64,7 +63,6 @@ void qz_init(qz_server* server)
     // TODO: drag icon should be in a layer above everything else (implement layer shell extension!)
     server->drag_icon_parent = wlr_scene_tree_create(&server->scene->tree);
 
-    wl_list_init(&server->toplevels);
     server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
     server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, qz_server_new_xdg_toplevel);
     server->listeners.listen(&server->xdg_shell->events.new_popup,    server, qz_server_new_xdg_popup);
@@ -81,7 +79,6 @@ void qz_init(qz_server* server)
     server->listeners.listen(&server->cursor->events.axis,            server, qz_server_cursor_axis);
     server->listeners.listen(&server->cursor->events.frame,           server, qz_server_cursor_frame);
 
-    wl_list_init(&server->keyboards);
     server->listeners.listen(&server->backend->events.new_input, server, qz_server_new_input);
 
     server->seat = wlr_seat_create(server->wl_display, "seat0");

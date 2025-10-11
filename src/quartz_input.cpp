@@ -19,12 +19,12 @@ bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
             wl_display_terminate(server->wl_display);
             break;
         case XKB_KEY_Tab: {
-            if (wl_list_length(&server->toplevels) < 2) {
+            if (server->toplevels.size() < 2) {
                 break;
             }
             // TODO: Enter focus cycling mode until MOD key is released,
             //       at which point currently cycled window will be moved to top of focus stack
-            qz_toplevel* next_toplevel = wl_container_of(server->toplevels.prev, next_toplevel, link);
+            qz_toplevel* next_toplevel = server->toplevels.front();
             qz_focus_toplevel(next_toplevel);
             break;
         }
@@ -99,7 +99,7 @@ void qz_keyboard_handle_destroy(wl_listener* listener, void*)
 
     qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
 
-    wl_list_remove(&keyboard->link);
+    std::erase(keyboard->server->keyboards, keyboard);
     delete keyboard;
 
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
@@ -132,7 +132,7 @@ void qz_server_new_keyboard(qz_server* server, wlr_input_device* device)
 
     wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
 
-    wl_list_insert(&server->keyboards, &keyboard->link);
+    server->keyboards.emplace_back(keyboard);
 }
 
 void qz_server_new_pointer(qz_server* server, wlr_input_device* device)
@@ -158,7 +158,7 @@ void qz_server_new_input(wl_listener* listener, void* data)
     }
 
     uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-    if (!wl_list_empty(&server->keyboards)) {
+    if (!server->keyboards.empty()) {
         caps |= WL_SEAT_CAPABILITY_KEYBOARD;
     }
 

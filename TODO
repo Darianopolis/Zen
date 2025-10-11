@@ -65,5 +65,5 @@
 - ✅ Use new/delete instead of calloc/free
 - ✅ Use dynamic wl_listener warpper
 - ✅ Rename structures and drop `struct` prefix?
-- Replace wl_list/wl_array with standard containers
+- ✅ Replace wl_list/wl_array with standard containers
 - Unified C++ format based logging

@@ -54,7 +54,7 @@ void qz_output_destroy(wl_listener* listener, void*)
 {
     qz_output* output = qz_listener_userdata<qz_output*>(listener);
 
-    wl_list_remove(&output->link);
+    std::erase(output->server->outputs, output);
 
     wlr_scene_node_destroy(&output->background->node);
 
@@ -92,7 +92,7 @@ void qz_server_new_output(wl_listener* listener, void* data)
     output->listeners.listen(&wlr_output->events.request_state, output, qz_output_request_state);
     output->listeners.listen(&wlr_output->events.destroy,       output, qz_output_destroy);
 
-    wl_list_insert(&server->outputs, &output->link);
+    server->outputs.emplace_back(output);
 
     // Add to output layout. `add_auto` arranges outputs from left-to-right in the order they appear
     // TODO: Configure size, position, scale
@@ -112,8 +112,7 @@ void qz_server_output_layout_change(wl_listener* listener, void*)
 
     // TODO: Handled output removal, addition
 
-    qz_output* output;
-    wl_list_for_each(output, &server->outputs, link) {
+    for (qz_output* output : server->outputs) {
         wlr_box bounds = qz_output_get_bounds(output);
         if (output->background) {
             wlr_scene_node_set_position(&output->background->node, bounds.x, bounds.y);

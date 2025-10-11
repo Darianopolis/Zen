@@ -61,8 +61,8 @@ void qz_focus_toplevel(qz_toplevel* toplevel)
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
-    wl_list_remove(&toplevel->link);
-    wl_list_insert(&server->toplevels, &toplevel->link);
+    std::erase(server->toplevels, toplevel);
+    server->toplevels.emplace_back(toplevel);
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
 
     if (keyboard) {
@@ -101,7 +101,7 @@ void qz_toplevel_map(wl_listener* listener, void*)
 {
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
-    wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
+    toplevel->server->toplevels.emplace_back(toplevel);
 
     qz_focus_toplevel(toplevel);
 }
@@ -115,7 +115,7 @@ void qz_toplevel_unmap(wl_listener* listener, void*)
         qz_reset_cursor_mode(toplevel->server);
     }
 
-    wl_list_remove(&toplevel->link);
+    std::erase(toplevel->server->toplevels, toplevel);
 }
 
 void qz_toplevel_commit(wl_listener* listener, void*)

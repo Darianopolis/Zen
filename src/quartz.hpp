@@ -16,6 +16,8 @@
 #include "quartz_wlroots.h"
 #include "quartz_util.hpp"
 
+#include <vector>
+
 enum class qz_cursor_mode
 {
     passthrough,
@@ -24,6 +26,8 @@ enum class qz_cursor_mode
 };
 
 struct qz_toplevel;
+struct qz_output;
+struct qz_keyboard;
 
 struct qz_server
 {
@@ -39,13 +43,13 @@ struct qz_server
     wlr_subcompositor* subcompositor;
 
     wlr_xdg_shell* xdg_shell;
-    wl_list toplevels;
+    std::vector<qz_toplevel*> toplevels;
 
     wlr_cursor* cursor;
     wlr_xcursor_manager* cursor_manager;
 
     wlr_seat* seat;
-    wl_list keyboards;
+    std::vector<qz_keyboard*> keyboards;
 
     qz_cursor_mode cursor_mode;
     qz_toplevel* grabbed_toplevel;
@@ -56,7 +60,7 @@ struct qz_server
     qz_toplevel* focused_toplevel;
 
     wlr_output_layout* output_layout;
-    wl_list outputs;
+    std::vector<qz_output*> outputs;
 
     uint32_t modifier_key;
 
@@ -68,7 +72,6 @@ struct qz_output
 {
     qz_listener_set listeners;
 
-    wl_list link;
     qz_server* server;
     wlr_output* wlr_output;
     wlr_scene_output* scene_output;
@@ -80,7 +83,6 @@ struct qz_toplevel
 {
     qz_listener_set listeners;
 
-    wl_list link;
     qz_server* server;
     wlr_scene_tree* scene_tree;
 
@@ -100,7 +102,6 @@ struct qz_keyboard
 {
     qz_listener_set listeners;
 
-    wl_list link;
     qz_server* server;
     wlr_keyboard* wlr_keyboard;
 };
