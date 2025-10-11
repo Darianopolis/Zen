@@ -36,10 +36,6 @@ struct qz_server
     struct wlr_compositor* compositor;
     struct wlr_subcompositor* subcompositor;
 
-#ifdef QZ_XWAYLAND
-    struct wlr_xwayland* xwayland;
-#endif
-
     struct wlr_xdg_shell* xdg_shell;
     struct wl_list toplevels;
 
@@ -81,9 +77,6 @@ struct qz_output
 // enum qz_client_type
 // {
 //     QZ_CLIENT_XDG_SHELL,
-// #ifdef QZ_XWAYLAND
-//     QZ_CLIENT_XWAYLAND,
-// #endif
 // };
 
 struct qz_toplevel
@@ -97,9 +90,6 @@ struct qz_toplevel
     struct wlr_scene_tree* scene_tree;
 
     struct wlr_xdg_toplevel* xdg_toplevel;
-#ifdef QZ_XWAYLAND
-    struct wlr_xwayland_surface* xwayland_surface;
-#endif
 
     struct wlr_box prev_bounds;
 };
@@ -211,7 +201,6 @@ void qz_toplevel_set_fullscreen(struct qz_toplevel*, bool fullscreen);
 struct qz_toplevel* qz_desktop_toplevel_at(struct qz_server*, double lx, double ly, struct wlr_surface**, double *sx, double *sy);
 
 struct wlr_surface* qz_toplevel_get_surface(struct qz_toplevel* toplevel);
-bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel);
 
 // Called when the surface is mapped, or ready to display on-screen
 void qz_xdg_toplevel_map(struct wl_listener*, void*);
@@ -233,15 +222,5 @@ void qz_server_new_xdg_toplevel(struct wl_listener*, void*);
 void qz_xdg_popup_commit(struct wl_listener*, void*);
 void qz_xdg_popup_destroy(struct wl_listener*, void*);
 void qz_server_new_xdg_popup(struct wl_listener*, void*);
-
-// ---- XWayland ---
-
-#ifdef QZ_XWAYLAND
-void qz_init_xwayland(struct qz_server* server);
-void qz_destroy_xwayland(struct qz_server* server);
-
-void qz_xwayland_ready(struct wl_listener*, void*);
-void qz_new_xwayland_surface(struct wl_listener*, void*);
-#endif
 
 #endif

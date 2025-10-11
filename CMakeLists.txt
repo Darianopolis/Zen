@@ -52,8 +52,3 @@ target_link_libraries(quartz PUBLIC
     libevdev
     Backward::Object
     )
-
-if(QUARTZ_XWAYLAND)
-    target_sources(            quartz PUBLIC src/quartz_xwayland.cpp)
-    target_compile_definitions(quartz PUBLIC QZ_XWAYLAND)
-endif()

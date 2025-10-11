@@ -93,10 +93,6 @@ void qz_init(struct qz_server* server)
 
     // Make sure containing X server does not leak through
     unsetenv("DISPLAY");
-
-#ifdef QZ_XWAYLAND
-    qz_init_xwayland(server);
-#endif
 }
 
 void qz_run(struct qz_server* server, char* startup_cmd)
@@ -131,10 +127,6 @@ void qz_cleanup(struct qz_server* server)
 {
     wl_display_destroy_clients(server->wl_display);
     // TODO: Wait for clients to die properly
-
-#ifdef QZ_XWAYLAND
-    qz_destroy_xwayland(server);
-#endif
 
     server->listeners.clear();
 

@@ -2,27 +2,11 @@
 
 struct wlr_surface* qz_toplevel_get_surface(struct qz_toplevel* toplevel)
 {
-#ifdef QZ_XWAYLAND
-    if (toplevel->xwayland_surface) return toplevel->xwayland_surface->surface;
-#endif
-
     if (toplevel->xdg_toplevel && toplevel->xdg_toplevel->base) {
         return toplevel->xdg_toplevel->base->surface;
     }
 
     return nullptr;
-}
-
-bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel)
-{
-#ifdef QZ_XWAYLAND
-    if (toplevel->xwayland_surface && toplevel->xwayland_surface->override_redirect) {
-        return true;
-    }
-#else
-    (void)toplevel;
-#endif
-    return false;
 }
 
 void qz_toplevel_set_bounds(struct qz_toplevel* toplevel, wlr_box box)
