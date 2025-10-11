@@ -7,10 +7,15 @@ add_subdirectory(3rdparty/wayland)
 
 # wlroots
 
-add_library(               wlroots INTERFACE)
-target_compile_definitions(wlroots INTERFACE WLR_USE_UNSTABLE)
-target_link_libraries(     wlroots INTERFACE wlroots-0.19)
-target_include_directories(wlroots INTERFACE /usr/include/wlroots-0.19)
+set(QUARTZ_USE_GIT_WLROOTS OFF)
+if (QUARTZ_USE_GIT_WLROOTS)
+    add_subdirectory(3rdparty/wlroots-install)
+else()
+    add_library(               wlroots INTERFACE)
+    target_compile_definitions(wlroots INTERFACE WLR_USE_UNSTABLE)
+    target_link_libraries(     wlroots INTERFACE wlroots-0.19)
+    target_include_directories(wlroots INTERFACE /usr/include/wlroots-0.19)
+endif()
 
 # libevdev
 

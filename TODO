@@ -28,6 +28,8 @@
 - ✅ Fullscreen support
 - Minimal multi display configuration
    - Add wayland output spawning for multi-window testing
+- Add pointer constraint protocol
+- ️Basic window zone snapping logic
 
 ### Bugs
 
@@ -39,10 +41,8 @@
 
 ### Additional
 
-- ️Window zone snapping logic
+- Shortcut to grab all input back from any clients and ignore any constraints
 - Add decoration manager to tell clients to prefer server side decorations
-- Add pointer constraint protocol
-   - Add shortcut to grab all input back from any clients and ignore any constraints
 - Add layer shell protocol
 - Media control keybinds
 - Numlock default state

@@ -1,5 +1,4 @@
-#ifndef QUARTZ_H
-#define QUARTZ_H
+#pragma once
 
 #include <assert.h>
 #include <getopt.h>
@@ -181,5 +180,3 @@ void qz_server_new_xdg_toplevel(    wl_listener*, void*);
 void qz_xdg_popup_commit(    wl_listener*, void*);
 void qz_xdg_popup_destroy(   wl_listener*, void*);
 void qz_server_new_xdg_popup(wl_listener*, void*);
-
-#endif

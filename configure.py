@@ -1,15 +1,8 @@
 
 import os
-import argparse
 import sys
 from pathlib import Path
 import subprocess
-import json
-import glob
-import asyncio
-import logging
-import multiprocessing
-import struct
 
 # -----------------------------------------------------------------------------
 
@@ -46,10 +39,6 @@ def panic(message, code = 1):
     print(f"[{color_fatal}FATAL{color_reset}] {message}")
     sys.exit(code)
 
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 
 def ensure_dir(path):
@@ -110,3 +99,58 @@ def generate_wayland_protocols():
         cmakelists.write(f"target_include_directories({cmake_target_name} PUBLIC include)\n")
 
 generate_wayland_protocols()
+
+# -----------------------------------------------------------------------------
+
+def git_fetch(dir, repo, branch):
+    if dir.exists():
+        cmd = ["git", "pull"]
+        log_debug(f"{cmd} @ {dir}")
+        subprocess.run(cmd, cwd = dir)
+    else:
+        cmd = ["git", "clone", repo, "--branch", branch, dir]
+        log_debug(cmd)
+        subprocess.run(cmd)
+
+backward_cpp_src_dir = vendor_dir / "backward-cpp"
+wlroots_src_dir      = vendor_dir / "wlroots"
+
+def update_git_deps():
+    git_fetch(backward_cpp_src_dir, "https://github.com/bombela/backward-cpp.git",        "master")
+    git_fetch(wlroots_src_dir,      "https://gitlab.freedesktop.org/wlroots/wlroots.git", "master")
+
+update_git_deps()
+
+# -----------------------------------------------------------------------------
+
+def build_wlroots():
+    version = "0.20"
+
+    build_dir   = vendor_dir.absolute() / "wlroots-build"
+    install_dir = vendor_dir.absolute() / "wlroots-install"
+
+    cmd = ["meson", "setup", "--reconfigure", "--default-library", "static", "--prefix", install_dir, build_dir]
+    log_debug(cmd)
+    subprocess.run(cmd, cwd=wlroots_src_dir)
+
+    cmd = ["meson", "compile", "-C", build_dir]
+    log_debug(cmd)
+    subprocess.run(cmd)
+
+    cmd = ["meson", "install", "-q", "-C", build_dir]
+    log_debug(cmd)
+    subprocess.run(cmd)
+
+    with open(install_dir / "CMakeLists.txt", "w") as cmakelists:
+        cmakelists.write("add_library(               wlroots INTERFACE)\n")
+
+        cmd = ["pkg-config", "--static", "--libs", f"wlroots-{version}"]
+        env = os.environ.copy()
+        env["PKG_CONFIG_PATH"] = install_dir / "lib/pkgconfig"
+        res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+        cmakelists.write(f"target_include_directories(wlroots INTERFACE include/wlroots-{version})\n")
+        cmakelists.write(f"target_link_options(       wlroots INTERFACE {res.stdout.strip()})\n")
+        cmakelists.write( "target_compile_definitions(wlroots INTERFACE -DWLR_USE_UNSTABLE)")
+
+build_wlroots()
