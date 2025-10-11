@@ -35,6 +35,8 @@ void qz_init(struct qz_server* server)
         return;
     }
 
+    // TODO: Split initialization of subsystems
+
     // Create some hands-off wlroots interfaces
     server->compositor = wlr_compositor_create(server->wl_display, 5, server->renderer);
     server->subcompositor = wlr_subcompositor_create(server->wl_display);
@@ -52,12 +54,15 @@ void qz_init(struct qz_server* server)
     wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
 
     server->output_layout = wlr_output_layout_create(server->wl_display);
+    QZ_LISTEN(server->output_layout->events.change, server->output_layout_change, qz_server_output_layout_change);
 
     wl_list_init(&server->outputs);
     QZ_LISTEN(server->backend->events.new_output, server->new_output, qz_server_new_output);
 
     server->scene = wlr_scene_create();
     server->scene_output_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
+    // TODO: drag icon should be in a layer above everything else (implement layer shell extension!)
+    server->drag_icon_parent = wlr_scene_tree_create(&server->scene->tree);
 
     wl_list_init(&server->toplevels);
     server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
@@ -83,6 +88,8 @@ void qz_init(struct qz_server* server)
     QZ_LISTEN(              server->seat->events.request_set_cursor,    server->request_cursor,        qz_seat_request_set_cursor);
     QZ_LISTEN(server->seat->pointer_state.events.focus_change,          server->pointer_focus_change,  qz_seat_pointer_focus_change);
     QZ_LISTEN(              server->seat->events.request_set_selection, server->request_set_selection, qz_seat_request_set_selection);
+    QZ_LISTEN(              server->seat->events.request_start_drag,    server->request_start_drag,    qz_seat_request_start_drag);
+    QZ_LISTEN(              server->seat->events.start_drag,            server->start_drag,            qz_seat_start_drag);
 
     // Make sure containing X server does not leak through
     unsetenv("DISPLAY");
@@ -141,16 +148,19 @@ void qz_cleanup(struct qz_server* server)
     QZ_UNLISTEN(server->request_cursor);
     QZ_UNLISTEN(server->pointer_focus_change);
     QZ_UNLISTEN(server->request_set_selection);
+    QZ_UNLISTEN(server->request_start_drag);
+    QZ_UNLISTEN(server->start_drag);
 
     QZ_UNLISTEN(server->new_output);
+    QZ_UNLISTEN(server->output_layout_change);
 
-    wlr_scene_node_destroy(&server->scene->tree.node);
     wlr_xcursor_manager_destroy(server->cursor_manager);
     wlr_cursor_destroy(server->cursor);
     wlr_allocator_destroy(server->allocator);
     wlr_renderer_destroy(server->renderer);
     wlr_backend_destroy(server->backend);
     wl_display_destroy(server->wl_display);
+    wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
 int qz_main(int argc, char* argv[])

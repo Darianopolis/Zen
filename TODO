@@ -18,13 +18,24 @@
    - ✅ MOD + T = Launching konsole
    - ✅ MOD + D = Launching fuzzel/wofi
    - ✅ MOD + Q = Closing focused window
-- Compositor authority for move/size
+- ✅ Compositor authority for move/size
    - ✅ MOD + LeftClick  - Move
    - ✅ MOD + RightClick - Size
-   - Disable client requested move/size operations
+   - ✅ Remove client requested move/size operations
 - ✅ Enable viewporter protocol
 - ✅ Ensure that xwayland-satellite is sufficient for running Steam
-- Add drag'n'drop support (required for browser tab dragging functionality)
+- ✅ Add drag'n'drop support (required for browser tab dragging functionality)
+- ✅ Fullscreen support
+- Minimal multi display configuration
+   - Add wayland output spawning for multi-window testing
+
+### Bugs
+
+- Minecraft, GIMP
+   - [wayland] Data too big for buffer (X + Y > 4096)<br>
+     [wayland] error in client communication (pid Z)
+- Minecraft, SDL3+Vulkan
+   - Extremely laggy resizing
 
 ### Additional
 
@@ -36,7 +47,10 @@
 - Media control keybinds
 - Numlock default state
 - Window list/search/cycling
-- Add wayland output spawning for multi-window testing
+- Output management
+   - Dynamic output removal/creation/configuration
+   - Output scaling
+   - wlr_output_configuration_v1 protocol?
 
 ### Portals
 
@@ -44,3 +58,12 @@
 - Screencast portal
 - Screenshotting
 - Application theming
+
+### Code cleanup
+
+- ✅ Use new/delete instead of calloc/free
+- Replace wl_list/wl_array with standard containers
+- Replace wl_container_of with explicitly typed helper
+- Prefer `auto` everywhere
+- Rename structures and drop `struct` prefix?
+- Unified C++ format based logging

@@ -126,7 +126,7 @@ void qz_new_xwayland_surface(struct wl_listener* listener, void* data)
 
     struct qz_toplevel* toplevel;
 
-    toplevel = static_cast<struct qz_toplevel*>(calloc(1, sizeof(*toplevel)));
+    toplevel = new qz_toplevel{};
     toplevel->server = server;
     toplevel->xwayland_surface = surface;
     surface->data = toplevel;

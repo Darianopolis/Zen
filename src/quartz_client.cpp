@@ -25,13 +25,32 @@ bool qz_toplevel_is_unmanaged(struct qz_toplevel* toplevel)
     return false;
 }
 
-void qz_toplevel_set_size(struct qz_toplevel* toplevel, int new_width, int new_height)
+void qz_toplevel_set_bounds(struct qz_toplevel* toplevel, wlr_box box)
 {
-    if (toplevel->last_width != new_width || toplevel->last_height != new_height) {
-        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, new_width, new_height);
-        toplevel->last_width = new_width;
-        toplevel->last_height = new_height;
-    }
+    // TODO: Does this need to be rate limited?
+    //       if (toplevel->last_width != new_width || toplevel->last_height != new_height) {
+    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, box.width, box.height);
+    wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
+}
+
+wlr_box qz_toplevel_get_bounds(struct qz_toplevel* toplevel)
+{
+    wlr_box box;
+    box.x = toplevel->scene_tree->node.x;
+    box.y = toplevel->scene_tree->node.y;
+    box.width = toplevel->xdg_toplevel->base->current.geometry.width;
+    box.height = toplevel->xdg_toplevel->base->current.geometry.height;
+    return box;
+}
+
+bool qz_toplevel_wants_fullscreen(struct qz_toplevel* toplevel)
+{
+    return toplevel->xdg_toplevel->requested.fullscreen;
+}
+
+void qz_toplevel_set_fullscreen(struct qz_toplevel* toplevel, bool fullscreen)
+{
+    wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, fullscreen);
 }
 
 void qz_focus_toplevel(struct qz_toplevel* toplevel)
@@ -143,16 +162,18 @@ void qz_xdg_toplevel_destroy(struct wl_listener* listener, void*)
     QZ_UNLISTEN(toplevel->unmap);
     QZ_UNLISTEN(toplevel->commit);
     QZ_UNLISTEN(toplevel->destroy);
-    QZ_UNLISTEN(toplevel->request_move);
-    QZ_UNLISTEN(toplevel->request_resize);
     QZ_UNLISTEN(toplevel->request_maximize);
     QZ_UNLISTEN(toplevel->request_fullscreen);
 
-    free(toplevel);
+    delete toplevel;
 }
 
 void qz_begin_interactive(struct qz_toplevel* toplevel, enum qz_cursor_mode mode, uint32_t edges)
 {
+    if (toplevel->xdg_toplevel->current.fullscreen) {
+        return;
+    }
+
     struct qz_server* server = toplevel->server;
 
     server->grabbed_toplevel = toplevel;
@@ -178,22 +199,6 @@ void qz_begin_interactive(struct qz_toplevel* toplevel, enum qz_cursor_mode mode
     }
 }
 
-void qz_xdg_toplevel_request_move(struct wl_listener* listener, void*)
-{
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_move);
-
-    // TODO: Ignore all client requests, and instead only use MOD keybindings
-    qz_begin_interactive(toplevel, QZ_CURSOR_MOVE, 0);
-}
-
-void qz_xdg_toplevel_request_resize(struct wl_listener* listener, void* data)
-{
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_resize);
-    struct wlr_xdg_toplevel_resize_event* event = static_cast<struct wlr_xdg_toplevel_resize_event*>(data);
-
-    qz_begin_interactive(toplevel, QZ_CURSOR_RESIZE, event->edges);
-}
-
 void qz_xdg_toplevel_request_maximize(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_maximize);
@@ -209,10 +214,26 @@ void qz_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
 {
     struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_fullscreen);
 
-    // TODO: Support fullscreen
-
-    if (toplevel->xdg_toplevel->base->initialized) {
-        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
+    bool fs = qz_toplevel_wants_fullscreen(toplevel);
+    if (fs) {
+        auto prev = qz_toplevel_get_bounds(toplevel);
+        auto output = qz_get_output_for_toplevel(toplevel);
+        if (output) {
+            auto b = qz_output_get_bounds(output);
+            qz_toplevel_set_fullscreen(toplevel, true);
+            qz_toplevel_set_bounds(toplevel, b);
+            toplevel->prev_bounds = prev;
+            // TODO: With layers implemented, move output background rect to fullscreen layer
+            //       The xdg-protocol specifies:
+            //
+            //       If the fullscreened surface is not opaque, the compositor must make
+            //        sure that other screen content not part of the same surface tree (made
+            //        up of subsurfaces, popups or similarly coupled surfaces) are not
+            //        visible below the fullscreened surface.
+        }
+    } else {
+        qz_toplevel_set_fullscreen(toplevel, false);
+        qz_toplevel_set_bounds(toplevel, toplevel->prev_bounds);
     }
 }
 
@@ -221,7 +242,7 @@ void qz_server_new_xdg_toplevel(struct wl_listener* listener, void* data)
     struct qz_server* server = wl_container_of(listener, server, new_xdg_toplevel);
     struct wlr_xdg_toplevel* xdg_toplevel = static_cast<struct wlr_xdg_toplevel*>(data);
 
-    struct qz_toplevel* toplevel = static_cast<struct qz_toplevel*>(calloc(1, sizeof(*toplevel)));
+    struct qz_toplevel* toplevel = new qz_toplevel{};
     toplevel->server = server;
     toplevel->xdg_toplevel = xdg_toplevel;
     toplevel->scene_tree = wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
@@ -234,8 +255,6 @@ void qz_server_new_xdg_toplevel(struct wl_listener* listener, void* data)
 
     QZ_LISTEN(xdg_toplevel->events.destroy, toplevel->destroy, qz_xdg_toplevel_destroy);
 
-    QZ_LISTEN(xdg_toplevel->events.request_move,       toplevel->request_move,       qz_xdg_toplevel_request_move);
-    QZ_LISTEN(xdg_toplevel->events.request_resize,     toplevel->request_resize,     qz_xdg_toplevel_request_resize);
     QZ_LISTEN(xdg_toplevel->events.request_maximize,   toplevel->request_maximize,   qz_xdg_toplevel_request_maximize);
     QZ_LISTEN(xdg_toplevel->events.request_fullscreen, toplevel->request_fullscreen, qz_xdg_toplevel_request_fullscreen);
 }
@@ -264,14 +283,14 @@ void qz_xdg_popup_destroy(struct wl_listener* listener, void*)
     QZ_UNLISTEN(popup->commit);
     QZ_UNLISTEN(popup->destroy);
 
-    free(popup);
+    delete popup;
 }
 
 void qz_server_new_xdg_popup(struct wl_listener*, void* data)
 {
     struct wlr_xdg_popup* xdg_popup = static_cast<struct wlr_xdg_popup*>(data);
 
-    struct qz_popup* popup = static_cast<struct qz_popup*>(calloc(1, sizeof(*popup)));
+    struct qz_popup* popup = new qz_popup{};
     popup->xdg_popup = xdg_popup;
 
     struct wlr_xdg_surface* parent = wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);

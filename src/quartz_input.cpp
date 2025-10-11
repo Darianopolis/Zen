@@ -1,7 +1,7 @@
 #include "quartz.hpp"
 
 #include <libinput.h>
-#include <libevdev-1.0/libevdev/libevdev.h>
+#include <libevdev/libevdev.h>
 
 bool qz_is_main_mod_down(struct qz_server* server)
 {
@@ -94,13 +94,16 @@ void qz_keyboard_handle_key(struct wl_listener* listener, void* data)
 
 void qz_keyboard_handle_destroy(struct wl_listener* listener, void*)
 {
+    // This event is raised by the keyboard base wlr_input_device to signal the destruction of the wlr_keyboard.
+    // It will no longer receieve events and should be destroyed
+
     struct qz_keyboard* keyboard = wl_container_of(listener, keyboard, destroy);
 
     QZ_UNLISTEN(keyboard->modifiers);
     QZ_UNLISTEN(keyboard->key);
     QZ_UNLISTEN(keyboard->destroy);
     wl_list_remove(&keyboard->link);
-    free(keyboard);
+    delete keyboard;
 
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
 }
@@ -109,7 +112,7 @@ void qz_server_new_keyboard(struct qz_server* server, struct wlr_input_device* d
 {
     struct wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(device);
 
-    struct qz_keyboard* keyboard = static_cast<struct qz_keyboard*>(calloc(1, sizeof(*keyboard)));
+    struct qz_keyboard* keyboard = new qz_keyboard{};
     keyboard->server = server;
     keyboard->wlr_keyboard = wlr_keyboard;
 
@@ -194,6 +197,68 @@ void qz_seat_request_set_selection(struct wl_listener* listener, void* data)
     wlr_seat_set_selection(server->seat, event->source, event->serial);
 }
 
+// -----------------------------------------------------------------------------
+
+void qz_seat_request_start_drag(struct wl_listener* listener, void* data)
+{
+    struct qz_server* server = wl_container_of(listener, server, request_start_drag);
+    struct wlr_seat_request_start_drag_event* event = static_cast<struct wlr_seat_request_start_drag_event*>(data);
+
+    if (wlr_seat_validate_pointer_grab_serial(server->seat, event->origin, event->serial)) {
+        wlr_log(WLR_ERROR, "Drag requested, start");
+        wlr_seat_start_pointer_drag(server->seat, event->drag, event->serial);
+    } else {
+        wlr_log(WLR_ERROR, "Drag requested, invalid serial, destroying..");
+        wlr_data_source_destroy(event->drag->source);
+    }
+}
+
+struct qz_seat_drag_state {
+    qz_server* server;
+    wl_listener destroy;
+};
+
+static
+void qz_seat_drag_icon_destroy(struct wl_listener* listener, void* data)
+{
+    wlr_log(WLR_ERROR, "Drag icon destroy");
+
+    struct qz_seat_drag_state* state = wl_container_of(listener, state, destroy);
+
+    // Refocus last focused toplevel
+    qz_focus_toplevel(state->server->focused_toplevel);
+    qz_process_cursor_motion(state->server, 0);
+
+    QZ_UNLISTEN(*listener);
+    delete state;
+}
+
+void qz_seat_start_drag(struct wl_listener* listener, void* data)
+{
+    wlr_log(WLR_ERROR, "Drag start");
+
+    struct qz_server* server = wl_container_of(listener, server, start_drag);
+    struct wlr_drag* drag = static_cast<struct wlr_drag*>(data);
+    if (!drag->icon) return;
+
+    drag->icon->data = &wlr_scene_drag_icon_create(server->drag_icon_parent, drag->icon)->node;
+    auto drag_state = new qz_seat_drag_state{
+        .server = server,
+    };
+    QZ_LISTEN(drag->icon->events.destroy, drag_state->destroy, qz_seat_drag_icon_destroy);
+}
+
+static
+void qz_seat_drag_update_position(struct qz_server* server)
+{
+    wlr_scene_node_set_position(&server->drag_icon_parent->node, int(std::round(server->cursor->x)), int(std::round(server->cursor->y)));
+
+    // TODO: This should be on a separate layer that is always on top (above even the OVERLAY layer)
+    wlr_scene_node_raise_to_top(&server->drag_icon_parent->node);
+}
+
+// -----------------------------------------------------------------------------
+
 void qz_reset_cursor_mode(struct qz_server* server)
 {
     server->cursor_mode = QZ_CURSOR_PASSTHROUGH;
@@ -241,16 +306,20 @@ void qz_process_cursor_resize(struct qz_server* server)
     }
 
     struct wlr_box* geo_box = &toplevel->xdg_toplevel->base->geometry;
-    wlr_scene_node_set_position(&toplevel->scene_tree->node, new_left - geo_box->x, new_top - geo_box->y);
-
-    int new_width = new_right - new_left;
-    int new_height = new_bottom - new_top;
+    struct wlr_box bounds {
+        .x = new_left - geo_box->x,
+        .y = new_top - geo_box->y,
+        .width = new_right - new_left,
+        .height = new_bottom - new_top,
+    };
     // TODO: Investigate issue with GLFW/SDL Vulkan windows slow resizing
-    qz_toplevel_set_size(toplevel, new_width, new_height);
+    qz_toplevel_set_bounds(toplevel, bounds);
 }
 
 void qz_process_cursor_motion(struct qz_server* server, uint32_t time)
 {
+    qz_seat_drag_update_position(server);
+
     if (server->cursor_mode == QZ_CURSOR_MOVE) {
         qz_process_cursor_move(server);
         return;
@@ -320,7 +389,7 @@ void qz_server_cursor_button(struct wl_listener* listener, void* data)
                     qz_begin_interactive(toplevel, QZ_CURSOR_MOVE, 0);
                     handled = true;
                 } else if (event->button == BTN_RIGHT) {
-                    // TODO: Edges should be set based on where mouse is in toplevel
+                        // TODO: Edges should be set based on where mouse is in toplevel
                     qz_begin_interactive(toplevel, QZ_CURSOR_RESIZE, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
                     handled = true;
                 }

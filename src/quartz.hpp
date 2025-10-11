@@ -71,6 +71,8 @@ struct qz_server
     struct wl_listener request_cursor;
     struct wl_listener pointer_focus_change;
     struct wl_listener request_set_selection;
+    struct wl_listener request_start_drag;
+    struct wl_listener start_drag;
     struct wl_list keyboards;
 
     enum qz_cursor_mode cursor_mode;
@@ -84,8 +86,12 @@ struct qz_server
     struct wlr_output_layout* output_layout;
     struct wl_list outputs;
     struct wl_listener new_output;
+    struct wl_listener output_layout_change;
 
     uint32_t modifier_key;
+
+    // Parent node in the scene for attaching drag icons to
+    struct wlr_scene_tree* drag_icon_parent;
 };
 
 struct qz_output
@@ -93,9 +99,12 @@ struct qz_output
     struct wl_list link;
     struct qz_server* server;
     struct wlr_output* wlr_output;
+    struct wlr_scene_output* scene_output;
     struct wl_listener frame;
     struct wl_listener request_state;
     struct wl_listener destroy;
+
+    struct wlr_scene_rect* background;
 };
 
 // enum qz_client_type
@@ -125,8 +134,6 @@ struct qz_toplevel
 
     struct wl_listener destroy;
 
-    struct wl_listener request_move;
-    struct wl_listener request_resize;
     struct wl_listener request_maximize;
     struct wl_listener request_fullscreen;
 
@@ -138,8 +145,7 @@ struct qz_toplevel
     struct wl_listener x_set_hints;
 #endif
 
-    int last_width = -1;
-    int last_height = -1;
+    struct wlr_box prev_bounds;
 };
 
 struct qz_popup
@@ -174,12 +180,8 @@ bool qz_is_main_mod_down(struct qz_server* server);
 
 // ---- Keyboard ----
 
-// This event is raised when a modifier key, such as shift or alt, is presed. We simply communicate this to the client
 void qz_keyboard_handle_modifiers(struct wl_listener*, void*);
-// This event is raised when a key is pressed or released
 void qz_keyboard_handle_key(struct wl_listener*, void*);
-// This event is raised by the keyboard base wlr_input_device to signal the destruction of the wlr_keyboard.
-// It will no longer receieve events and should be destroyed
 void qz_keyboard_handle_destroy(struct wl_listener*, void*);
 
 // ---- Mouse ----
@@ -218,6 +220,9 @@ void qz_server_cursor_frame(struct wl_listener*, void*);
 // wlroots allows compositors to ignore such requests if they so choose, but in quartzs we always honor
 void qz_seat_request_set_selection(struct wl_listener*, void*);
 
+void qz_seat_request_start_drag(struct wl_listener* listener, void* data);
+void qz_seat_start_drag(struct wl_listener* listener, void* data);
+
 void qz_server_new_keyboard(struct qz_server*, struct wlr_input_device*);
 // We don't do anything special with pointers. all of our pointer handling is proxied through wlr_cursor.
 // On another compositor, you might take this opportunity to do libinput configuration on the device to set acceleration, etc..
@@ -227,21 +232,25 @@ void qz_server_new_input(struct wl_listener*, void*);
 
 // ---- Output ----
 
-// This function is called every time an output is ready to display a frame, generally at the output's refresh rate (e.g. 60Hz)
+qz_output* qz_get_output_at(struct qz_server* server, double x, double y);
+wlr_box qz_output_get_bounds(struct qz_output*);
+qz_output* qz_get_output_for_toplevel(struct qz_toplevel*);
+
 void qz_output_frame(struct wl_listener*, void*);
-// This function is called when the backend requests a new state for the output.
-// For example, wayland and X11 backends request a new mode when the output window is resized
 void qz_output_request_state(struct wl_listener*, void*);
 void qz_output_destroy(struct wl_listener*, void*);
-// This event is raised by the backend when a new output (aka a display or monitor) becomes available
 void qz_server_new_output(struct wl_listener*, void*);
+void qz_server_output_layout_change(struct wl_listener*, void*);
 
 // ---- Toplevel ----
 
 // This function only deals with keyboard focus
 void qz_focus_toplevel(struct qz_toplevel*);
 
-void qz_toplevel_set_size(struct qz_toplevel*, int width, int height);
+void qz_toplevel_set_bounds(struct qz_toplevel*, wlr_box);
+wlr_box qz_toplevel_get_bounds(struct qz_toplevel*);
+bool qz_toplevel_wants_fullscreen(struct qz_toplevel*);
+void qz_toplevel_set_fullscreen(struct qz_toplevel*, bool fullscreen);
 
 // This returns the topmost node in the scene at the given layout coords.
 // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a quartz_client
@@ -260,8 +269,6 @@ void qz_xdg_toplevel_commit(struct wl_listener*, void*);
 void qz_xdg_toplevel_destroy(struct wl_listener*, void*);
 // Sets up an interactive move or resize operation, where the compositor stops propogating pointer events to clients and instead consumes them itself, to move or resize windows
 void qz_begin_interactive(struct qz_toplevel*, enum qz_cursor_mode, uint32_t edges);
-void qz_xdg_toplevel_request_move(struct wl_listener*, void*);
-void qz_xdg_toplevel_request_resize(struct wl_listener*, void*);
 void qz_xdg_toplevel_request_maximize(struct wl_listener*, void*);
 void qz_xdg_toplevel_request_fullscreen(struct wl_listener*, void*);
 void qz_server_new_xdg_toplevel(struct wl_listener*, void*);

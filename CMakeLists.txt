@@ -12,6 +12,11 @@ target_compile_definitions(wlroots INTERFACE WLR_USE_UNSTABLE)
 target_link_libraries(     wlroots INTERFACE wlroots-0.19)
 target_include_directories(wlroots INTERFACE /usr/include/wlroots-0.19)
 
+# libevdev
+
+add_library(               libevdev INTERFACE)
+target_include_directories(libevdev INTERFACE /usr/include/libevdev-1.0)
+
 # pixman
 
 add_library(               pixman INTERFACE)
@@ -44,6 +49,7 @@ target_link_libraries(quartz PUBLIC
     xkbcommon
     wlroots
     pixman
+    libevdev
     Backward::Object
     )
 
