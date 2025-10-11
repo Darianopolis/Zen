@@ -12,22 +12,9 @@
 #include <wayland-server-core.h>
 
 #include "quartz_wlroots.h"
+#include "quartz_util.hpp"
 
 #include <xkbcommon/xkbcommon.h>
-
-#define QZ_LISTEN(Event, Listener, Handler) wl_signal_add(&(Event), ((Listener).notify = (Handler), &(Listener)))
-#define QZ_UNLISTEN(Listener)               qz_unlisten(&(Listener))
-
-inline
-void qz_unlisten(struct wl_listener* listener)
-{
-    if (listener->notify) {
-        wl_list_remove(&listener->link);
-        listener->notify = nullptr;
-    } else {
-        wlr_log(WLR_INFO, "QUARTZ_TRACE: unlisten called on non-activated listener");
-    }
-}
 
 enum qz_cursor_mode
 {
@@ -38,6 +25,8 @@ enum qz_cursor_mode
 
 struct qz_server
 {
+    qz_listener_set listeners;
+
     struct wl_display* wl_display;
     struct wlr_backend* backend;
     struct wlr_renderer* renderer;
@@ -49,30 +38,15 @@ struct qz_server
 
 #ifdef QZ_XWAYLAND
     struct wlr_xwayland* xwayland;
-    struct wl_listener xwayland_ready;
-    struct wl_listener new_xwayland_surface;
 #endif
 
     struct wlr_xdg_shell* xdg_shell;
-    struct wl_listener new_xdg_toplevel;
-    struct wl_listener new_xdg_popup;
     struct wl_list toplevels;
 
     struct wlr_cursor* cursor;
     struct wlr_xcursor_manager* cursor_manager;
-    struct wl_listener cursor_motion;
-    struct wl_listener cursor_motion_absolute;
-    struct wl_listener cursor_button;
-    struct wl_listener cursor_axis;
-    struct wl_listener cursor_frame;
 
     struct wlr_seat* seat;
-    struct wl_listener new_input;
-    struct wl_listener request_cursor;
-    struct wl_listener pointer_focus_change;
-    struct wl_listener request_set_selection;
-    struct wl_listener request_start_drag;
-    struct wl_listener start_drag;
     struct wl_list keyboards;
 
     enum qz_cursor_mode cursor_mode;
@@ -85,8 +59,6 @@ struct qz_server
 
     struct wlr_output_layout* output_layout;
     struct wl_list outputs;
-    struct wl_listener new_output;
-    struct wl_listener output_layout_change;
 
     uint32_t modifier_key;
 
@@ -96,13 +68,12 @@ struct qz_server
 
 struct qz_output
 {
+    qz_listener_set listeners;
+
     struct wl_list link;
     struct qz_server* server;
     struct wlr_output* wlr_output;
     struct wlr_scene_output* scene_output;
-    struct wl_listener frame;
-    struct wl_listener request_state;
-    struct wl_listener destroy;
 
     struct wlr_scene_rect* background;
 };
@@ -117,6 +88,8 @@ struct qz_output
 
 struct qz_toplevel
 {
+    qz_listener_set listeners;
+
     // enum qz_client_type type;
 
     struct wl_list link;
@@ -128,42 +101,23 @@ struct qz_toplevel
     struct wlr_xwayland_surface* xwayland_surface;
 #endif
 
-    struct wl_listener map;
-    struct wl_listener unmap;
-    struct wl_listener commit;
-
-    struct wl_listener destroy;
-
-    struct wl_listener request_maximize;
-    struct wl_listener request_fullscreen;
-
-#ifdef QZ_XWAYLAND
-    struct wl_listener x_activate;
-    struct wl_listener x_associate;
-    struct wl_listener x_dissociate;
-    struct wl_listener x_configure;
-    struct wl_listener x_set_hints;
-#endif
-
     struct wlr_box prev_bounds;
 };
 
 struct qz_popup
 {
+    qz_listener_set listeners;
+
     struct wlr_xdg_popup* xdg_popup;
-    struct wl_listener commit;
-    struct wl_listener destroy;
 };
 
 struct qz_keyboard
 {
+    qz_listener_set listeners;
+
     struct wl_list link;
     struct qz_server* server;
     struct wlr_keyboard* wlr_keyboard;
-
-    struct wl_listener modifiers;
-    struct wl_listener key;
-    struct wl_listener destroy;
 };
 
 // ---- Util ----

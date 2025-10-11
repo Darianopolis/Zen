@@ -54,10 +54,10 @@ void qz_init(struct qz_server* server)
     wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
 
     server->output_layout = wlr_output_layout_create(server->wl_display);
-    QZ_LISTEN(server->output_layout->events.change, server->output_layout_change, qz_server_output_layout_change);
+    server->listeners.listen(&server->output_layout->events.change, server, qz_server_output_layout_change);
 
     wl_list_init(&server->outputs);
-    QZ_LISTEN(server->backend->events.new_output, server->new_output, qz_server_new_output);
+    server->listeners.listen(&server->backend->events.new_output, server, qz_server_new_output);
 
     server->scene = wlr_scene_create();
     server->scene_output_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
@@ -66,8 +66,8 @@ void qz_init(struct qz_server* server)
 
     wl_list_init(&server->toplevels);
     server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
-    QZ_LISTEN(server->xdg_shell->events.new_toplevel, server->new_xdg_toplevel, qz_server_new_xdg_toplevel);
-    QZ_LISTEN(server->xdg_shell->events.new_popup,    server->new_xdg_popup,    qz_server_new_xdg_popup);
+    server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, qz_server_new_xdg_toplevel);
+    server->listeners.listen(&server->xdg_shell->events.new_popup,    server, qz_server_new_xdg_popup);
 
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
@@ -75,21 +75,21 @@ void qz_init(struct qz_server* server)
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, 24);
 
     server->cursor_mode = QZ_CURSOR_PASSTHROUGH;
-    QZ_LISTEN(server->cursor->events.motion,          server->cursor_motion,          qz_server_cursor_motion);
-    QZ_LISTEN(server->cursor->events.motion_absolute, server->cursor_motion_absolute, qz_server_cursor_motion_absolute);
-    QZ_LISTEN(server->cursor->events.button,          server->cursor_button,          qz_server_cursor_button);
-    QZ_LISTEN(server->cursor->events.axis,            server->cursor_axis,            qz_server_cursor_axis);
-    QZ_LISTEN(server->cursor->events.frame,           server->cursor_frame,           qz_server_cursor_frame);
+    server->listeners.listen(&server->cursor->events.motion,          server, qz_server_cursor_motion);
+    server->listeners.listen(&server->cursor->events.motion_absolute, server, qz_server_cursor_motion_absolute);
+    server->listeners.listen(&server->cursor->events.button,          server, qz_server_cursor_button);
+    server->listeners.listen(&server->cursor->events.axis,            server, qz_server_cursor_axis);
+    server->listeners.listen(&server->cursor->events.frame,           server, qz_server_cursor_frame);
 
     wl_list_init(&server->keyboards);
-    QZ_LISTEN(server->backend->events.new_input, server->new_input, qz_server_new_input);
+    server->listeners.listen(&server->backend->events.new_input, server, qz_server_new_input);
 
     server->seat = wlr_seat_create(server->wl_display, "seat0");
-    QZ_LISTEN(              server->seat->events.request_set_cursor,    server->request_cursor,        qz_seat_request_set_cursor);
-    QZ_LISTEN(server->seat->pointer_state.events.focus_change,          server->pointer_focus_change,  qz_seat_pointer_focus_change);
-    QZ_LISTEN(              server->seat->events.request_set_selection, server->request_set_selection, qz_seat_request_set_selection);
-    QZ_LISTEN(              server->seat->events.request_start_drag,    server->request_start_drag,    qz_seat_request_start_drag);
-    QZ_LISTEN(              server->seat->events.start_drag,            server->start_drag,            qz_seat_start_drag);
+    server->listeners.listen(&              server->seat->events.request_set_cursor,    server, qz_seat_request_set_cursor);
+    server->listeners.listen(&server->seat->pointer_state.events.focus_change,          server, qz_seat_pointer_focus_change);
+    server->listeners.listen(&              server->seat->events.request_set_selection, server, qz_seat_request_set_selection);
+    server->listeners.listen(&              server->seat->events.request_start_drag,    server, qz_seat_request_start_drag);
+    server->listeners.listen(&              server->seat->events.start_drag,            server, qz_seat_start_drag);
 
     // Make sure containing X server does not leak through
     unsetenv("DISPLAY");
@@ -136,23 +136,7 @@ void qz_cleanup(struct qz_server* server)
     qz_destroy_xwayland(server);
 #endif
 
-    QZ_UNLISTEN(server->new_xdg_toplevel);
-    QZ_UNLISTEN(server->new_xdg_popup);
-    QZ_UNLISTEN(server->cursor_motion);
-    QZ_UNLISTEN(server->cursor_motion_absolute);
-    QZ_UNLISTEN(server->cursor_button);
-    QZ_UNLISTEN(server->cursor_axis);
-    QZ_UNLISTEN(server->cursor_frame);
-
-    QZ_UNLISTEN(server->new_input);
-    QZ_UNLISTEN(server->request_cursor);
-    QZ_UNLISTEN(server->pointer_focus_change);
-    QZ_UNLISTEN(server->request_set_selection);
-    QZ_UNLISTEN(server->request_start_drag);
-    QZ_UNLISTEN(server->start_drag);
-
-    QZ_UNLISTEN(server->new_output);
-    QZ_UNLISTEN(server->output_layout_change);
+    server->listeners.clear();
 
     wlr_xcursor_manager_destroy(server->cursor_manager);
     wlr_cursor_destroy(server->cursor);
@@ -165,7 +149,7 @@ void qz_cleanup(struct qz_server* server)
 
 int qz_main(int argc, char* argv[])
 {
-    wlr_log_init(WLR_INFO, nullptr);
+    wlr_log_init(WLR_DEBUG, nullptr);
     char* startup_cmd = nullptr;
 
     int c;

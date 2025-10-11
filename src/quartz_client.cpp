@@ -110,7 +110,7 @@ struct qz_toplevel* qz_desktop_toplevel_at(struct qz_server* server, double lx, 
 
 void qz_xdg_toplevel_map(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, map);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
 
@@ -119,7 +119,7 @@ void qz_xdg_toplevel_map(struct wl_listener* listener, void*)
 
 void qz_xdg_toplevel_unmap(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, unmap);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     // Reset cursor mode if grabbed toplevel was unmapped
     if (toplevel == toplevel->server->grabbed_toplevel) {
@@ -131,7 +131,7 @@ void qz_xdg_toplevel_unmap(struct wl_listener* listener, void*)
 
 void qz_xdg_toplevel_commit(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, commit);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     if (toplevel->xdg_toplevel->base->initial_commit) {
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
@@ -140,7 +140,7 @@ void qz_xdg_toplevel_commit(struct wl_listener* listener, void*)
 
 void qz_xdg_toplevel_destroy(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, destroy);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     if (!toplevel->server) {
         wlr_log(WLR_ERROR, "qz_toplevel destroyed that didn't have server reference!");
@@ -149,21 +149,6 @@ void qz_xdg_toplevel_destroy(struct wl_listener* listener, void*)
             toplevel->server->focused_toplevel = nullptr;
         }
     }
-
-#ifdef QZ_XWAYLAND
-    QZ_UNLISTEN(toplevel->x_activate);
-    QZ_UNLISTEN(toplevel->x_associate);
-    QZ_UNLISTEN(toplevel->x_dissociate);
-    QZ_UNLISTEN(toplevel->x_configure);
-    QZ_UNLISTEN(toplevel->x_set_hints);
-#endif
-
-    QZ_UNLISTEN(toplevel->map);
-    QZ_UNLISTEN(toplevel->unmap);
-    QZ_UNLISTEN(toplevel->commit);
-    QZ_UNLISTEN(toplevel->destroy);
-    QZ_UNLISTEN(toplevel->request_maximize);
-    QZ_UNLISTEN(toplevel->request_fullscreen);
 
     delete toplevel;
 }
@@ -201,7 +186,7 @@ void qz_begin_interactive(struct qz_toplevel* toplevel, enum qz_cursor_mode mode
 
 void qz_xdg_toplevel_request_maximize(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_maximize);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     // NOTE: We won't support maximization, but we have to send a configure event anyway
 
@@ -212,7 +197,7 @@ void qz_xdg_toplevel_request_maximize(struct wl_listener* listener, void*)
 
 void qz_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
 {
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, request_fullscreen);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     bool fs = qz_toplevel_wants_fullscreen(toplevel);
     if (fs) {
@@ -239,7 +224,7 @@ void qz_xdg_toplevel_request_fullscreen(struct wl_listener* listener, void*)
 
 void qz_server_new_xdg_toplevel(struct wl_listener* listener, void* data)
 {
-    struct qz_server* server = wl_container_of(listener, server, new_xdg_toplevel);
+    auto server = qz_listener_userdata<qz_server*>(listener);
     struct wlr_xdg_toplevel* xdg_toplevel = static_cast<struct wlr_xdg_toplevel*>(data);
 
     struct qz_toplevel* toplevel = new qz_toplevel{};
@@ -249,14 +234,14 @@ void qz_server_new_xdg_toplevel(struct wl_listener* listener, void* data)
     toplevel->scene_tree->node.data = toplevel;
     xdg_toplevel->base->data = toplevel->scene_tree;
 
-    QZ_LISTEN(xdg_toplevel->base->surface->events.map,    toplevel->map,    qz_xdg_toplevel_map);
-    QZ_LISTEN(xdg_toplevel->base->surface->events.unmap,  toplevel->unmap,  qz_xdg_toplevel_unmap);
-    QZ_LISTEN(xdg_toplevel->base->surface->events.commit, toplevel->commit, qz_xdg_toplevel_commit);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,                toplevel, qz_xdg_toplevel_map);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,              toplevel, qz_xdg_toplevel_unmap);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.commit,             toplevel, qz_xdg_toplevel_commit);
 
-    QZ_LISTEN(xdg_toplevel->events.destroy, toplevel->destroy, qz_xdg_toplevel_destroy);
+    toplevel->listeners.listen(&xdg_toplevel->events.destroy, toplevel, qz_xdg_toplevel_destroy);
 
-    QZ_LISTEN(xdg_toplevel->events.request_maximize,   toplevel->request_maximize,   qz_xdg_toplevel_request_maximize);
-    QZ_LISTEN(xdg_toplevel->events.request_fullscreen, toplevel->request_fullscreen, qz_xdg_toplevel_request_fullscreen);
+    toplevel->listeners.listen(&xdg_toplevel->events.request_maximize,   toplevel, qz_xdg_toplevel_request_maximize);
+    toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, qz_xdg_toplevel_request_fullscreen);
 }
 
 // -----------------------------------------------------------------------------
@@ -268,7 +253,7 @@ void qz_server_new_xdg_toplevel(struct wl_listener* listener, void* data)
 
 void qz_xdg_popup_commit(struct wl_listener* listener, void*)
 {
-    struct qz_popup* popup = wl_container_of(listener, popup, commit);
+    auto popup = qz_listener_userdata<qz_popup*>(listener);
 
     if (popup->xdg_popup->base->initial_commit) {
         // When an xdg_surface performs an initial commit, the compositor must reply with a configure so the client can map the surface.
@@ -278,10 +263,7 @@ void qz_xdg_popup_commit(struct wl_listener* listener, void*)
 
 void qz_xdg_popup_destroy(struct wl_listener* listener, void*)
 {
-    struct qz_popup* popup = wl_container_of(listener, popup, destroy);
-
-    QZ_UNLISTEN(popup->commit);
-    QZ_UNLISTEN(popup->destroy);
+    auto popup = qz_listener_userdata<qz_popup*>(listener);
 
     delete popup;
 }
@@ -298,6 +280,6 @@ void qz_server_new_xdg_popup(struct wl_listener*, void* data)
     struct wlr_scene_tree* parent_tree = static_cast<struct wlr_scene_tree*>(parent->data);
     xdg_popup->base->data = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
 
-    QZ_LISTEN(xdg_popup->base->surface->events.commit,  popup->commit,  qz_xdg_popup_commit);
-    QZ_LISTEN(               xdg_popup->events.destroy, popup->destroy, qz_xdg_popup_destroy);
+    popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup,  qz_xdg_popup_commit);
+    popup->listeners.listen(&               xdg_popup->events.destroy, popup, qz_xdg_popup_destroy);
 }

@@ -27,7 +27,7 @@ void qz_output_frame(struct wl_listener* listener, void*)
 {
     // This function is called every time an output is ready to display a frame, generally at the output's refresh rate (e.g. 60Hz)
 
-    struct qz_output* output = wl_container_of(listener, output, frame);
+    auto output = qz_listener_userdata<qz_output*>(listener);
     struct wlr_scene* scene = output->server->scene;
 
     struct wlr_scene_output* scene_output = wlr_scene_get_scene_output(scene, output->wlr_output);
@@ -44,7 +44,7 @@ void qz_output_request_state(struct wl_listener* listener, void* data)
     // This function is called when the backend requests a new state for the output.
     // For example, wayland and X11 backends request a new mode when the output window is resized
 
-    struct qz_output* output = wl_container_of(listener, output, request_state);
+    auto output = qz_listener_userdata<qz_output*>(listener);
     const struct wlr_output_event_request_state* event = static_cast<struct wlr_output_event_request_state*>(data);
 
     wlr_output_commit_state(output->wlr_output, event->state);
@@ -52,11 +52,8 @@ void qz_output_request_state(struct wl_listener* listener, void* data)
 
 void qz_output_destroy(struct wl_listener* listener, void*)
 {
-    struct qz_output* output = wl_container_of(listener, output, destroy);
+    auto output = qz_listener_userdata<qz_output*>(listener);
 
-    QZ_UNLISTEN(output->frame);
-    QZ_UNLISTEN(output->request_state);
-    QZ_UNLISTEN(output->destroy);
     wl_list_remove(&output->link);
 
     wlr_scene_node_destroy(&output->background->node);
@@ -68,7 +65,7 @@ void qz_server_new_output(struct wl_listener* listener, void* data)
 {
     // This event is raised by the backend when a new output (aka a display or monitor) becomes available
 
-    struct qz_server* server = wl_container_of(listener, server, new_output);
+    auto server = qz_listener_userdata<qz_server*>(listener);
     struct wlr_output* wlr_output = static_cast<struct wlr_output*>(data);
 
     wlr_output_init_render(wlr_output, server->allocator, server->renderer);
@@ -91,9 +88,9 @@ void qz_server_new_output(struct wl_listener* listener, void* data)
 
     wlr_output->data = output;
 
-    QZ_LISTEN(wlr_output->events.frame,         output->frame,         qz_output_frame);
-    QZ_LISTEN(wlr_output->events.request_state, output->request_state, qz_output_request_state);
-    QZ_LISTEN(wlr_output->events.destroy,       output->destroy,       qz_output_destroy);
+    output->listeners.listen(&wlr_output->events.frame,         output, qz_output_frame);
+    output->listeners.listen(&wlr_output->events.request_state, output, qz_output_request_state);
+    output->listeners.listen(&wlr_output->events.destroy,       output, qz_output_destroy);
 
     wl_list_insert(&server->outputs, &output->link);
 
@@ -111,7 +108,7 @@ void qz_server_new_output(struct wl_listener* listener, void* data)
 
 void qz_server_output_layout_change(struct wl_listener* listener, void*)
 {
-    struct qz_server* server = wl_container_of(listener, server, output_layout_change);
+    auto server = qz_listener_userdata<qz_server*>(listener);
 
     // TODO: Handled output removal, addition
 

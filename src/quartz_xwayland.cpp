@@ -38,7 +38,7 @@ void qz_xwayland_ready(struct wl_listener* listener, void*)
 {
     QZ_XTRACE_ENTER
 
-    struct qz_server* server = wl_container_of(listener, server, xwayland_ready);
+    auto server = qz_listener_userdata<qz_server*>(listener);
     struct wlr_xcursor* xcursor;
 
     wlr_xwayland_set_seat(server->xwayland, server->seat);
@@ -57,7 +57,7 @@ void qz_xwayland_associate(struct wl_listener* listener, void*)
 {
     QZ_XTRACE_ENTER
 
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, x_associate);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     QZ_LISTEN(qz_toplevel_get_surface(toplevel)->events.map,   toplevel->map,   qz_xdg_toplevel_map);
     QZ_LISTEN(qz_toplevel_get_surface(toplevel)->events.unmap, toplevel->unmap, qz_xdg_toplevel_unmap);
@@ -69,7 +69,7 @@ void qz_xwayland_dissociate(struct wl_listener* listener, void*)
 {
     QZ_XTRACE_ENTER
 
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, x_dissociate);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     QZ_UNLISTEN(toplevel->map);
     QZ_UNLISTEN(toplevel->unmap);
@@ -81,7 +81,7 @@ void qz_xwayland_request_activate(struct wl_listener* listener, void*)
 {
     QZ_XTRACE_ENTER
 
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, x_activate);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     if (!qz_toplevel_is_unmanaged(toplevel)) {
         wlr_xwayland_surface_activate(toplevel->xwayland_surface, 1);
@@ -94,7 +94,7 @@ void qz_xwayland_request_configure(struct wl_listener* listener, void* data)
 {
     QZ_XTRACE_ENTER
 
-    struct qz_toplevel* toplevel = wl_container_of(listener, toplevel, x_configure);
+    auto toplevel = qz_listener_userdata<qz_toplevel*>(listener);
     struct wlr_xwayland_surface_configure_event* event = static_cast<struct wlr_xwayland_surface_configure_event*>(data);
 
     if (!toplevel->xwayland_surface->surface || !toplevel->xwayland_surface->surface->mapped) {
@@ -121,7 +121,7 @@ void qz_new_xwayland_surface(struct wl_listener* listener, void* data)
 {
     QZ_XTRACE_ENTER
 
-    struct qz_server* server = wl_container_of(listener, server, new_xwayland_surface);
+    auto server = qz_listener_userdata<qz_server*>(listener);
     struct wlr_xwayland_surface* surface = static_cast<struct wlr_xwayland_surface*>(data);
 
     struct qz_toplevel* toplevel;
