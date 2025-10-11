@@ -51,6 +51,7 @@
    - Dynamic output removal/creation/configuration
    - Output scaling
    - wlr_output_configuration_v1 protocol?
+- Upgrade to wlroots 0.20 git?
 
 ### Portals
 
@@ -62,8 +63,7 @@
 ### Code cleanup
 
 - ✅ Use new/delete instead of calloc/free
+- ✅ Use dynamic wl_listener warpper
+- ✅ Rename structures and drop `struct` prefix?
 - Replace wl_list/wl_array with standard containers
-- Replace wl_container_of with explicitly typed helper
-- Prefer `auto` everywhere
-- Rename structures and drop `struct` prefix?
 - Unified C++ format based logging

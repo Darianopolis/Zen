@@ -3,15 +3,15 @@
 #include <libinput.h>
 #include <libevdev/libevdev.h>
 
-bool qz_is_main_mod_down(struct qz_server* server)
+bool qz_is_main_mod_down(qz_server* server)
 {
-    auto keyboard = wlr_seat_get_keyboard(server->seat);
+    wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
     if (!keyboard) return false;
     uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard);
     return modifiers & server->modifier_key;
 }
 
-bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
+bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
 {
     switch (sym)
     {
@@ -24,7 +24,7 @@ bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
             }
             // TODO: Enter focus cycling mode until MOD key is released,
             //       at which point currently cycled window will be moved to top of focus stack
-            struct qz_toplevel* next_toplevel = wl_container_of(server->toplevels.prev, next_toplevel, link);
+            qz_toplevel* next_toplevel = wl_container_of(server->toplevels.prev, next_toplevel, link);
             qz_focus_toplevel(next_toplevel);
             break;
         }
@@ -48,9 +48,9 @@ bool qz_handle_keybinding(struct qz_server* server, xkb_keysym_t sym)
     return true;
 }
 
-void qz_keyboard_handle_modifiers(struct wl_listener* listener, void*)
+void qz_keyboard_handle_modifiers(wl_listener* listener, void*)
 {
-    auto keyboard = qz_listener_userdata<qz_keyboard*>(listener);
+    qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
 
     // NOTE: Wayland only supports one keyboard at a time, so set the most recently used keyboard as the current one
     wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
@@ -59,12 +59,12 @@ void qz_keyboard_handle_modifiers(struct wl_listener* listener, void*)
     wlr_seat_keyboard_notify_modifiers(keyboard->server->seat, &keyboard->wlr_keyboard->modifiers);
 }
 
-void qz_keyboard_handle_key(struct wl_listener* listener, void* data)
+void qz_keyboard_handle_key(wl_listener* listener, void* data)
 {
-    auto keyboard = qz_listener_userdata<qz_keyboard*>(listener);
-    struct qz_server* server = keyboard->server;
-    struct wlr_seat* seat = server->seat;
-    struct wlr_keyboard_key_event* event = static_cast<struct wlr_keyboard_key_event*>(data);
+    qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
+    qz_server* server = keyboard->server;
+    wlr_seat* seat = server->seat;
+    wlr_keyboard_key_event* event = static_cast<wlr_keyboard_key_event*>(data);
 
     // Translate libinput keycode -> xkbcommon
     uint32_t keycode = event->keycode + 8;
@@ -92,12 +92,12 @@ void qz_keyboard_handle_key(struct wl_listener* listener, void* data)
     }
 }
 
-void qz_keyboard_handle_destroy(struct wl_listener* listener, void*)
+void qz_keyboard_handle_destroy(wl_listener* listener, void*)
 {
     // This event is raised by the keyboard base wlr_input_device to signal the destruction of the wlr_keyboard.
     // It will no longer receieve events and should be destroyed
 
-    auto keyboard = qz_listener_userdata<qz_keyboard*>(listener);
+    qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
 
     wl_list_remove(&keyboard->link);
     delete keyboard;
@@ -105,19 +105,19 @@ void qz_keyboard_handle_destroy(struct wl_listener* listener, void*)
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
 }
 
-void qz_server_new_keyboard(struct qz_server* server, struct wlr_input_device* device)
+void qz_server_new_keyboard(qz_server* server, wlr_input_device* device)
 {
-    struct wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(device);
+    wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(device);
 
-    struct qz_keyboard* keyboard = new qz_keyboard{};
+    qz_keyboard* keyboard = new qz_keyboard{};
     keyboard->server = server;
     keyboard->wlr_keyboard = wlr_keyboard;
 
     // We need to prepare an XKB keymap and assign it to the keyboard.
     // TODO: Configuration support for keyboard layout
 
-    struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    struct xkb_keymap* keymap = xkb_keymap_new_from_names(context, qz_ptr(xkb_rule_names{
+    xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    xkb_keymap* keymap = xkb_keymap_new_from_names(context, qz_ptr(xkb_rule_names{
         .layout = "gb",
     }), XKB_KEYMAP_COMPILE_NO_FLAGS);
 
@@ -135,17 +135,17 @@ void qz_server_new_keyboard(struct qz_server* server, struct wlr_input_device* d
     wl_list_insert(&server->keyboards, &keyboard->link);
 }
 
-void qz_server_new_pointer(struct qz_server* server, struct wlr_input_device* device)
+void qz_server_new_pointer(qz_server* server, wlr_input_device* device)
 {
-    // TODO: Handle mouse configuration
+    // TODO: Handle libinput mouse configuration
 
     wlr_cursor_attach_input_device(server->cursor, device);
 }
 
-void qz_server_new_input(struct wl_listener* listener, void* data)
+void qz_server_new_input(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_input_device* device = static_cast<struct wlr_input_device*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_input_device* device = static_cast<wlr_input_device*>(data);
     switch (device->type) {
         case WLR_INPUT_DEVICE_KEYBOARD:
             qz_server_new_keyboard(server, device);
@@ -165,41 +165,43 @@ void qz_server_new_input(struct wl_listener* listener, void* data)
     wlr_seat_set_capabilities(server->seat, caps);
 }
 
-void qz_seat_request_set_cursor(struct wl_listener* listener, void* data)
+void qz_seat_request_set_cursor(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_seat_pointer_request_set_cursor_event* event = static_cast<struct wlr_seat_pointer_request_set_cursor_event*>(data);
-    struct wlr_seat_client* focused_client = server->seat->pointer_state.focused_client;
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_seat_pointer_request_set_cursor_event* event = static_cast<wlr_seat_pointer_request_set_cursor_event*>(data);
+    wlr_seat_client* focused_client = server->seat->pointer_state.focused_client;
 
     if (focused_client == event->seat_client) {
         wlr_cursor_set_surface(server->cursor, event->surface, event->hotspot_x, event->hotspot_y);
     }
 }
 
-void qz_seat_pointer_focus_change(struct wl_listener* listener, void* data)
+void qz_seat_pointer_focus_change(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
 
-    struct wlr_seat_pointer_focus_change_event* event = static_cast<struct wlr_seat_pointer_focus_change_event*>(data);
+    wlr_seat_pointer_focus_change_event* event = static_cast<wlr_seat_pointer_focus_change_event*>(data);
     if (event->new_surface == NULL) {
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
     }
 }
 
-void qz_seat_request_set_selection(struct wl_listener* listener, void* data)
+void qz_seat_request_set_selection(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
+    // TODO: Validate serial?
 
-    struct wlr_seat_request_set_selection_event* event = static_cast<struct wlr_seat_request_set_selection_event*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+
+    wlr_seat_request_set_selection_event* event = static_cast<wlr_seat_request_set_selection_event*>(data);
     wlr_seat_set_selection(server->seat, event->source, event->serial);
 }
 
 // -----------------------------------------------------------------------------
 
-void qz_seat_request_start_drag(struct wl_listener* listener, void* data)
+void qz_seat_request_start_drag(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_seat_request_start_drag_event* event = static_cast<struct wlr_seat_request_start_drag_event*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_seat_request_start_drag_event* event = static_cast<wlr_seat_request_start_drag_event*>(data);
 
     if (wlr_seat_validate_pointer_grab_serial(server->seat, event->origin, event->serial)) {
         wlr_log(WLR_ERROR, "Drag requested, start");
@@ -211,11 +213,11 @@ void qz_seat_request_start_drag(struct wl_listener* listener, void* data)
 }
 
 static
-void qz_seat_drag_icon_destroy(struct wl_listener* listener, void* data)
+void qz_seat_drag_icon_destroy(wl_listener* listener, void* data)
 {
     wlr_log(WLR_ERROR, "Drag icon destroy");
 
-    auto server = qz_listener_userdata<qz_server*>(listener);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
 
     // Refocus last focused toplevel
     qz_focus_toplevel(server->focused_toplevel);
@@ -224,12 +226,12 @@ void qz_seat_drag_icon_destroy(struct wl_listener* listener, void* data)
     qz_unlisten(qz_listener_from(listener));
 }
 
-void qz_seat_start_drag(struct wl_listener* listener, void* data)
+void qz_seat_start_drag(wl_listener* listener, void* data)
 {
     wlr_log(WLR_ERROR, "Drag start");
 
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_drag* drag = static_cast<struct wlr_drag*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_drag* drag = static_cast<wlr_drag*>(data);
     if (!drag->icon) return;
 
     drag->icon->data = &wlr_scene_drag_icon_create(server->drag_icon_parent, drag->icon)->node;
@@ -237,7 +239,7 @@ void qz_seat_start_drag(struct wl_listener* listener, void* data)
 }
 
 static
-void qz_seat_drag_update_position(struct qz_server* server)
+void qz_seat_drag_update_position(qz_server* server)
 {
     wlr_scene_node_set_position(&server->drag_icon_parent->node, int(std::round(server->cursor->x)), int(std::round(server->cursor->y)));
 
@@ -247,21 +249,21 @@ void qz_seat_drag_update_position(struct qz_server* server)
 
 // -----------------------------------------------------------------------------
 
-void qz_reset_cursor_mode(struct qz_server* server)
+void qz_reset_cursor_mode(qz_server* server)
 {
-    server->cursor_mode = QZ_CURSOR_PASSTHROUGH;
+    server->cursor_mode = qz_cursor_mode::passthrough;
     server->grabbed_toplevel = NULL;
 }
 
-void qz_process_cursor_move(struct qz_server* server)
+void qz_process_cursor_move(qz_server* server)
 {
-    struct qz_toplevel* toplevel = server->grabbed_toplevel;
+    qz_toplevel* toplevel = server->grabbed_toplevel;
     wlr_scene_node_set_position(&toplevel->scene_tree->node, server->cursor->x - server->grab_x, server->cursor->y - server->grab_y);
 }
 
-void qz_process_cursor_resize(struct qz_server* server)
+void qz_process_cursor_resize(qz_server* server)
 {
-    struct qz_toplevel* toplevel = server->grabbed_toplevel;
+    qz_toplevel* toplevel = server->grabbed_toplevel;
     double border_x = server->cursor->x - server->grab_x;
     double border_y = server->cursor->y - server->grab_y;
     int new_left = server->grab_geobox.x;
@@ -293,8 +295,8 @@ void qz_process_cursor_resize(struct qz_server* server)
         }
     }
 
-    struct wlr_box* geo_box = &toplevel->xdg_toplevel->base->geometry;
-    struct wlr_box bounds {
+    wlr_box* geo_box = &toplevel->xdg_toplevel->base->geometry;
+    wlr_box bounds {
         .x = new_left - geo_box->x,
         .y = new_top - geo_box->y,
         .width = new_right - new_left,
@@ -304,22 +306,22 @@ void qz_process_cursor_resize(struct qz_server* server)
     qz_toplevel_set_bounds(toplevel, bounds);
 }
 
-void qz_process_cursor_motion(struct qz_server* server, uint32_t time)
+void qz_process_cursor_motion(qz_server* server, uint32_t time)
 {
     qz_seat_drag_update_position(server);
 
-    if (server->cursor_mode == QZ_CURSOR_MOVE) {
+    if (server->cursor_mode == qz_cursor_mode::move) {
         qz_process_cursor_move(server);
         return;
-    } else if (server->cursor_mode == QZ_CURSOR_RESIZE) {
+    } else if (server->cursor_mode == qz_cursor_mode::resize) {
         qz_process_cursor_resize(server);
         return;
     }
 
     double sx, sy;
-    struct wlr_seat* seat = server->seat;
-    struct wlr_surface* surface = nullptr;
-    struct qz_toplevel* toplevel = qz_desktop_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    wlr_seat* seat = server->seat;
+    wlr_surface* surface = nullptr;
+    qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
     if (!toplevel) {
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
     }
@@ -333,10 +335,10 @@ void qz_process_cursor_motion(struct qz_server* server, uint32_t time)
     }
 }
 
-void qz_server_cursor_motion(struct wl_listener* listener, void* data)
+void qz_server_cursor_motion(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_pointer_motion_event* event = static_cast<struct wlr_pointer_motion_event*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_pointer_motion_event* event = static_cast<wlr_pointer_motion_event*>(data);
 
     // TODO: Handle custom acceleration here
 
@@ -344,19 +346,21 @@ void qz_server_cursor_motion(struct wl_listener* listener, void* data)
     qz_process_cursor_motion(server, event->time_msec);
 }
 
-void qz_server_cursor_motion_absolute(struct wl_listener* listener, void* data)
+void qz_server_cursor_motion_absolute(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_pointer_motion_absolute_event* event = static_cast<struct wlr_pointer_motion_absolute_event*>(data);
+    // TODO: Drawing tablet handling?
+
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_pointer_motion_absolute_event* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
 
     wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
     qz_process_cursor_motion(server, event->time_msec);
 }
 
-void qz_server_cursor_button(struct wl_listener* listener, void* data)
+void qz_server_cursor_button(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_pointer_button_event* event = static_cast<struct wlr_pointer_button_event*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_pointer_button_event* event = static_cast<wlr_pointer_button_event*>(data);
 
     bool handled = false;
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
@@ -367,18 +371,18 @@ void qz_server_cursor_button(struct wl_listener* listener, void* data)
         // Focus client if any button was pressed
         // TODO: Focus follows mouse?
         double sx, sy;
-        struct wlr_surface* surface = nullptr;
-        struct qz_toplevel* toplevel = qz_desktop_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+        wlr_surface* surface = nullptr;
+        qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
         if (toplevel) {
             qz_focus_toplevel(toplevel);
 
             if (qz_is_main_mod_down(server)) {
                 if (event->button == BTN_LEFT) {
-                    qz_begin_interactive(toplevel, QZ_CURSOR_MOVE, 0);
+                    qz_toplevel_begin_interactive(toplevel, qz_cursor_mode::move, 0);
                     handled = true;
                 } else if (event->button == BTN_RIGHT) {
                         // TODO: Edges should be set based on where mouse is in toplevel
-                    qz_begin_interactive(toplevel, QZ_CURSOR_RESIZE, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
+                    qz_toplevel_begin_interactive(toplevel, qz_cursor_mode::resize, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
                     handled = true;
                 }
             }
@@ -390,17 +394,17 @@ void qz_server_cursor_button(struct wl_listener* listener, void* data)
     }
 }
 
-void qz_server_cursor_axis(struct wl_listener* listener, void* data)
+void qz_server_cursor_axis(wl_listener* listener, void* data)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
-    struct wlr_pointer_axis_event* event = static_cast<struct wlr_pointer_axis_event*>(data);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
 
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
 }
 
-void qz_server_cursor_frame(struct wl_listener* listener, void*)
+void qz_server_cursor_frame(wl_listener* listener, void*)
 {
-    auto server = qz_listener_userdata<qz_server*>(listener);
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
 
     wlr_seat_pointer_notify_frame(server->seat);
 }

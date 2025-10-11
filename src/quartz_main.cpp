@@ -1,6 +1,6 @@
 #include "quartz.hpp"
 
-void qz_init(struct qz_server* server)
+void qz_init(qz_server* server)
 {
     server->wl_display = wl_display_create();
     server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->wl_display), nullptr);
@@ -74,7 +74,7 @@ void qz_init(struct qz_server* server)
 
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, 24);
 
-    server->cursor_mode = QZ_CURSOR_PASSTHROUGH;
+    server->cursor_mode = qz_cursor_mode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, qz_server_cursor_motion);
     server->listeners.listen(&server->cursor->events.motion_absolute, server, qz_server_cursor_motion_absolute);
     server->listeners.listen(&server->cursor->events.button,          server, qz_server_cursor_button);
@@ -95,7 +95,7 @@ void qz_init(struct qz_server* server)
     unsetenv("DISPLAY");
 }
 
-void qz_run(struct qz_server* server, char* startup_cmd)
+void qz_run(qz_server* server, char* startup_cmd)
 {
     const char* socket = wl_display_add_socket_auto(server->wl_display);
     if (!socket) {
@@ -123,7 +123,7 @@ void qz_run(struct qz_server* server, char* startup_cmd)
     wl_display_run(server->wl_display);
 }
 
-void qz_cleanup(struct qz_server* server)
+void qz_cleanup(qz_server* server)
 {
     wl_display_destroy_clients(server->wl_display);
     // TODO: Wait for clients to die properly
@@ -163,7 +163,7 @@ int qz_main(int argc, char* argv[])
 
     // Init
 
-    struct qz_server server = {};
+    qz_server server = {};
     qz_init(&server);
 
     // Run
