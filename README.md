@@ -5,14 +5,14 @@ A minimalistic stacking zone-based Wayland compositor built on wlroots.
 ### Goals
 
 - Simple codebase
-    - Keep codebase as small as possible (without sacrificing clarity)
+    - Keep codebase as small and simple as possible (without sacrificing clarity)
     - Easily hackable and maintainable
 - Zone based window management
     - Grid based window snapping (similar to grid layout from FancyZones)
 - Input remapping
     - Mouse acceleration
     - Keyboard shortcuts and macros
-    - Joystick remapping
+    - Joystick remapping?
 
 ### Non-goals
 

@@ -1,5 +1,33 @@
 #include "quartz.hpp"
 
+static
+void qz_toplevel_update_border(qz_toplevel* toplevel)
+{
+    static constexpr uint32_t left = 0;
+    static constexpr uint32_t top = 1;
+    static constexpr uint32_t right = 2;
+    static constexpr uint32_t bottom = 3;
+
+    wlr_box b = qz_client_get_bounds(toplevel);
+
+    if (b.width <= 0 || b.height <= 0) return;
+
+    wlr_box positions[4];
+    positions[left]   = { -qz_border_width, -qz_border_width, qz_border_width, b.height + qz_border_width * 2 };
+    positions[right]  = {  b.width,         -qz_border_width, qz_border_width, b.height + qz_border_width * 2 };
+    positions[top]    = {  0,               -qz_border_width, b.width,         qz_border_width };
+    positions[bottom] = {  0,                b.height,        b.width,         qz_border_width };
+
+    for (uint32_t i = 0; i < 4; ++i) {
+        wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
+        wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
+        wlr_scene_rect_set_color(toplevel->border[i],
+            toplevel->server->focused_toplevel == toplevel
+                ? qz_border_color_focused.values
+                : qz_border_color_unfocused.values);
+    }
+}
+
 wlr_surface* qz_toplevel_get_surface(qz_toplevel* toplevel)
 {
     if (toplevel->xdg_toplevel && toplevel->xdg_toplevel->base) {
@@ -126,8 +154,11 @@ void qz_toplevel_commit(wl_listener* listener, void*)
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     if (toplevel->xdg_toplevel->base->initial_commit) {
+        qz_decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
     }
+
+    qz_toplevel_update_border(toplevel);
 }
 
 void qz_toplevel_destroy(wl_listener* listener, void*)
@@ -237,6 +268,57 @@ void qz_server_new_toplevel(wl_listener* listener, void* data)
 
     toplevel->listeners.listen(&xdg_toplevel->events.request_maximize,   toplevel, qz_toplevel_request_maximize);
     toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, qz_toplevel_request_fullscreen);
+
+    for (int i = 0; i < 4; ++i) {
+        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, qz_border_color_unfocused.values);
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+void qz_decoration_set_mode(qz_toplevel* toplevel)
+{
+    if (!toplevel->decoration.xdg_decoration) return;
+
+    wlr_log(WLR_INFO, "setting decoration mode");
+
+    if (toplevel->xdg_toplevel->base->initialized) {
+        wlr_xdg_toplevel_decoration_v1_set_mode(toplevel->decoration.xdg_decoration, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+    }
+}
+
+void qz_decoration_new(wl_listener*, void* data)
+{
+    wlr_log(WLR_INFO, "creating xdg_decoration");
+
+    wlr_xdg_toplevel_decoration_v1* xdg_decoration = static_cast<wlr_xdg_toplevel_decoration_v1*>(data);
+
+    qz_toplevel* toplevel = static_cast<qz_toplevel*>(xdg_decoration->toplevel->base->data);
+    if (toplevel->decoration.xdg_decoration) {
+        wlr_log(WLR_ERROR, "toplevel already has attached decoration!");
+        return;
+    }
+
+    toplevel->decoration.xdg_decoration = xdg_decoration;
+
+    toplevel->decoration.listeners.listen(&xdg_decoration->events.request_mode, toplevel, qz_decoration_request_mode);
+    toplevel->decoration.listeners.listen(&xdg_decoration->events.destroy,      toplevel, qz_decoration_destroy);
+
+    qz_decoration_set_mode(toplevel);
+}
+
+void qz_decoration_request_mode(wl_listener* listener, void*)
+{
+    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    qz_decoration_set_mode(toplevel);
+}
+
+void qz_decoration_destroy(wl_listener* listener, void*)
+{
+    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+
+    toplevel->decoration.xdg_decoration = nullptr;
+    toplevel->decoration.listeners.clear();
 }
 
 // -----------------------------------------------------------------------------

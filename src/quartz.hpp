@@ -17,6 +17,25 @@
 
 #include <vector>
 
+// -----------------------------------------------------------------------------
+
+static constexpr int      qz_border_width = 2;
+static constexpr qz_color qz_border_color_unfocused = { 0.3f, 0.3f, 0.3f, 1.0f };
+static constexpr qz_color qz_border_color_focused   = { 0.4f, 0.4f, 1.0f, 1.0f };
+
+static constexpr qz_color qz_background_color = { 0.1f, 0.1f, 0.1f, 1.f };
+
+static constexpr qz_color qz_zone_color_inital = { 0.6f, 0.6f, 0.6f, 0.4f };
+static constexpr qz_color qz_zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
+
+static constexpr uint32_t qz_zone_horizontal_zones = 6;
+static constexpr uint32_t qz_zone_vertical_zones   = 2;
+static constexpr qz_point qz_zone_zone_selection_leeway = { 200, 200 };
+static constexpr double   qz_zone_external_padding_ltrb[] = { 7 + qz_border_width, 7 + qz_border_width, 7 + qz_border_width, 7 + qz_border_width };
+static constexpr double   qz_zone_internal_padding = 4 +  + qz_border_width * 2;
+
+// -----------------------------------------------------------------------------
+
 enum class qz_cursor_mode
 {
     passthrough,
@@ -41,6 +60,7 @@ struct qz_server
     wlr_scene_output_layout* scene_output_layout;
     wlr_compositor* compositor;
     wlr_subcompositor* subcompositor;
+    wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
 
     wlr_xdg_shell* xdg_shell;
     std::vector<qz_toplevel*> toplevels;
@@ -71,8 +91,8 @@ struct qz_server
         wlr_box selection;
         wlr_scene_rect* selector;
         qz_box initial_zone = {};
-        qz_box final_zone = {};
-        bool moving = false;
+        qz_box final_zone   = {};
+        bool moving    = false;
         bool selecting = false;
     } zone;
 };
@@ -108,6 +128,12 @@ struct qz_toplevel : qz_client
     qz_listener_set listeners;
 
     wlr_xdg_toplevel* xdg_toplevel;
+
+    wlr_scene_rect* border[4];
+    struct {
+        wlr_xdg_toplevel_decoration_v1* xdg_decoration;
+        qz_listener_set listeners;
+    } decoration;
 
     wlr_box prev_bounds;
 };
@@ -208,6 +234,14 @@ void qz_toplevel_destroy(           wl_listener*, void*);
 void qz_toplevel_request_maximize(  wl_listener*, void*);
 void qz_toplevel_request_fullscreen(wl_listener*, void*);
 void qz_server_new_toplevel(        wl_listener*, void*);
+
+// ---- Client.Toplevel.Decoration ----
+
+void qz_decoration_set_mode(qz_toplevel*);
+
+void qz_decoration_new(         wl_listener*, void*);
+void qz_decoration_request_mode(wl_listener*, void*);
+void qz_decoration_destroy(     wl_listener*, void*);
 
 // ---- Client.Popup ----
 

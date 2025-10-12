@@ -102,8 +102,7 @@ void qz_server_new_output(wl_listener* listener, void* data)
     output->scene_output = scene_output;
 
     // TODO: If this is set to 0,0,0,1 - results in incorrect damage when unfullscreening a window?
-    static constexpr qz_color bg_color { 0.1f, 0.1f, 0.1f, 1.f };
-    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, bg_color.values);
+    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, qz_background_color.values);
 }
 
 void qz_server_output_layout_change(wl_listener* listener, void*)

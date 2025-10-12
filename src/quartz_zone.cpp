@@ -4,9 +4,6 @@
 
 #include <optional>
 
-static constexpr qz_color qz_zone_color_inital = { 0.6f, 0.6f, 0.6f, 0.4f };
-static constexpr qz_color qz_zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
-
 void qz_zone_init(qz_server* server)
 {
     server->zone.selector = wlr_scene_rect_create(&server->scene->tree, 0, 0, qz_zone_color_inital.values);
@@ -71,20 +68,14 @@ void qz_zone_process_cursor_motion(qz_server* server)
     auto output = qz_get_output_at(server, server->cursor->x, server->cursor->y);
     auto bounds = qz_output_get_bounds(output);
 
-    static constexpr int horizontal_zones = 6;
-    static constexpr int vertical_zones = 2;
-    static constexpr qz_point zone_leeway = { 200, 200 };
-    static constexpr double external_padding_ltrb[] = { 7, 7, 7, 7 };
-    static constexpr double internal_padding = 4;
-
     qz_point point{ server->cursor->x, server->cursor->y };
 
     qz_box pointer_zone = {};
     bool any_zones = false;
 
-    auto extent = qz_point(double(bounds.width) / horizontal_zones, double(bounds.height) / vertical_zones);
-    for (int zone_x = 0; zone_x < horizontal_zones; ++zone_x) {
-        for (int zone_y = 0; zone_y < vertical_zones; ++zone_y) {
+    auto extent = qz_point(double(bounds.width) / qz_zone_horizontal_zones, double(bounds.height) / qz_zone_vertical_zones);
+    for (uint32_t zone_x = 0; zone_x < qz_zone_horizontal_zones; ++zone_x) {
+        for (uint32_t zone_y = 0; zone_y < qz_zone_vertical_zones; ++zone_y) {
             auto rect = qz_box {
                 .x = bounds.x + extent.x * zone_x,
                 .y = bounds.y + extent.y * zone_y,
@@ -93,17 +84,17 @@ void qz_zone_process_cursor_motion(qz_server* server)
             };
 
             auto check_rect = rect;
-            check_rect.x -= zone_leeway.x;
-            check_rect.y -= zone_leeway.y;
-            check_rect.width += zone_leeway.x * 2;
-            check_rect.height += zone_leeway.y * 2;
+            check_rect.x -= qz_zone_zone_selection_leeway.x;
+            check_rect.y -= qz_zone_zone_selection_leeway.y;
+            check_rect.width += qz_zone_zone_selection_leeway.x * 2;
+            check_rect.height += qz_zone_zone_selection_leeway.y * 2;
 
             if (qz_box_contains_point(check_rect, point)) {
 
                 // Compute padding
-                constexpr auto pad = [](int i, bool c) { return c ? external_padding_ltrb[i] : internal_padding / 2; };
+                constexpr auto pad = [](int i, bool c) { return c ? qz_zone_external_padding_ltrb[i] : qz_zone_internal_padding / 2; };
                 qz_point tl_inset{ pad(0, zone_x == 0),                      pad(1, zone_y == 0)                    };
-                qz_point br_inset{ pad(2, zone_x == (horizontal_zones - 1)), pad(3, zone_y == (vertical_zones - 1)) };
+                qz_point br_inset{ pad(2, zone_x == (qz_zone_horizontal_zones - 1)), pad(3, zone_y == (qz_zone_vertical_zones - 1)) };
                 rect.x += tl_inset.x;
                 rect.y += tl_inset.y;
                 rect.width  -= tl_inset.x + br_inset.x;
@@ -123,7 +114,7 @@ void qz_zone_process_cursor_motion(qz_server* server)
             server->zone.final_zone = server->zone.initial_zone = pointer_zone;
         }
 
-        auto b = server->zone.final_zone;
+        auto b = qz_box_round_to_wlr_box(server->zone.final_zone);
 
         wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
         wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);

@@ -28,14 +28,14 @@
    - ✅ Add drag icon/source support
    - Continue mouse drag operations outside of window
 - ✅ Fullscreen support
+- ️✅ Basic window zone snapping logic
+- ✅ Server decorations
+   - ✅ Add decoration manager to tell clients to prefer server side decorations
+   - ✅ Add thin border around windows
 - Minimal multi display configuration
    - Add wayland output spawning for multi-window testing
 - Add pointer constraint protocol
-- ️✅ Basic window zone snapping logic
 - Add layer shell protocol
-- Client decorations
-   - Add decoration manager to tell clients to prefer server side decorations
-   - Add thin border around windows
 
 ### Bugs
 
@@ -47,6 +47,8 @@
 
 ### Additional
 
+- Throttle resize requests
+   - Until surface commit received or vblank passed?
 - Consolidate interaction logic
    - Rename `quartz_input.cpp` -> `quartz_seat.cpp`
    - Move input binding logic to `quartz_interaction.cpp`

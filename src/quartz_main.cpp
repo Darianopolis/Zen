@@ -41,7 +41,6 @@ void qz_init(qz_server* server)
     server->compositor = wlr_compositor_create(server->wl_display, 5, server->renderer);
     server->subcompositor = wlr_subcompositor_create(server->wl_display);
     wlr_data_device_manager_create(server->wl_display);
-
     wlr_export_dmabuf_manager_v1_create(server->wl_display);
     wlr_screencopy_manager_v1_create(server->wl_display);
     wlr_data_control_manager_v1_create(server->wl_display);
@@ -67,6 +66,15 @@ void qz_init(qz_server* server)
     server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, qz_server_new_toplevel);
     server->listeners.listen(&server->xdg_shell->events.new_popup,    server, qz_server_new_popup);
 
+    // Decorations:
+    //  We enable enough decoration functionality to tell clients *not* to render their
+    //  own decorations but we'll render our border regardless of whether clients comply.
+    wlr_server_decoration_manager_set_default_mode(
+        wlr_server_decoration_manager_create(server->wl_display),
+        WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+    server->xdg_decoration_manager = wlr_xdg_decoration_manager_v1_create(server->wl_display);
+    server->listeners.listen(&server->xdg_decoration_manager->events.new_toplevel_decoration, server, qz_decoration_new);
+
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
@@ -89,9 +97,6 @@ void qz_init(qz_server* server)
     server->listeners.listen(&              server->seat->events.start_drag,            server, qz_seat_start_drag);
 
     qz_zone_init(server);
-
-    // Make sure containing X server does not leak through
-    unsetenv("DISPLAY");
 }
 
 void qz_run(qz_server* server, char* startup_cmd)
@@ -113,6 +118,9 @@ void qz_run(qz_server* server, char* startup_cmd)
     // TODO: Set this for applications that we've checked work in Wayland mode inside of Quartz
     setenv("ELECTRON_OZONE_PLATFORM_HINT", "auto", true);
     setenv("SDL_VIDEO_DRIVER", "wayland", true);
+
+    // Make sure containing X server does not leak through
+    unsetenv("DISPLAY");
 
     if (startup_cmd) {
         qz_spawn("/bin/sh", {"/bin/sh", "-c", startup_cmd});
