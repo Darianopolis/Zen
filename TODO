@@ -24,12 +24,14 @@
    - ✅ Remove client requested move/size operations
 - ✅ Enable viewporter protocol
 - ✅ Ensure that xwayland-satellite is sufficient for running Steam
-- ✅ Add drag'n'drop support (required for browser tab dragging functionality)
+- Add drag support
+   - ✅ Add drag icon/source support
+   - Continue mouse drag operations outside of window
 - ✅ Fullscreen support
 - Minimal multi display configuration
    - Add wayland output spawning for multi-window testing
 - Add pointer constraint protocol
-- ️Basic window zone snapping logic
+- ️✅ Basic window zone snapping logic
 
 ### Bugs
 
@@ -41,17 +43,25 @@
 
 ### Additional
 
+- Consolidate interaction logic
+   - Rename `quartz_input.cpp` -> `quartz_seat.cpp`
+   - Move input binding logic to `quartz_interaction.cpp`
+   - Replace `qz_cursor_mode` with `qz_interaction_state`
+   - Separate zoning logic from zone interaction binds
+- Add layer shell protocol
+- Improved zone logic
+   - Have toplevels remember what zones edges they are constrained to
+   - Readjust all toplevel zone constraint on workspace/output configuration change
 - Shortcut to grab all input back from any clients and ignore any constraints
 - Add decoration manager to tell clients to prefer server side decorations
-- Add layer shell protocol
 - Media control keybinds
 - Numlock default state
-- Window list/search/cycling
+- Improved window list/search/cycling
+   - MOD + MouseScroll - Cycle through toplevels under mouse cursor
 - Output management
    - Dynamic output removal/creation/configuration
    - Output scaling
    - wlr_output_configuration_v1 protocol?
-- Upgrade to wlroots 0.20 git?
 
 ### Portals
 

@@ -1,14 +1,17 @@
 #include "quartz.hpp"
 
-#include <libinput.h>
 #include <libevdev/libevdev.h>
 
-bool qz_is_main_mod_down(qz_server* server)
+uint32_t qz_get_modifiers(qz_server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
     if (!keyboard) return false;
-    uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard);
-    return modifiers & server->modifier_key;
+    return wlr_keyboard_get_modifiers(keyboard);
+}
+
+bool qz_is_main_mod_down(qz_server* server)
+{
+    return qz_get_modifiers(server) & server->modifier_key;
 }
 
 bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
@@ -316,6 +319,9 @@ void qz_process_cursor_motion(qz_server* server, uint32_t time)
     } else if (server->cursor_mode == qz_cursor_mode::resize) {
         qz_process_cursor_resize(server);
         return;
+    } else if (server->cursor_mode == qz_cursor_mode::zone) {
+        qz_zone_process_cursor_motion(server);
+        return;
     }
 
     double sx, sy;
@@ -362,36 +368,61 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
     wlr_pointer_button_event* event = static_cast<wlr_pointer_button_event*>(data);
 
-    bool handled = false;
+    // TODO: Focus follows mouse?
+    // TODO: Move interaction logic to separate source
+
+    // Zone interaction
+
+    if (qz_zone_process_cursor_button(server, event)) return;
+
+    // End move/size interaction
+
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-        // If you released any button, exit interactive move/resize mode
         qz_reset_cursor_mode(server);
-    } else {
+        wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
+        return;
+    }
 
-        // Focus client if any button was pressed
-        // TODO: Focus follows mouse?
-        double sx, sy;
-        wlr_surface* surface = nullptr;
-        qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-        if (toplevel) {
-            qz_focus_toplevel(toplevel);
+    // Focus window on any button press
 
-            if (qz_is_main_mod_down(server)) {
-                if (event->button == BTN_LEFT) {
-                    qz_toplevel_begin_interactive(toplevel, qz_cursor_mode::move, 0);
-                    handled = true;
-                } else if (event->button == BTN_RIGHT) {
-                        // TODO: Edges should be set based on where mouse is in toplevel
-                    qz_toplevel_begin_interactive(toplevel, qz_cursor_mode::resize, WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT);
-                    handled = true;
-                }
-            }
+    double sx, sy;
+    wlr_surface* surface = nullptr;
+    qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    if (toplevel) {
+        qz_focus_toplevel(toplevel);
+    }
+
+    // Check for move/size interaction begin
+
+    if (toplevel && qz_is_main_mod_down(server)) {
+        if (event->button == BTN_LEFT && (qz_get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
+            qz_toplevel_begin_interactive(toplevel, qz_cursor_mode::move, 0);
+            return;
+        } else if (event->button == BTN_RIGHT) {
+            wlr_box bounds = qz_client_get_bounds(toplevel);
+            int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
+            int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
+
+            qz_cursor_mode type = qz_cursor_mode::resize;
+            uint32_t edges = 0;
+
+            if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
+            else if (nine_slice_x > 1) edges |= WLR_EDGE_RIGHT;
+
+            if      (nine_slice_y < 1) edges |= WLR_EDGE_TOP;
+            else if (nine_slice_y > 1) edges |= WLR_EDGE_BOTTOM;
+
+            // If no edges selected, must be center - switch to move
+            if (!edges) type = qz_cursor_mode::move;
+
+            qz_toplevel_begin_interactive(toplevel, type, edges);
+            return;
         }
     }
 
-    if (!handled) {
-        wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
-    }
+    // ... else passthrough to client
+
+    wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 }
 
 void qz_server_cursor_axis(wl_listener* listener, void* data)

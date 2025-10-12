@@ -47,6 +47,7 @@ target_sources(            quartz PUBLIC
     src/quartz_main.cpp
     src/quartz_output.cpp
     src/quartz_util.cpp
+    src/quartz_zone.cpp
     )
 target_link_libraries(quartz PUBLIC
     wayland-server

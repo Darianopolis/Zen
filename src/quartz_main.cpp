@@ -64,8 +64,8 @@ void qz_init(qz_server* server)
     server->drag_icon_parent = wlr_scene_tree_create(&server->scene->tree);
 
     server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
-    server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, qz_server_new_xdg_toplevel);
-    server->listeners.listen(&server->xdg_shell->events.new_popup,    server, qz_server_new_xdg_popup);
+    server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, qz_server_new_toplevel);
+    server->listeners.listen(&server->xdg_shell->events.new_popup,    server, qz_server_new_popup);
 
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
@@ -87,6 +87,8 @@ void qz_init(qz_server* server)
     server->listeners.listen(&              server->seat->events.request_set_selection, server, qz_seat_request_set_selection);
     server->listeners.listen(&              server->seat->events.request_start_drag,    server, qz_seat_request_start_drag);
     server->listeners.listen(&              server->seat->events.start_drag,            server, qz_seat_start_drag);
+
+    qz_zone_init(server);
 
     // Make sure containing X server does not leak through
     unsetenv("DISPLAY");

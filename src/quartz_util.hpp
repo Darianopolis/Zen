@@ -7,8 +7,67 @@
 
 // -----------------------------------------------------------------------------
 
+struct qz_color
+{
+    float values[4];
+
+    constexpr qz_color() = default;
+
+    constexpr qz_color(float r, float g, float b, float a)
+        : values { r * a, g * a, b * a, a }
+    {}
+};
+
+struct qz_point
+{
+    double x, y;
+};
+
+struct qz_box
+{
+    double x, y, width, height;
+};
+
+constexpr
+wlr_box qz_box_round_to_wlr_box(qz_box in)
+{
+    wlr_box out;
+    out.x = std::floor(in.x);
+    out.y = std::floor(in.y);
+    out.width = std::ceil(in.x + in.width - out.x);
+    out.height = std::ceil(in.y + in.height - out.y);
+    return out;
+};
+
+constexpr
+qz_box qz_box_outer(qz_box a, qz_box b)
+{
+    auto left   = std::min(a.x,            b.x);
+    auto top    = std::min(a.y,            b.y);
+    auto right  = std::max(a.x + a.width,  b.x + b.width);
+    auto bottom = std::max(a.y + a.height, b.y + b.height);
+    return {
+        .x = left,
+        .y = top,
+        .width = right - left,
+        .height = bottom - top,
+    };
+};
+
+constexpr
+bool qz_box_contains_point(qz_box box, qz_point p)
+{
+    auto l = box.x;
+    auto t = box.y;
+    auto r = box.x + box.width;
+    auto b = box.y + box.height;
+    return p.x >= l && p.x < r && p.y >= t && p.y < b;
+};
+
+// -----------------------------------------------------------------------------
+
 void qz_spawn(const char* file, const char* const argv[]);
-auto qz_ptr(auto&& value) { return &value; }
+constexpr auto qz_ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------
 

@@ -9,22 +9,25 @@ wlr_surface* qz_toplevel_get_surface(qz_toplevel* toplevel)
     return nullptr;
 }
 
-void qz_toplevel_set_bounds(qz_toplevel* toplevel, wlr_box box)
+wlr_box qz_client_get_bounds(qz_client* toplevel)
 {
-    // TODO: Does this need to be rate limited?
-    //       if (toplevel->last_width != new_width || toplevel->last_height != new_height) {
-    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, box.width, box.height);
-    wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
+    wlr_box box = {};
+    wlr_scene_node_coords(&toplevel->scene_tree->node, &box.x, &box.y);
+    box.width = toplevel->xdg_surface->current.geometry.width;
+    box.height = toplevel->xdg_surface->current.geometry.height;
+    return box;
 }
 
-wlr_box qz_toplevel_get_bounds(qz_toplevel* toplevel)
+void qz_toplevel_set_bounds(qz_toplevel* toplevel, wlr_box box)
 {
-    wlr_box box;
-    box.x = toplevel->scene_tree->node.x;
-    box.y = toplevel->scene_tree->node.y;
-    box.width = toplevel->xdg_toplevel->base->current.geometry.width;
-    box.height = toplevel->xdg_toplevel->base->current.geometry.height;
-    return box;
+    // NOTE: Bounds are set with node relative positions, unlike get_bounds which returns layout relative positions
+    //       Thus you must be careful when setting/getting bounds with positioned parents
+    // TODO: Tidy up this API and make it clear what is relative to what.
+    //       Investigate Wayland's/wlroot's coordinate systems
+    // TODO: Does this need to be rate limited?
+
+    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, box.width, box.height);
+    wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
 }
 
 bool qz_toplevel_wants_fullscreen(qz_toplevel* toplevel)
@@ -190,8 +193,8 @@ void qz_toplevel_request_fullscreen(wl_listener* listener, void*)
 
     bool fs = qz_toplevel_wants_fullscreen(toplevel);
     if (fs) {
-        wlr_box prev = qz_toplevel_get_bounds(toplevel);
-        qz_output* output = qz_get_output_for_toplevel(toplevel);
+        wlr_box prev = qz_client_get_bounds(toplevel);
+        qz_output* output = qz_get_output_for_client(toplevel);
         if (output) {
             wlr_box b = qz_output_get_bounds(output);
             qz_toplevel_set_fullscreen(toplevel, true);
@@ -211,17 +214,20 @@ void qz_toplevel_request_fullscreen(wl_listener* listener, void*)
     }
 }
 
-void qz_server_new_xdg_toplevel(wl_listener* listener, void* data)
+void qz_server_new_toplevel(wl_listener* listener, void* data)
 {
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
     wlr_xdg_toplevel* xdg_toplevel = static_cast<wlr_xdg_toplevel*>(data);
 
     qz_toplevel* toplevel = new qz_toplevel{};
+    toplevel->type = qz_client_type::toplevel;
     toplevel->server = server;
+    toplevel->xdg_surface = xdg_toplevel->base;
+    toplevel->xdg_surface->data = toplevel;
+
     toplevel->xdg_toplevel = xdg_toplevel;
     toplevel->scene_tree = wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
-    xdg_toplevel->base->data = toplevel->scene_tree;
 
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, qz_toplevel_map);
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, qz_toplevel_unmap);
@@ -234,41 +240,64 @@ void qz_server_new_xdg_toplevel(wl_listener* listener, void* data)
 }
 
 // -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
 
-void qz_xdg_popup_commit(wl_listener* listener, void*)
+void qz_popup_commit(wl_listener* listener, void*)
 {
     qz_popup* popup = qz_listener_userdata<qz_popup*>(listener);
 
-    if (popup->xdg_popup->base->initial_commit) {
-        // When an xdg_surface performs an initial commit, the compositor must reply with a configure so the client can map the surface.
-        // TODO: Ensure good popup geometry (e.g. centered, on screen)
+    wlr_xdg_popup* xdg_popup = popup->xdg_popup;
+
+    if (!xdg_popup->base->initial_commit) {
+        return;
+    }
+
+    wlr_xdg_surface* xdg_parent = wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
+    qz_client* parent = static_cast<qz_client*>(xdg_parent->data);
+    popup->scene_tree = wlr_scene_xdg_surface_create(parent->scene_tree, xdg_popup->base);
+
+    qz_output* output = qz_get_output_for_client(parent);
+    if (output) {
+        wlr_box box = qz_output_get_bounds(output);
+
+        // NOTE: This box needs to be in the root toplevel' surface coordinate system.
+        {
+            // TODO: Move this into a helper for getting a qz_toplevel from an wlr_(xdg_)surface
+
+            qz_client* cur = parent;
+            while (cur->type == qz_client_type::popup) {
+                cur = static_cast<qz_client*>(wlr_xdg_surface_try_from_wlr_surface(static_cast<qz_popup*>(cur)->xdg_popup->parent)->data);
+            }
+            wlr_box toplevel_box = qz_client_get_bounds(cur);
+            box.x -= toplevel_box.x;
+            box.y -= toplevel_box.y;
+        }
+
+        wlr_xdg_popup_unconstrain_from_box(xdg_popup, &box);
+    } else {
+        wlr_log(WLR_ERROR, "No output for toplevel while opening popup!");
     }
 }
 
-void qz_xdg_popup_destroy(wl_listener* listener, void*)
+void qz_popup_destroy(wl_listener* listener, void*)
 {
     qz_popup* popup = qz_listener_userdata<qz_popup*>(listener);
 
     delete popup;
 }
 
-void qz_server_new_xdg_popup(wl_listener*, void* data)
+void qz_server_new_popup(wl_listener* listener, void* data)
 {
+    qz_server* server = qz_listener_userdata<qz_server*>(listener);
     wlr_xdg_popup* xdg_popup = static_cast<wlr_xdg_popup*>(data);
 
     qz_popup* popup = new qz_popup{};
+    popup->type = qz_client_type::popup;
+    popup->server = server;
+    popup->xdg_surface = xdg_popup->base;
+    popup->xdg_surface->data = popup;
+
     popup->xdg_popup = xdg_popup;
 
-    wlr_xdg_surface* parent = wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
-    assert(parent != nullptr);
-    wlr_scene_tree* parent_tree = static_cast<wlr_scene_tree*>(parent->data);
-    xdg_popup->base->data = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
-
-    popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup,  qz_xdg_popup_commit);
-    popup->listeners.listen(&               xdg_popup->events.destroy, popup, qz_xdg_popup_destroy);
+    popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup, qz_popup_commit);
+    popup->listeners.listen(&               xdg_popup->events.destroy, popup, qz_popup_destroy);
 }

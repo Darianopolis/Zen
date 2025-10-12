@@ -22,6 +22,7 @@ enum class qz_cursor_mode
     passthrough,
     move,
     resize,
+    zone,
 };
 
 struct qz_toplevel;
@@ -65,6 +66,15 @@ struct qz_server
 
     // Parent node in the scene for attaching drag icons to
     wlr_scene_tree* drag_icon_parent;
+
+    struct {
+        wlr_box selection;
+        wlr_scene_rect* selector;
+        qz_box initial_zone = {};
+        qz_box final_zone = {};
+        bool moving = false;
+        bool selecting = false;
+    } zone;
 };
 
 struct qz_output
@@ -78,19 +88,31 @@ struct qz_output
     wlr_scene_rect* background;
 };
 
-struct qz_toplevel
+enum class qz_client_type
 {
-    qz_listener_set listeners;
+    toplevel,
+    popup,
+};
+
+struct qz_client
+{
+    qz_client_type type;
 
     qz_server* server;
     wlr_scene_tree* scene_tree;
+    wlr_xdg_surface* xdg_surface;
+};
+
+struct qz_toplevel : qz_client
+{
+    qz_listener_set listeners;
 
     wlr_xdg_toplevel* xdg_toplevel;
 
     wlr_box prev_bounds;
 };
 
-struct qz_popup
+struct qz_popup : qz_client
 {
     qz_listener_set listeners;
 
@@ -107,8 +129,9 @@ struct qz_keyboard
 
 // ---- Policy ----
 
-bool qz_handle_keybinding(qz_server*, xkb_keysym_t);
-bool qz_is_main_mod_down( qz_server*);
+bool     qz_handle_keybinding(qz_server*, xkb_keysym_t);
+uint32_t qz_get_modifiers(    qz_server*);
+bool     qz_is_main_mod_down( qz_server*);
 
 // ---- Keyboard ----
 
@@ -140,13 +163,21 @@ void qz_seat_request_set_selection(wl_listener*, void*);
 void qz_seat_request_start_drag(   wl_listener*, void*);
 void qz_seat_start_drag(           wl_listener*, void*);
 
+// ---- Zone ----
+
+void qz_zone_init(                 qz_server*);
+void qz_zone_process_cursor_motion(qz_server*);
+bool qz_zone_process_cursor_button(qz_server*, wlr_pointer_button_event*);
+void qz_zone_begin_selection(      qz_server*);
+void qz_zone_end_selection(        qz_server*);
+
 // ---- Output ----
 
 qz_output* qz_get_output_at(qz_server*, double x, double y);
 
 wlr_box qz_output_get_bounds(qz_output*);
 
-qz_output* qz_get_output_for_toplevel(qz_toplevel*);
+qz_output* qz_get_output_for_client(qz_client*);
 
 void qz_output_frame(               wl_listener*, void*);
 void qz_output_request_state(       wl_listener*, void*);
@@ -154,11 +185,14 @@ void qz_output_destroy(             wl_listener*, void*);
 void qz_server_new_output(          wl_listener*, void*);
 void qz_server_output_layout_change(wl_listener*, void*);
 
-// ---- Toplevel ----
+// ---- Client ----
+
+wlr_box qz_client_get_bounds(qz_client*);
+
+// ---- Client.Toplevel ----
 
 void         qz_focus_toplevel(           qz_toplevel*);
 void         qz_toplevel_set_bounds(      qz_toplevel*, wlr_box);
-wlr_box      qz_toplevel_get_bounds(      qz_toplevel*);
 bool         qz_toplevel_wants_fullscreen(qz_toplevel*);
 void         qz_toplevel_set_fullscreen(  qz_toplevel*, bool fullscreen);
 wlr_surface* qz_toplevel_get_surface(     qz_toplevel*);
@@ -173,10 +207,10 @@ void qz_toplevel_commit(            wl_listener*, void*);
 void qz_toplevel_destroy(           wl_listener*, void*);
 void qz_toplevel_request_maximize(  wl_listener*, void*);
 void qz_toplevel_request_fullscreen(wl_listener*, void*);
-void qz_server_new_xdg_toplevel(    wl_listener*, void*);
+void qz_server_new_toplevel(        wl_listener*, void*);
 
-// ---- Popup ----
+// ---- Client.Popup ----
 
-void qz_xdg_popup_commit(    wl_listener*, void*);
-void qz_xdg_popup_destroy(   wl_listener*, void*);
-void qz_server_new_xdg_popup(wl_listener*, void*);
+void qz_popup_commit(    wl_listener*, void*);
+void qz_popup_destroy(   wl_listener*, void*);
+void qz_server_new_popup(wl_listener*, void*);

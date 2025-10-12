@@ -6,14 +6,14 @@ qz_output* qz_get_output_at(qz_server* server, double x, double y)
     return o ? static_cast<qz_output*>(o->data) : nullptr;
 }
 
-qz_output* qz_get_output_for_toplevel(qz_toplevel* toplevel)
+qz_output* qz_get_output_for_client(qz_client* client)
 {
-    wlr_box bounds = qz_toplevel_get_bounds(toplevel);
+    wlr_box bounds = qz_client_get_bounds(client);
     int x = bounds.x + bounds.width / 2;
     int y = bounds.y + bounds.height / 2;
     // TODO: - Keep track of the last monitor to be associated with this window
     //       - Check monitor output based on bounds instead of centroid?
-    return qz_get_output_at(toplevel->server, x, y);
+    return qz_get_output_at(client->server, x, y);
 }
 
 wlr_box qz_output_get_bounds(qz_output* output)
@@ -102,8 +102,8 @@ void qz_server_new_output(wl_listener* listener, void* data)
     output->scene_output = scene_output;
 
     // TODO: If this is set to 0,0,0,1 - results in incorrect damage when unfullscreening a window?
-    float bg_color[] { 0.1f, 0.1f, 0.1f, 1.f };
-    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, bg_color);
+    static constexpr qz_color bg_color { 0.1f, 0.1f, 0.1f, 1.f };
+    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, bg_color.values);
 }
 
 void qz_server_output_layout_change(wl_listener* listener, void*)
