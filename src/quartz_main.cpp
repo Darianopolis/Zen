@@ -115,7 +115,7 @@ void qz_run(qz_server* server, char* startup_cmd)
     setenv("SDL_VIDEO_DRIVER", "wayland", true);
 
     if (startup_cmd) {
-        qz_spawn("/bin/sh", (const char* const[]){"/bin/sh", "-c", startup_cmd, nullptr});
+        qz_spawn("/bin/sh", {"/bin/sh", "-c", startup_cmd});
     }
 
     wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);

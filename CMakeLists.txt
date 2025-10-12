@@ -39,6 +39,13 @@ option(QUARTZ_XWAYLAND OFF)
 add_executable(        quartz)
 target_compile_options(quartz PUBLIC
     -std=c++26
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Werror
+    -Wno-missing-designated-field-initializers
+    -Wno-missing-field-initializers
+    -Wno-unknown-pragmas
     )
 target_include_directories(quartz PUBLIC src)
 target_sources(            quartz PUBLIC

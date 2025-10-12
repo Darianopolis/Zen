@@ -33,7 +33,7 @@ struct qz_server
 {
     qz_listener_set listeners;
 
-    wl_display* wl_display;
+    struct wl_display* wl_display;
     wlr_backend* backend;
     wlr_renderer* renderer;
     wlr_allocator* allocator;
@@ -82,7 +82,7 @@ struct qz_output
     qz_listener_set listeners;
 
     qz_server* server;
-    wlr_output* wlr_output;
+    struct wlr_output* wlr_output;
     wlr_scene_output* scene_output;
 
     wlr_scene_rect* background;
@@ -124,7 +124,7 @@ struct qz_keyboard
     qz_listener_set listeners;
 
     qz_server* server;
-    wlr_keyboard* wlr_keyboard;
+    struct wlr_keyboard* wlr_keyboard;
 };
 
 // ---- Policy ----

@@ -33,11 +33,11 @@ bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
         }
         case XKB_KEY_T:
         case XKB_KEY_t:
-            qz_spawn("konsole", (const char* const[]){"konsole", nullptr});
+            qz_spawn("konsole", {"konsole"});
             break;
         case XKB_KEY_D:
         case XKB_KEY_d:
-            qz_spawn("wofi", (const char* const[]){"wofi", "--show", "drun", nullptr});
+            qz_spawn("wofi", {"wofi", "--show", "drun"});
             break;
         case XKB_KEY_Q:
         case XKB_KEY_q:
@@ -216,7 +216,7 @@ void qz_seat_request_start_drag(wl_listener* listener, void* data)
 }
 
 static
-void qz_seat_drag_icon_destroy(wl_listener* listener, void* data)
+void qz_seat_drag_icon_destroy(wl_listener* listener, void*)
 {
     wlr_log(WLR_ERROR, "Drag icon destroy");
 

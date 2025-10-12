@@ -32,6 +32,10 @@
    - Add wayland output spawning for multi-window testing
 - Add pointer constraint protocol
 - ️✅ Basic window zone snapping logic
+- Add layer shell protocol
+- Client decorations
+   - Add decoration manager to tell clients to prefer server side decorations
+   - Add thin border around windows
 
 ### Bugs
 
@@ -48,12 +52,10 @@
    - Move input binding logic to `quartz_interaction.cpp`
    - Replace `qz_cursor_mode` with `qz_interaction_state`
    - Separate zoning logic from zone interaction binds
-- Add layer shell protocol
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
    - Readjust all toplevel zone constraint on workspace/output configuration change
 - Shortcut to grab all input back from any clients and ignore any constraints
-- Add decoration manager to tell clients to prefer server side decorations
 - Media control keybinds
 - Numlock default state
 - Improved window list/search/cycling

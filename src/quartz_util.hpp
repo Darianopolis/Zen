@@ -4,6 +4,8 @@
 
 #include <typeinfo>
 #include <cstring>
+#include <span>
+#include <string_view>
 
 // -----------------------------------------------------------------------------
 
@@ -66,7 +68,7 @@ bool qz_box_contains_point(qz_box box, qz_point p)
 
 // -----------------------------------------------------------------------------
 
-void qz_spawn(const char* file, const char* const argv[]);
+void qz_spawn(const char* file, std::span<const std::string_view> argv);
 constexpr auto qz_ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------

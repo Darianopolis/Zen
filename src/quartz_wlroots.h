@@ -15,6 +15,10 @@
 extern "C" {
 #endif
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#pragma clang diagnostic ignored "-Wkeyword-macro"
+
 // backends
 #include <wlr/backend.h>
 #include <wlr/backend/drm.h>
@@ -62,6 +66,8 @@ extern "C" {
 # include <wlr/xwayland/xwayland.h> // uses reserved keyword "class" as struct member
 #undef class
 #include <wlr/xwayland.h>
+
+#pragma clang diagnostic pop
 
 #ifdef __cplusplus
 }
