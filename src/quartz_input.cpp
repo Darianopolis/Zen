@@ -140,7 +140,13 @@ void qz_server_new_keyboard(qz_server* server, wlr_input_device* device)
 
 void qz_server_new_pointer(qz_server* server, wlr_input_device* device)
 {
-    // TODO: Handle libinput mouse configuration
+    libinput_device* libinput_device;
+    if (wlr_input_device_is_libinput(device) && (libinput_device = wlr_libinput_get_device_handle(device))) {
+        if (libinput_device_config_accel_is_available(libinput_device)) {
+            libinput_device_config_accel_set_profile(libinput_device, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
+            libinput_device_config_accel_set_speed(  libinput_device, qz_libinput_mouse_speed);
+        }
+    }
 
     wlr_cursor_attach_input_device(server->cursor, device);
 }
@@ -309,7 +315,7 @@ void qz_process_cursor_resize(qz_server* server)
     qz_toplevel_set_bounds(toplevel, bounds);
 }
 
-void qz_process_cursor_motion(qz_server* server, uint32_t time)
+void qz_process_cursor_motion(qz_server* server, uint32_t time_msecs)
 {
     qz_seat_drag_update_position(server);
 
@@ -335,9 +341,9 @@ void qz_process_cursor_motion(qz_server* server, uint32_t time)
     if (surface) {
         // TODO: If mouse button held down, send mouse motion events to window that button was pressed in
         wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
-        wlr_seat_pointer_notify_motion(seat, time, sx, sy);
+        wlr_seat_pointer_notify_motion(seat, time_msecs, sx, sy);
     } else {
-        wlr_seat_pointer_clear_focus(seat);
+        wlr_seat_pointer_notify_clear_focus(seat);
     }
 }
 

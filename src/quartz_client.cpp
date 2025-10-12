@@ -37,12 +37,23 @@ wlr_surface* qz_toplevel_get_surface(qz_toplevel* toplevel)
     return nullptr;
 }
 
-wlr_box qz_client_get_bounds(qz_client* toplevel)
+wlr_box qz_client_get_bounds(qz_client* client)
 {
     wlr_box box = {};
-    wlr_scene_node_coords(&toplevel->scene_tree->node, &box.x, &box.y);
-    box.width = toplevel->xdg_surface->current.geometry.width;
-    box.height = toplevel->xdg_surface->current.geometry.height;
+    wlr_scene_node_coords(&client->scene_tree->node, &box.x, &box.y);
+
+    box.width = client->xdg_surface->current.geometry.width;
+    box.height = client->xdg_surface->current.geometry.height;
+    if (!box.width || !box.height) {
+        // TODO: Why is xdg_surface.geometry 0,0 on some windows?
+        //       This is a workaround for now to get borders showing
+        if (client->xdg_surface->toplevel) {
+            box.width = client->xdg_surface->toplevel->current.width;
+            box.height = client->xdg_surface->toplevel->current.height;
+        } else {
+            wlr_log(WLR_ERROR, "Non-toplevel client with size 0,0");
+        }
+    }
     return box;
 }
 

@@ -1,6 +1,18 @@
 #include "quartz.hpp"
 
-void qz_init(qz_server* server)
+#include <string_view>
+#include <iostream>
+
+using namespace std::literals;
+
+struct qz_startup_options
+{
+    const char* startup_cmd;
+    const char* log_file;
+};
+
+static
+void qz_init(qz_server* server, const qz_startup_options& /* options */)
 {
     server->wl_display = wl_display_create();
     server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->wl_display), nullptr);
@@ -9,17 +21,12 @@ void qz_init(qz_server* server)
         return;
     }
 
-    server->modifier_key = WLR_MODIFIER_ALT;
-    if (wlr_backend_is_drm(server->backend)) {
-        wlr_log(WLR_INFO, "Created DRM backend");
-        server->modifier_key = WLR_MODIFIER_LOGO;
-    } else if (wlr_backend_is_wl(server->backend)) {
-        wlr_log(WLR_INFO, "Created Wayland backend");
-    } else if (wlr_backend_is_x11(server->backend)) {
-        wlr_log(WLR_INFO, "Created X11 backend");
-    } else if (wlr_backend_is_headless(server->backend)) {
-        wlr_log(WLR_ERROR, "Falling back to headless backend");
-    }
+    server->modifier_key = WLR_MODIFIER_LOGO;
+    wlr_multi_for_each_backend(server->backend, [](wlr_backend* backend, void* data) {
+        if (wlr_backend_is_wl(backend) || wlr_backend_is_x11(backend)) {
+            static_cast<qz_server*>(data)->modifier_key = WLR_MODIFIER_ALT;
+        }
+    }, server);
 
     server->renderer = wlr_renderer_autocreate(server->backend);
     if (!server->renderer) {
@@ -99,7 +106,7 @@ void qz_init(qz_server* server)
     qz_zone_init(server);
 }
 
-void qz_run(qz_server* server, char* startup_cmd)
+void qz_run(qz_server* server, const qz_startup_options& options)
 {
     const char* socket = wl_display_add_socket_auto(server->wl_display);
     if (!socket) {
@@ -119,11 +126,10 @@ void qz_run(qz_server* server, char* startup_cmd)
     setenv("ELECTRON_OZONE_PLATFORM_HINT", "auto", true);
     setenv("SDL_VIDEO_DRIVER", "wayland", true);
 
-    // Make sure containing X server does not leak through
     unsetenv("DISPLAY");
 
-    if (startup_cmd) {
-        qz_spawn("/bin/sh", {"/bin/sh", "-c", startup_cmd});
+    if (options.startup_cmd) {
+        qz_spawn("/bin/sh", {"/bin/sh", "-c", options.startup_cmd});
     }
 
     wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
@@ -146,36 +152,70 @@ void qz_cleanup(qz_server* server)
     wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
+constexpr const char* qz_help_prompt = R"(Usage: quartz [options]
+  --log-file [path]     log to file
+  --startup  [cmd]      startup command
+)";
+
+static struct {
+    FILE* log_file;
+} qz_log_state = {};
+
+void qz_log_callback(wlr_log_importance importance, const char *fmt, va_list args)
+{
+    if (importance > WLR_INFO) return;
+
+    char buffer[65'536];
+    int len = vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+
+    buffer[len++] = '\n';
+    buffer[len] = '\0';
+
+    std::cout << buffer;
+    if (qz_log_state.log_file) {
+        fwrite(buffer, 1, len, qz_log_state.log_file);
+        fflush(qz_log_state.log_file);
+    }
+}
+
 int qz_main(int argc, char* argv[])
 {
-    wlr_log_init(WLR_DEBUG, nullptr);
-    char* startup_cmd = nullptr;
+    qz_startup_options options = {};
 
-    int c;
-    while ((c = getopt(argc, argv, "s:h")) != -1) {
-        switch (c) {
-            case 's':
-                startup_cmd = optarg;
-                break;
-            default:
-                printf("Usage: %s [-s startup command]\n", argv[0]);
-                return 0;
+    auto print_usage = [] {
+        printf(qz_help_prompt);
+        exit(0);
+    };
+
+    for (int i = 1; i < argc; ++i) {
+        const char* arg = {argv[i]};
+        auto param = [&] {
+            if (++i >= argc) print_usage();
+            return argv[i];
+        };
+
+        if        ("--log-file"sv == arg) {
+            options.log_file = param();
+        } else if ("--startup"sv == arg) {
+            options.startup_cmd = param();
+        } else if ("--help"sv == arg) {
+            print_usage();
         }
     }
 
-    if (optind < argc) {
-        printf("Usage: %s [-s startup command]\n", argv[0]);
-        return 0;
+    if (options.log_file) {
+        qz_log_state.log_file = fopen(options.log_file, "wb");
     }
+    wlr_log_init(WLR_INFO, qz_log_callback);
 
     // Init
 
     qz_server server = {};
-    qz_init(&server);
+    qz_init(&server, options);
 
     // Run
 
-    qz_run(&server, startup_cmd);
+    qz_run(&server, options);
 
     // Closing
 

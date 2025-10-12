@@ -21,10 +21,10 @@ extern "C" {
 
 // backends
 #include <wlr/backend.h>
-#include <wlr/backend/drm.h>
 #include <wlr/backend/wayland.h>
 #include <wlr/backend/x11.h>
-#include <wlr/backend/headless.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/backend/multi.h>
 
 // render
 #include <wlr/render/allocator.h>

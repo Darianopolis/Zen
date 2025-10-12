@@ -15,6 +15,8 @@
 #include "quartz_wlroots.h"
 #include "quartz_util.hpp"
 
+#include <libinput.h>
+
 #include <vector>
 
 // -----------------------------------------------------------------------------
@@ -33,6 +35,14 @@ static constexpr uint32_t qz_zone_vertical_zones   = 2;
 static constexpr qz_point qz_zone_zone_selection_leeway = { 200, 200 };
 static constexpr double   qz_zone_external_padding_ltrb[] = { 7 + qz_border_width, 7 + qz_border_width, 7 + qz_border_width, 7 + qz_border_width };
 static constexpr double   qz_zone_internal_padding = 4 +  + qz_border_width * 2;
+
+struct qz_monitor_rule { const char* name; int x, y; };
+static constexpr std::array qz_monitor_rules = {
+    qz_monitor_rule { .name = "DP-1", .x =     0, .y = 0 },
+    qz_monitor_rule { .name = "DP-2", .x = -3840, .y = 0 },
+};
+
+static constexpr double qz_libinput_mouse_speed = -0.66;
 
 // -----------------------------------------------------------------------------
 
@@ -169,7 +179,7 @@ void qz_keyboard_handle_destroy(  wl_listener*, void*);
 
 void qz_reset_cursor_mode(    qz_server*);
 void qz_process_cursor_resize(qz_server*);
-void qz_process_cursor_motion(qz_server*, uint32_t time);
+void qz_process_cursor_motion(qz_server*, uint32_t time_msecs);
 
 void qz_seat_request_set_cursor(      wl_listener*, void*);
 void qz_seat_pointer_focus_change(    wl_listener*, void*);

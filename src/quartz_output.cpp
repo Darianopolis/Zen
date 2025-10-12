@@ -94,9 +94,23 @@ void qz_server_new_output(wl_listener* listener, void* data)
 
     server->outputs.emplace_back(output);
 
-    // Add to output layout. `add_auto` arranges outputs from left-to-right in the order they appear
-    // TODO: Configure size, position, scale
-    wlr_output_layout_output* l_output = wlr_output_layout_add_auto(server->output_layout, wlr_output);
+    const qz_monitor_rule* matched_rule = nullptr;
+    for (const qz_monitor_rule& rule : qz_monitor_rules) {
+        if (std::string_view(rule.name) == wlr_output->name) {
+            matched_rule = &rule;
+            break;
+        }
+    }
+
+    if (matched_rule) {
+        wlr_log(WLR_INFO, "Output [%s] matched rule. x = %i, y = %i", wlr_output->name, matched_rule->x, matched_rule->y);
+    } else {
+        wlr_log(WLR_INFO, "Output [%s] matches no rules, using auto layout", wlr_output->name);
+    }
+
+    wlr_output_layout_output* l_output = matched_rule
+        ? wlr_output_layout_add(server->output_layout, wlr_output, matched_rule->x, matched_rule->y)
+        : wlr_output_layout_add_auto(server->output_layout, wlr_output);
     wlr_scene_output* scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_output_layout, l_output, scene_output);
     output->scene_output = scene_output;

@@ -7,11 +7,6 @@
    - ✅ Move to CMake project
    - ✅ Build wlroots separately / use system package
    - ✅ Convert to C++
-- ✅ Avoid direct XWayland integration for now
-   - ✅ Remove/disable broken XWayland code
-   - ✅ Set environment variables (only for some applications)
-      - ✅ ELECTRON_OZONE_PLATFORM_HINT="auto"
-      - ✅ SDL_VIDEO_DRIVER="wayland"
 - ✅ Basic shortcuts
    - ✅ Add "spawn" helper
    - ✅ Switch MOD between Super/Alt if running standalone/nested
@@ -32,10 +27,12 @@
 - ✅ Server decorations
    - ✅ Add decoration manager to tell clients to prefer server side decorations
    - ✅ Add thin border around windows
-- Minimal multi display configuration
-   - Add wayland output spawning for multi-window testing
-- Add pointer constraint protocol
+- ✅ Minimal multi display configuration
+- Improved pointer handling
+   - Add pointer constraint protocol
+   - Relative cursor motion protocol
 - Add layer shell protocol
+- Add XWayland integration
 
 ### Bugs
 
@@ -66,13 +63,14 @@
    - Dynamic output removal/creation/configuration
    - Output scaling
    - wlr_output_configuration_v1 protocol?
+- wlr_screencast
 
 ### Portals
 
 - File chooser
 - Screencast portal
 - Screenshotting
-- Application theming
+- Application Theming
 
 ### Code cleanup
 

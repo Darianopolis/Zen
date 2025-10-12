@@ -63,5 +63,7 @@ target_link_libraries(quartz PUBLIC
     wlroots
     pixman
     libevdev
+    input
+    stdc++exp
     Backward::Object
     )

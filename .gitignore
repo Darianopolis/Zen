@@ -3,3 +3,5 @@
 
 3rdparty/*
 build
+
+*.log
