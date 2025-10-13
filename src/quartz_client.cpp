@@ -93,13 +93,16 @@ void qz_toplevel_resize(qz_toplevel* toplevel, int width, int height)
         }
     } else {
         toplevel->resize.any_pending = false;
-        toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, width, height);
 
+        if (toplevel->xdg_toplevel->pending.width != width || toplevel->xdg_toplevel->pending.height != height) {
 #if QZ_NOISY_RESIZE
-        wlr_log(WLR_INFO, "resize.request[%i] (%i, %i) -> (%i, %i)", toplevel->resize.last_resize_serial,
-            toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
-            width,                                 height);
+            wlr_log(WLR_INFO, "resize.request[%i] (%i, %i) -> (%i, %i)", toplevel->resize.last_resize_serial,
+                toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
+                width,                                 height);
 #endif
+
+            toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, width, height);
+        }
     }
 }
 
@@ -282,25 +285,20 @@ qz_toplevel* qz_get_toplevel_at(qz_server* server, double lx, double ly, wlr_sur
     // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a quartz_client
 
     wlr_scene_node* node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
-    if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
-        return NULL;
-    }
+    if (!node || node->type != WLR_SCENE_NODE_BUFFER) return nullptr;
 
     wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
     wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
-    if (!scene_surface) {
-        return NULL;
-    }
+    if (!scene_surface) return nullptr;
 
     *surface = scene_surface->surface;
 
     wlr_scene_tree* tree = node->parent;
-    // TODO: This `tree != NULL` seems pointless. If it's ever triggered then the subsequent `tree->node.data` will always segfault
-    while (tree != NULL && tree->node.data == NULL) {
+    while (tree && (!tree->node.data || static_cast<qz_client*>(tree->node.data)->type != qz_client_type::toplevel)) {
         tree = tree->node.parent;
     }
 
-    return static_cast<qz_toplevel*>(tree->node.data);
+    return tree ? static_cast<qz_toplevel*>(tree->node.data) : nullptr;
 }
 
 void qz_toplevel_map(wl_listener* listener, void*)
@@ -317,7 +315,7 @@ void qz_toplevel_unmap(wl_listener* listener, void*)
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
     // Reset cursor mode if grabbed toplevel was unmapped
-    if (toplevel == toplevel->server->grabbed_toplevel) {
+    if (toplevel == toplevel->server->movesize.grabbed_toplevel) {
         qz_reset_cursor_mode(toplevel->server);
     }
 
@@ -363,26 +361,26 @@ void qz_toplevel_begin_interactive(qz_toplevel* toplevel, qz_cursor_mode mode, u
 
     qz_server* server = toplevel->server;
 
-    server->grabbed_toplevel = toplevel;
+    server->movesize.grabbed_toplevel = toplevel;
     server->cursor_mode = mode;
 
     if (mode == qz_cursor_mode::move) {
-        server->grab_x = server->cursor->x - toplevel->scene_tree->node.x;
-        server->grab_y = server->cursor->y - toplevel->scene_tree->node.y;
+        server->movesize.grab_x = server->cursor->x - toplevel->scene_tree->node.x;
+        server->movesize.grab_y = server->cursor->y - toplevel->scene_tree->node.y;
     } else {
         wlr_box* geo_box = &toplevel->xdg_toplevel->base->geometry;
 
         double border_x = (toplevel->scene_tree->node.x + geo_box->x) + ((edges & WLR_EDGE_RIGHT ) ? geo_box->width  : 0);
         double border_y = (toplevel->scene_tree->node.y + geo_box->y) + ((edges & WLR_EDGE_BOTTOM) ? geo_box->height : 0);
 
-        server->grab_x = server->cursor->x - border_x;
-        server->grab_y = server->cursor->y - border_y;
+        server->movesize.grab_x = server->cursor->x - border_x;
+        server->movesize.grab_y = server->cursor->y - border_y;
 
-        server->grab_geobox = *geo_box;
-        server->grab_geobox.x += toplevel->scene_tree->node.x;
-        server->grab_geobox.y += toplevel->scene_tree->node.y;
+        server->movesize.grab_geobox = *geo_box;
+        server->movesize.grab_geobox.x += toplevel->scene_tree->node.x;
+        server->movesize.grab_geobox.y += toplevel->scene_tree->node.y;
 
-        server->resize_edges = edges;
+        server->movesize.resize_edges = edges;
     }
 }
 

@@ -112,18 +112,15 @@ void qz_server_new_keyboard(qz_server* server, wlr_input_device* device)
     keyboard->server = server;
     keyboard->wlr_keyboard = wlr_keyboard;
 
-    // We need to prepare an XKB keymap and assign it to the keyboard.
-    // TODO: Configuration support for keyboard layout
-
     xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     xkb_keymap* keymap = xkb_keymap_new_from_names(context, qz_ptr(xkb_rule_names{
-        .layout = "gb",
+        .layout = qz_keyboard_layout,
     }), XKB_KEYMAP_COMPILE_NO_FLAGS);
 
     wlr_keyboard_set_keymap(wlr_keyboard, keymap);
     xkb_keymap_unref(keymap);
     xkb_context_unref(context);
-    wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
+    wlr_keyboard_set_repeat_info(wlr_keyboard, qz_keyboard_repeat_rate, qz_keyboard_repeat_delay);
 
     keyboard->listeners.listen(&wlr_keyboard->events.modifiers, keyboard, qz_keyboard_handle_modifiers);
     keyboard->listeners.listen(&wlr_keyboard->events.key,       keyboard, qz_keyboard_handle_key);
@@ -186,7 +183,7 @@ void qz_seat_pointer_focus_change(wl_listener* listener, void* data)
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
 
     wlr_seat_pointer_focus_change_event* event = static_cast<wlr_seat_pointer_focus_change_event*>(data);
-    if (event->new_surface == NULL) {
+    if (!event->new_surface) {
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
     }
 }
@@ -251,58 +248,39 @@ void qz_seat_drag_update_position(qz_server* server)
 void qz_reset_cursor_mode(qz_server* server)
 {
     server->cursor_mode = qz_cursor_mode::passthrough;
-    server->grabbed_toplevel = NULL;
+    server->movesize.grabbed_toplevel = nullptr;
 }
 
 void qz_process_cursor_move(qz_server* server)
 {
-    qz_toplevel* toplevel = server->grabbed_toplevel;
-    wlr_scene_node_set_position(&toplevel->scene_tree->node, server->cursor->x - server->grab_x, server->cursor->y - server->grab_y);
+    qz_toplevel* toplevel = server->movesize.grabbed_toplevel;
+    wlr_scene_node_set_position(&toplevel->scene_tree->node, server->cursor->x - server->movesize.grab_x, server->cursor->y - server->movesize.grab_y);
 }
 
 void qz_process_cursor_resize(qz_server* server)
 {
-    qz_toplevel* toplevel = server->grabbed_toplevel;
-    double border_x = server->cursor->x - server->grab_x;
-    double border_y = server->cursor->y - server->grab_y;
-    int new_left = server->grab_geobox.x;
-    int new_right = server->grab_geobox.x + server->grab_geobox.width;
-    int new_top = server->grab_geobox.y;
-    int new_bottom = server->grab_geobox.y + server->grab_geobox.height;
+    auto& movesize = server->movesize;
 
-    if (server->resize_edges & WLR_EDGE_TOP) {
-        new_top = border_y;
-        if (new_top >= new_bottom) {
-            new_top = new_bottom - 1;
-        }
-    } else if (server->resize_edges & WLR_EDGE_BOTTOM) {
-        new_bottom = border_y;
-        if (new_bottom <= new_top) {
-            new_bottom = new_top + 1;
-        }
-    }
+    int border_x = int(server->cursor->x - movesize.grab_x);
+    int border_y = int(server->cursor->y - movesize.grab_y);
 
-    if (server->resize_edges & WLR_EDGE_LEFT) {
-        new_left = border_x;
-        if (new_left >= new_right) {
-            new_left = new_right - 1;
-        }
-    } else if (server->resize_edges & WLR_EDGE_RIGHT) {
-        new_right = border_x;
-        if (new_right <= new_left) {
-            new_right = new_left + 1;
-        }
-    }
+    int left   = movesize.grab_geobox.x;
+    int top    = movesize.grab_geobox.y;
+    int right  = movesize.grab_geobox.x + movesize.grab_geobox.width;
+    int bottom = movesize.grab_geobox.y + movesize.grab_geobox.height;
 
-    wlr_box* geo_box = &toplevel->xdg_toplevel->base->geometry;
-    wlr_box bounds {
-        .x = new_left - geo_box->x,
-        .y = new_top - geo_box->y,
-        .width = new_right - new_left,
-        .height = new_bottom - new_top,
-    };
-    // TODO: Investigate issue with GLFW/SDL Vulkan windows slow resizing
-    qz_toplevel_set_bounds(toplevel, bounds);
+    if      (movesize.resize_edges & WLR_EDGE_TOP)    top    = std::min(border_y, bottom - 1);
+    else if (movesize.resize_edges & WLR_EDGE_BOTTOM) bottom = std::max(border_y, top    + 1);
+
+    if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(border_x, right - 1);
+    else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(border_x, left  + 1);
+
+    qz_toplevel_set_bounds(movesize.grabbed_toplevel, {
+        .x = left - movesize.grabbed_toplevel->xdg_toplevel->base->geometry.x,
+        .y = top  - movesize.grabbed_toplevel->xdg_toplevel->base->geometry.y,
+        .width  = right  - left,
+        .height = bottom - top,
+    });
 }
 
 void qz_process_cursor_motion(qz_server* server, uint32_t time_msecs)
@@ -429,6 +407,9 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
             if (!edges) type = qz_cursor_mode::move;
 
             qz_toplevel_begin_interactive(toplevel, type, edges);
+            return;
+        } else if (event->button == BTN_MIDDLE) {
+            wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel);
             return;
         }
     }

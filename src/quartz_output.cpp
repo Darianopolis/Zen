@@ -61,6 +61,14 @@ void qz_output_destroy(wl_listener* listener, void*)
     delete output;
 }
 
+void qz_output_reconfigure(qz_output* output)
+{
+    wlr_box bounds = qz_output_get_bounds(output);
+
+    wlr_scene_node_set_position(&output->background->node, bounds.x, bounds.y);
+    wlr_scene_rect_set_size(output->background, bounds.width, bounds.height);
+}
+
 void qz_server_new_output(wl_listener* listener, void* data)
 {
     // This event is raised by the backend when a new output (aka a display or monitor) becomes available
@@ -108,15 +116,14 @@ void qz_server_new_output(wl_listener* listener, void* data)
         wlr_log(WLR_INFO, "Output [%s] matches no rules, using auto layout", wlr_output->name);
     }
 
+    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, qz_background_color.values);
+
     wlr_output_layout_output* l_output = matched_rule
         ? wlr_output_layout_add(server->output_layout, wlr_output, matched_rule->x, matched_rule->y)
         : wlr_output_layout_add_auto(server->output_layout, wlr_output);
     wlr_scene_output* scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_output_layout, l_output, scene_output);
     output->scene_output = scene_output;
-
-    // TODO: If this is set to 0,0,0,1 - results in incorrect damage when unfullscreening a window?
-    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, qz_background_color.values);
 }
 
 void qz_server_output_layout_change(wl_listener* listener, void*)
@@ -126,10 +133,6 @@ void qz_server_output_layout_change(wl_listener* listener, void*)
     // TODO: Handled output removal, addition
 
     for (qz_output* output : server->outputs) {
-        wlr_box bounds = qz_output_get_bounds(output);
-        if (output->background) {
-            wlr_scene_node_set_position(&output->background->node, bounds.x, bounds.y);
-            wlr_scene_rect_set_size(output->background, bounds.width, bounds.height);
-        }
+        qz_output_reconfigure(output);
     }
 }

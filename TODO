@@ -58,6 +58,9 @@
 
 ### Additional
 
+- Debug options
+   - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
+- Remove wlr_primary_selection_v1_device_manager_create?
 - Add IPC with messaging client
    - Spawn message
 - Scaling

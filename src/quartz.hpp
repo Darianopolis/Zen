@@ -48,6 +48,10 @@ static constexpr std::array qz_monitor_rules = {
     qz_monitor_rule { .name = "DP-2", .x = -3840, .y = 0 },
 };
 
+static constexpr const char* qz_keyboard_layout       = "gb";
+static constexpr int32_t     qz_keyboard_repeat_rate  = 25;
+static constexpr int32_t     qz_keyboard_repeat_delay = 600;
+
 static constexpr double qz_libinput_mouse_speed = -0.66;
 
 // -----------------------------------------------------------------------------
@@ -89,10 +93,13 @@ struct qz_server
     std::vector<qz_keyboard*> keyboards;
 
     qz_cursor_mode cursor_mode;
-    qz_toplevel* grabbed_toplevel;
-    double grab_x, grab_y;
-    wlr_box grab_geobox;
-    uint32_t resize_edges;
+
+    struct {
+        qz_toplevel* grabbed_toplevel;
+        double grab_x, grab_y;
+        wlr_box grab_geobox;
+        uint32_t resize_edges;
+    } movesize;
 
     qz_toplevel* focused_toplevel;
 
@@ -101,7 +108,6 @@ struct qz_server
 
     uint32_t modifier_key;
 
-    // Parent node in the scene for attaching drag icons to
     wlr_scene_tree* drag_icon_parent;
 
     struct {
@@ -183,7 +189,7 @@ struct qz_keyboard
 
 // ---- Policy ----
 
-void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwards);
+void qz_cycle_focus_immediate(qz_server*, wlr_cursor*, bool backwards);
 
 bool     qz_handle_keybinding(qz_server*, xkb_keysym_t);
 uint32_t qz_get_modifiers(    qz_server*);
@@ -229,11 +235,11 @@ void qz_zone_end_selection(        qz_server*);
 
 // ---- Output ----
 
-qz_output* qz_get_output_at(qz_server*, double x, double y);
-
-wlr_box qz_output_get_bounds(qz_output*);
-
+qz_output* qz_get_output_at(        qz_server*, double x, double y);
 qz_output* qz_get_output_for_client(qz_client*);
+
+wlr_box qz_output_get_bounds( qz_output*);
+void    qz_output_reconfigure(qz_output*);
 
 void qz_output_frame(               wl_listener*, void*);
 void qz_output_request_state(       wl_listener*, void*);
@@ -251,7 +257,7 @@ wlr_box qz_client_get_coord_system(qz_client*);
 
 void         qz_toplevel_focus(           qz_toplevel*);
 void         qz_toplevel_unfocus(         qz_toplevel*);
-void         qz_toplevel_resize(          qz_toplevel* toplevel, int width, int height);
+void         qz_toplevel_resize(          qz_toplevel*, int width, int height);
 void         qz_toplevel_set_bounds(      qz_toplevel*, wlr_box);
 void         qz_toplevel_set_activated(   qz_toplevel*, bool active);
 bool         qz_toplevel_wants_fullscreen(qz_toplevel*);
