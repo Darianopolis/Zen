@@ -30,8 +30,7 @@ Arch: `wayland-protocols` `seatd` `libliftoff` `xcb-util-errors`
 
 Options
 
- - `QUARTZ_XWAYLAND=ON/OFF` (default `OFF`) - Enables XWayland support (experimental)
- - `QUARTZ_USE_GIT_WLROOTS=ON/OFF` (default `OFF`) - Enables latest git (0.20) version of wlroots
+ - `USE_GIT_WLROOTS=ON/OFF` (default `OFF`) - Enables latest git (0.20) version of wlroots
 
 ```
 python configure.py

@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 4.1)
 project(quartz)
 
-# wayland
+# ------------------------------------------------------------------------------
 
 add_subdirectory(3rdparty/wayland)
 
-# wlroots
+# ------------------------------------------------------------------------------
 
-set(QUARTZ_USE_GIT_WLROOTS OFF)
-if (QUARTZ_USE_GIT_WLROOTS)
+set(QZ_USE_GIT_WLROOTS OFF)
+if (QZ_USE_GIT_WLROOTS)
     add_subdirectory(3rdparty/wlroots-install)
 else()
     add_library(               wlroots INTERFACE)
@@ -17,27 +17,26 @@ else()
     target_include_directories(wlroots INTERFACE /usr/include/wlroots-0.19)
 endif()
 
-# libevdev
+# ------------------------------------------------------------------------------
 
 add_library(               libevdev INTERFACE)
 target_include_directories(libevdev INTERFACE /usr/include/libevdev-1.0)
 
-# pixman
+# ------------------------------------------------------------------------------
 
 add_library(               pixman INTERFACE)
 target_link_libraries(     pixman INTERFACE pixman-1)
 target_include_directories(pixman INTERFACE /usr/include/pixman-1)
 
-# backward-cpp
+# ------------------------------------------------------------------------------
 
 add_subdirectory(3rdparty/backward-cpp)
 
-# quartz
+# ------------------------------------------------------------------------------
 
-option(QUARTZ_XWAYLAND OFF)
-
-add_executable(        quartz)
-target_compile_options(quartz PUBLIC
+add_executable(            ${PROJECT_NAME})
+target_compile_definitions(${PROJECT_NAME} PUBLIC "QZ_PROGRAM_NAME=\"${PROJECT_NAME}\"")
+target_compile_options(    ${PROJECT_NAME} PUBLIC
     -std=c++26
     -Wall
     -Wextra
@@ -47,16 +46,16 @@ target_compile_options(quartz PUBLIC
     -Wno-missing-field-initializers
     -Wno-unknown-pragmas
     )
-target_include_directories(quartz PUBLIC src)
-target_sources(            quartz PUBLIC
-    src/quartz_client.cpp
-    src/quartz_input.cpp
-    src/quartz_main.cpp
-    src/quartz_output.cpp
-    src/quartz_util.cpp
-    src/quartz_zone.cpp
+target_include_directories(${PROJECT_NAME} PUBLIC src)
+target_sources(            ${PROJECT_NAME} PUBLIC
+    src/client.cpp
+    src/input.cpp
+    src/main.cpp
+    src/output.cpp
+    src/util.cpp
+    src/zone.cpp
     )
-target_link_libraries(quartz PUBLIC
+target_link_libraries(${PROJECT_NAME} PUBLIC
     wayland-server
     wayland-header
     xkbcommon

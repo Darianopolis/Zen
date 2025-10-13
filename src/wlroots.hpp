@@ -11,9 +11,7 @@
 #include <xcb/xcb_ewmh.h>
 #include <xcb/xcb_icccm.h>
 
-#ifdef __cplusplus
 extern "C" {
-#endif
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
@@ -71,6 +69,4 @@ extern "C" {
 
 #pragma clang diagnostic pop
 
-#ifdef __cplusplus
 }
-#endif

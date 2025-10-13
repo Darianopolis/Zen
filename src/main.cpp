@@ -1,4 +1,4 @@
-#include "quartz.hpp"
+#include "core.hpp"
 
 #include <string_view>
 #include <iostream>
@@ -126,7 +126,7 @@ void qz_run(qz_server* server, const qz_startup_options& options)
 
     setenv("WAYLAND_DISPLAY", socket, true);
 
-    // TODO: Set this for applications that we've checked work in Wayland mode inside of Quartz
+    // TODO: Set this per spawned application
     setenv("ELECTRON_OZONE_PLATFORM_HINT", "auto", true);
     setenv("SDL_VIDEO_DRIVER", "wayland", true);
 
@@ -160,7 +160,7 @@ void qz_cleanup(qz_server* server)
     wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
-constexpr const char* qz_help_prompt = R"(Usage: quartz [options]
+constexpr const char* qz_help_prompt = R"(Usage: %s [options]
   --xwayland [socket]   specify X11 socket
   --log-file [path]     log to file
   --startup  [cmd]      startup command
@@ -191,8 +191,8 @@ int qz_main(int argc, char* argv[])
 {
     qz_startup_options options = {};
 
-    auto print_usage = [] {
-        printf(qz_help_prompt);
+    auto print_usage = [&] {
+        printf(qz_help_prompt, QZ_PROGRAM_NAME);
         exit(0);
     };
 

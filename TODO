@@ -1,5 +1,3 @@
-# Quartz TODO list
-
 ### Core
 
 - ✅ Update build
@@ -49,7 +47,7 @@
 - BeamNG + VSync-disabled + wlroots DRM Backend
    - Stuttery presentation but high framerate
    - Stutters go away if
-      - Ran in nested compositor (TESTED: nested quartz+xwayland-satellite AND gamescope)
+      - Ran in nested compositor (TESTED: nested xwayland-satellite AND gamescope)
       - Ran in standalone Niri with same xwayland-satellite binary
       - Ran with VSync enabled
    - Stutters also present in
@@ -71,8 +69,8 @@
 - ✅ Compositor initiated fullscreen toggle
 - ✅ Throttle resize requests
 - Consolidate interaction logic
-   - Rename `quartz_input.cpp` -> `quartz_seat.cpp`
-   - Move input binding logic to `quartz_interaction.cpp`
+   - Rename `input.cpp` -> `seat.cpp`
+   - Move input binding logic to `interaction.cpp`
    - Replace `qz_cursor_mode` with `qz_interaction_state`
    - Separate zoning logic from zone interaction binds
 - Improved zone logic

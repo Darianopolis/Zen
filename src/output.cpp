@@ -1,4 +1,4 @@
-#include "quartz.hpp"
+#include "core.hpp"
 
 qz_output* qz_get_output_at(qz_server* server, double x, double y)
 {

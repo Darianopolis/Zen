@@ -1,4 +1,4 @@
-#include "quartz.hpp"
+#include "core.hpp"
 
 #include <libevdev/libevdev.h>
 

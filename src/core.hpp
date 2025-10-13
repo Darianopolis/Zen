@@ -12,8 +12,8 @@
 
 #include <xkbcommon/xkbcommon.h>
 
-#include "quartz_wlroots.h"
-#include "quartz_util.hpp"
+#include "wlroots.hpp"
+#include "util.hpp"
 
 #include <libinput.h>
 

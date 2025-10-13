@@ -1,4 +1,4 @@
-#include "quartz.hpp"
+#include "core.hpp"
 
 static
 void qz_toplevel_update_border(qz_toplevel* toplevel)
@@ -280,7 +280,7 @@ void qz_toplevel_unfocus(qz_toplevel* toplevel)
 qz_toplevel* qz_get_toplevel_at(qz_server* server, double lx, double ly, wlr_surface** surface, double *sx, double *sy)
 {
     // This returns the topmost node in the scene at the given layout coords.
-    // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a quartz_client
+    // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a client
 
     wlr_scene_node* node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
     if (!node || node->type != WLR_SCENE_NODE_BUFFER) return nullptr;

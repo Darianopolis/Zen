@@ -1,6 +1,6 @@
 #pragma once
 
-#include "quartz_wlroots.h"
+#include "wlroots.hpp"
 
 #include <typeinfo>
 #include <cstring>
