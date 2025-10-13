@@ -1,4 +1,4 @@
-# Quartz
+# Zen
 
 A minimalistic stacking zone-based Wayland compositor built on wlroots.
 
