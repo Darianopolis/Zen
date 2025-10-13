@@ -17,7 +17,7 @@ void qz_init(qz_server* server, const qz_startup_options& /* options */)
     server->wl_display = wl_display_create();
     server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->wl_display), nullptr);
     if (!server->backend) {
-        wlr_log(WLR_ERROR, "failed to create wlr_backend");
+        wlr_log(WLR_ERROR, "Failed to create wlr_backend");
         return;
     }
 
@@ -30,7 +30,7 @@ void qz_init(qz_server* server, const qz_startup_options& /* options */)
 
     server->renderer = wlr_renderer_autocreate(server->backend);
     if (!server->renderer) {
-        wlr_log(WLR_ERROR, "failed to create wlr_renderer");
+        wlr_log(WLR_ERROR, "Failed to create wlr_renderer");
         return;
     }
 
@@ -38,7 +38,7 @@ void qz_init(qz_server* server, const qz_startup_options& /* options */)
 
     server->allocator = wlr_allocator_autocreate(server->backend, server->renderer);
     if (server->allocator == nullptr) {
-        wlr_log(WLR_ERROR, "failed to create wlr_allocator");
+        wlr_log(WLR_ERROR, "Failed to create wlr_allocator");
         return;
     }
 

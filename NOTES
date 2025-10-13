@@ -1,0 +1,7 @@
+## Surfaces
+
+- `geometry`: the region of the surface (in surface local coordinates) that corresponds to logical client geometry, excluding border effects such as drop shadows
+- `width/height`: the total region of the surface, in layout units
+- `buffer_[width/height]`: the pixel size of the buffer mapped to the surface
+
+Some clients don't correctly report surface `geometry`, and instead report a zero sized geometry box. In this case, the easy workaround is simply to adjust the geometry width/height based on the surface width/height (which *will* be specified if the client has committed anything).

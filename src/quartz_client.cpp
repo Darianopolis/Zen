@@ -8,23 +8,29 @@ void qz_toplevel_update_border(qz_toplevel* toplevel)
     static constexpr uint32_t right = 2;
     static constexpr uint32_t bottom = 3;
 
-    wlr_box b = qz_client_get_bounds(toplevel);
+    wlr_box bounds = qz_client_get_bounds(toplevel);
 
-    if (b.width <= 0 || b.height <= 0) return;
+    bool show = bounds.width && bounds.height;
+    show &= !toplevel->xdg_toplevel->current.fullscreen;
 
     wlr_box positions[4];
-    positions[left]   = { -qz_border_width, -qz_border_width, qz_border_width, b.height + qz_border_width * 2 };
-    positions[right]  = {  b.width,         -qz_border_width, qz_border_width, b.height + qz_border_width * 2 };
-    positions[top]    = {  0,               -qz_border_width, b.width,         qz_border_width };
-    positions[bottom] = {  0,                b.height,        b.width,         qz_border_width };
+    positions[left]   = { -qz_border_width, -qz_border_width, qz_border_width, bounds.height + qz_border_width * 2 };
+    positions[right]  = {  bounds.width,    -qz_border_width, qz_border_width, bounds.height + qz_border_width * 2 };
+    positions[top]    = {  0,               -qz_border_width, bounds.width,    qz_border_width };
+    positions[bottom] = {  0,                bounds.height,   bounds.width,    qz_border_width };
 
     for (uint32_t i = 0; i < 4; ++i) {
-        wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
-        wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
-        wlr_scene_rect_set_color(toplevel->border[i],
-            toplevel->server->focused_toplevel == toplevel
-                ? qz_border_color_focused.values
-                : qz_border_color_unfocused.values);
+        if (show) {
+            wlr_scene_node_set_enabled(&toplevel->border[i]->node, true);
+            wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
+            wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
+            wlr_scene_rect_set_color(toplevel->border[i],
+                toplevel->server->focused_toplevel == toplevel
+                    ? qz_border_color_focused.values
+                    : qz_border_color_unfocused.values);
+        } else {
+            wlr_scene_node_set_enabled(&toplevel->border[i]->node, false);
+        }
     }
 }
 
@@ -37,33 +43,47 @@ wlr_surface* qz_toplevel_get_surface(qz_toplevel* toplevel)
     return nullptr;
 }
 
-wlr_box qz_client_get_bounds(qz_client* client)
+wlr_box qz_client_get_geometry(qz_client* client)
+{
+    wlr_box geom = client->xdg_surface->current.geometry;
+
+    // Some clients fail to report valid geometry. Fall back to surface dimensions.
+    if (geom.width == 0)  geom.width  = client->xdg_surface->surface->current.width  - geom.x;
+    if (geom.height == 0) geom.height = client->xdg_surface->surface->current.height - geom.y;
+
+    return geom;
+}
+
+wlr_box qz_client_get_coord_system(qz_client* client)
 {
     wlr_box box = {};
     wlr_scene_node_coords(&client->scene_tree->node, &box.x, &box.y);
 
-    box.width = client->xdg_surface->current.geometry.width;
-    box.height = client->xdg_surface->current.geometry.height;
-    if (!box.width || !box.height) {
-        // TODO: Why is xdg_surface.geometry 0,0 on some windows?
-        //       This is a workaround for now to get borders showing
-        if (client->xdg_surface->toplevel) {
-            box.width = client->xdg_surface->toplevel->current.width;
-            box.height = client->xdg_surface->toplevel->current.height;
-        } else {
-            wlr_log(WLR_ERROR, "Non-toplevel client with size 0,0");
-        }
-    }
+    // Scene node coordinates position the geometry origin, adjust to surface origin
+    box.x -= client->xdg_surface->current.geometry.x;
+    box.y -= client->xdg_surface->current.geometry.y;
+
+    box.width = client->xdg_surface->surface->current.width;
+    box.height = client->xdg_surface->surface->current.height;
+
+    return box;
+}
+
+wlr_box qz_client_get_bounds(qz_client* client)
+{
+    wlr_box box = qz_client_get_geometry(client);
+    wlr_scene_node_coords(&client->scene_tree->node, &box.x, &box.y);
     return box;
 }
 
 void qz_toplevel_set_bounds(qz_toplevel* toplevel, wlr_box box)
 {
-    // NOTE: Bounds are set with node relative positions, unlike get_bounds which returns layout relative positions
+    // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
     //       Thus you must be careful when setting/getting bounds with positioned parents
     // TODO: Tidy up this API and make it clear what is relative to what.
     //       Investigate Wayland's/wlroot's coordinate systems
-    // TODO: Does this need to be rate limited?
+
+    // TODO: Rate limit resize requests
 
     wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, box.width, box.height);
     wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
@@ -76,7 +96,68 @@ bool qz_toplevel_wants_fullscreen(qz_toplevel* toplevel)
 
 void qz_toplevel_set_fullscreen(qz_toplevel* toplevel, bool fullscreen)
 {
-    wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, fullscreen);
+    if (fullscreen) {
+        wlr_box prev = qz_client_get_bounds(toplevel);
+        qz_output* output = qz_get_output_for_client(toplevel);
+        if (output) {
+            wlr_box b = qz_output_get_bounds(output);
+            wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
+            qz_toplevel_set_bounds(toplevel, b);
+            toplevel->prev_bounds = prev;
+            // TODO: With layers implemented, move output background rect to fullscreen layer
+            //       The xdg-protocol specifies:
+            //
+            //       If the fullscreened surface is not opaque, the compositor must make
+            //        sure that other screen content not part of the same surface tree (made
+            //        up of subsurfaces, popups or similarly coupled surfaces) are not
+            //        visible below the fullscreened surface.
+        }
+    } else {
+        wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, false);
+        qz_toplevel_set_bounds(toplevel, toplevel->prev_bounds);
+    }
+}
+
+void qz_toplevel_set_activated(qz_toplevel* toplevel, bool active)
+{
+    wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, active);
+    qz_toplevel_update_border(toplevel);
+}
+
+void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwards)
+{
+    if (backwards) {
+        for (qz_toplevel* toplevel : server->toplevels) {
+            if (toplevel == server->focused_toplevel) continue;
+            if (cursor) {
+                wlr_box bounds = qz_client_get_bounds(toplevel);
+                if (!wlr_box_contains_point(&bounds, cursor->x, cursor->y)) continue;
+            }
+
+            qz_focus_toplevel(toplevel);
+            return;
+        }
+    } else {
+        uint32_t i = server->toplevels.size();
+        while (i-- > 0) {
+            qz_toplevel* toplevel = server->toplevels[i];
+            if (toplevel == server->focused_toplevel) continue;
+            if (cursor) {
+                wlr_box bounds = qz_client_get_bounds(toplevel);
+                if (!wlr_box_contains_point(&bounds, cursor->x, cursor->y)) continue;
+            }
+
+            if (server->focused_toplevel) {
+                // Re-insert currently focused window at bottom of focus stack
+                std::erase(server->toplevels, server->focused_toplevel);
+                server->toplevels.insert(server->toplevels.begin(), server->focused_toplevel);
+            }
+
+            // Focus new window
+            qz_focus_toplevel(toplevel);
+            return;
+        }
+    }
 }
 
 void qz_focus_toplevel(qz_toplevel* toplevel)
@@ -97,7 +178,7 @@ void qz_focus_toplevel(qz_toplevel* toplevel)
     if (prev_surface) {
         wlr_xdg_toplevel* prev_toplevel = wlr_xdg_toplevel_try_from_wlr_surface(prev_surface);
         if (prev_toplevel) {
-            wlr_xdg_toplevel_set_activated(prev_toplevel, false);
+            qz_toplevel_set_activated(static_cast<qz_toplevel*>(prev_toplevel->base->data), false);
         }
     }
 
@@ -105,7 +186,7 @@ void qz_focus_toplevel(qz_toplevel* toplevel)
     wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
     std::erase(server->toplevels, toplevel);
     server->toplevels.emplace_back(toplevel);
-    wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
+    qz_toplevel_set_activated(toplevel, true);
 
     if (keyboard) {
         wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
@@ -169,6 +250,12 @@ void qz_toplevel_commit(wl_listener* listener, void*)
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
     }
 
+    if (!toplevel->xdg_toplevel->current.width || !toplevel->xdg_toplevel->current.height) {
+        // Update initial toplevel size to reflect commited geometry
+        wlr_box geom = qz_client_get_geometry(toplevel);
+        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, geom.width, geom.height);
+    }
+
     qz_toplevel_update_border(toplevel);
 }
 
@@ -176,22 +263,23 @@ void qz_toplevel_destroy(wl_listener* listener, void*)
 {
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
-    if (!toplevel->server) {
-        wlr_log(WLR_ERROR, "qz_toplevel destroyed that didn't have server reference!");
-    } else {
-        if (toplevel->server->focused_toplevel == toplevel) {
-            toplevel->server->focused_toplevel = nullptr;
-        }
+    if (toplevel->server->focused_toplevel == toplevel) {
+        toplevel->server->focused_toplevel = nullptr;
     }
 
     delete toplevel;
 }
 
+bool qz_toplevel_is_interactable(qz_toplevel* toplevel)
+{
+    if (toplevel->xdg_toplevel->current.fullscreen) return false;
+
+    return true;
+}
+
 void qz_toplevel_begin_interactive(qz_toplevel* toplevel, qz_cursor_mode mode, uint32_t edges)
 {
-    if (toplevel->xdg_toplevel->current.fullscreen) {
-        return;
-    }
+    if (!qz_toplevel_is_interactable(toplevel)) return;
 
     qz_server* server = toplevel->server;
 
@@ -233,27 +321,7 @@ void qz_toplevel_request_fullscreen(wl_listener* listener, void*)
 {
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
-    bool fs = qz_toplevel_wants_fullscreen(toplevel);
-    if (fs) {
-        wlr_box prev = qz_client_get_bounds(toplevel);
-        qz_output* output = qz_get_output_for_client(toplevel);
-        if (output) {
-            wlr_box b = qz_output_get_bounds(output);
-            qz_toplevel_set_fullscreen(toplevel, true);
-            qz_toplevel_set_bounds(toplevel, b);
-            toplevel->prev_bounds = prev;
-            // TODO: With layers implemented, move output background rect to fullscreen layer
-            //       The xdg-protocol specifies:
-            //
-            //       If the fullscreened surface is not opaque, the compositor must make
-            //        sure that other screen content not part of the same surface tree (made
-            //        up of subsurfaces, popups or similarly coupled surfaces) are not
-            //        visible below the fullscreened surface.
-        }
-    } else {
-        qz_toplevel_set_fullscreen(toplevel, false);
-        qz_toplevel_set_bounds(toplevel, toplevel->prev_bounds);
-    }
+    qz_toplevel_set_fullscreen(toplevel, qz_toplevel_wants_fullscreen(toplevel));
 }
 
 void qz_server_new_toplevel(wl_listener* listener, void* data)
@@ -291,8 +359,6 @@ void qz_decoration_set_mode(qz_toplevel* toplevel)
 {
     if (!toplevel->decoration.xdg_decoration) return;
 
-    wlr_log(WLR_INFO, "setting decoration mode");
-
     if (toplevel->xdg_toplevel->base->initialized) {
         wlr_xdg_toplevel_decoration_v1_set_mode(toplevel->decoration.xdg_decoration, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
@@ -300,13 +366,11 @@ void qz_decoration_set_mode(qz_toplevel* toplevel)
 
 void qz_decoration_new(wl_listener*, void* data)
 {
-    wlr_log(WLR_INFO, "creating xdg_decoration");
-
     wlr_xdg_toplevel_decoration_v1* xdg_decoration = static_cast<wlr_xdg_toplevel_decoration_v1*>(data);
 
     qz_toplevel* toplevel = static_cast<qz_toplevel*>(xdg_decoration->toplevel->base->data);
     if (toplevel->decoration.xdg_decoration) {
-        wlr_log(WLR_ERROR, "toplevel already has attached decoration!");
+        wlr_log(WLR_ERROR, "Toplevel already has attached decoration!");
         return;
     }
 
@@ -350,22 +414,22 @@ void qz_popup_commit(wl_listener* listener, void*)
 
     qz_output* output = qz_get_output_for_client(parent);
     if (output) {
-        wlr_box box = qz_output_get_bounds(output);
+        wlr_box output_bounds = qz_output_get_bounds(output);
 
-        // NOTE: This box needs to be in the root toplevel' surface coordinate system.
         {
             // TODO: Move this into a helper for getting a qz_toplevel from an wlr_(xdg_)surface
-
             qz_client* cur = parent;
             while (cur->type == qz_client_type::popup) {
                 cur = static_cast<qz_client*>(wlr_xdg_surface_try_from_wlr_surface(static_cast<qz_popup*>(cur)->xdg_popup->parent)->data);
             }
-            wlr_box toplevel_box = qz_client_get_bounds(cur);
-            box.x -= toplevel_box.x;
-            box.y -= toplevel_box.y;
+
+            // Adjust output bounds to be in the root toplevel's surface coordinate system.
+            wlr_box coord_system = qz_client_get_coord_system(cur);
+            output_bounds.x -= coord_system.x;
+            output_bounds.y -= coord_system.y;
         }
 
-        wlr_xdg_popup_unconstrain_from_box(xdg_popup, &box);
+        wlr_xdg_popup_unconstrain_from_box(xdg_popup, &output_bounds);
     } else {
         wlr_log(WLR_ERROR, "No output for toplevel while opening popup!");
     }

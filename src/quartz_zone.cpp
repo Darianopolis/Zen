@@ -18,30 +18,28 @@ bool qz_zone_process_cursor_button(qz_server* server, wlr_pointer_button_event* 
 
     if (event->button == BTN_LEFT) {
         if (pressed && qz_is_main_mod_down(server) && !(qz_get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
-            wlr_log(WLR_INFO, "Zone drag begin");
             double sx, sy;
             wlr_surface* surface = nullptr;
             qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
             if (toplevel) {
                 qz_focus_toplevel(toplevel);
 
-                wlr_scene_rect_set_color(server->zone.selector, qz_zone_color_inital.values);
-                wlr_scene_node_set_enabled(&server->zone.selector->node, true);
-                server->zone.selecting = false;
-                server->zone.moving = true;
-                server->cursor_mode = qz_cursor_mode::zone;
-                qz_zone_process_cursor_motion(server);
+                if (qz_toplevel_is_interactable(toplevel)) {
+                    wlr_scene_rect_set_color(server->zone.selector, qz_zone_color_inital.values);
+                    wlr_scene_node_set_enabled(&server->zone.selector->node, true);
+                    server->zone.selecting = false;
+                    server->zone.moving = true;
+                    server->cursor_mode = qz_cursor_mode::zone;
+                    qz_zone_process_cursor_motion(server);
+                }
             }
             return true;
         } else if (server->zone.moving) {
             if (server->zone.selecting) {
-                wlr_log(WLR_INFO, "Zone drag ended, moving window");
                 if (server->focused_toplevel) {
                     wlr_box box = qz_box_round_to_wlr_box(server->zone.final_zone);
                     qz_toplevel_set_bounds(server->focused_toplevel, box);
                 }
-            } else {
-                wlr_log(WLR_INFO, "Zone drag ended without selection");
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
             server->cursor_mode = qz_cursor_mode::passthrough;
@@ -52,7 +50,6 @@ bool qz_zone_process_cursor_button(qz_server* server, wlr_pointer_button_event* 
     else if (event->button == BTN_RIGHT && server->zone.moving) {
         if (pressed) {
             server->zone.selecting = !server->zone.selecting;
-            wlr_log(WLR_INFO, "Zone selecting = %i", server->zone.selecting);
             wlr_scene_rect_set_color(server->zone.selector, server->zone.selecting
                                                                 ? qz_zone_color_select.values
                                                                 : qz_zone_color_inital.values);

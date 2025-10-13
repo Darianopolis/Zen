@@ -21,30 +21,26 @@ bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
         case XKB_KEY_Escape:
             wl_display_terminate(server->wl_display);
             break;
-        case XKB_KEY_Tab: {
-            if (server->toplevels.size() < 2) {
-                break;
-            }
-            // TODO: Enter focus cycling mode until MOD key is released,
-            //       at which point currently cycled window will be moved to top of focus stack
-            qz_toplevel* next_toplevel = server->toplevels.front();
-            qz_focus_toplevel(next_toplevel);
+        case XKB_KEY_Tab:
+        case XKB_KEY_ISO_Left_Tab:
+            qz_cycle_focus_immediate(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
             break;
-        }
-        case XKB_KEY_T:
         case XKB_KEY_t:
             qz_spawn("konsole", {"konsole"});
             break;
-        case XKB_KEY_D:
         case XKB_KEY_d:
             qz_spawn("wofi", {"wofi", "--show", "drun"});
             break;
-        case XKB_KEY_Q:
         case XKB_KEY_q:
             if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel) {
                 wlr_xdg_toplevel_send_close(server->focused_toplevel->xdg_toplevel);
             }
             break;
+        case XKB_KEY_f:
+            if (server->focused_toplevel) {
+                bool fullscreen = server->focused_toplevel->xdg_toplevel->current.fullscreen;
+                qz_toplevel_set_fullscreen(server->focused_toplevel, !fullscreen);
+            }
         default:
             return false;
     }
@@ -213,10 +209,8 @@ void qz_seat_request_start_drag(wl_listener* listener, void* data)
     wlr_seat_request_start_drag_event* event = static_cast<wlr_seat_request_start_drag_event*>(data);
 
     if (wlr_seat_validate_pointer_grab_serial(server->seat, event->origin, event->serial)) {
-        wlr_log(WLR_ERROR, "Drag requested, start");
         wlr_seat_start_pointer_drag(server->seat, event->drag, event->serial);
     } else {
-        wlr_log(WLR_ERROR, "Drag requested, invalid serial, destroying..");
         wlr_data_source_destroy(event->drag->source);
     }
 }
@@ -224,8 +218,6 @@ void qz_seat_request_start_drag(wl_listener* listener, void* data)
 static
 void qz_seat_drag_icon_destroy(wl_listener* listener, void*)
 {
-    wlr_log(WLR_ERROR, "Drag icon destroy");
-
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
 
     // Refocus last focused toplevel
@@ -237,8 +229,6 @@ void qz_seat_drag_icon_destroy(wl_listener* listener, void*)
 
 void qz_seat_start_drag(wl_listener* listener, void* data)
 {
-    wlr_log(WLR_ERROR, "Drag start");
-
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
     wlr_drag* drag = static_cast<wlr_drag*>(data);
     if (!drag->icon) return;
@@ -333,9 +323,21 @@ void qz_process_cursor_motion(qz_server* server, uint32_t time_msecs)
     double sx, sy;
     wlr_seat* seat = server->seat;
     wlr_surface* surface = nullptr;
-    qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-    if (!toplevel) {
-        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+    if (server->cursor_mode == qz_cursor_mode::pressed && seat->pointer_state.focused_surface) {
+        if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(seat->pointer_state.focused_surface)) {
+            surface = seat->pointer_state.focused_surface;
+            qz_client* client = static_cast<qz_client*>(xdg_surface->data);
+            wlr_box coord_system = qz_client_get_coord_system(client);
+            sx = server->cursor->x - coord_system.x;
+            sy = server->cursor->y - coord_system.y;
+        }
+    }
+
+    if (!surface) {
+        qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+        if (!toplevel) {
+            wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+        }
     }
 
     if (surface) {
@@ -381,13 +383,16 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
 
     if (qz_zone_process_cursor_button(server, event)) return;
 
-    // End move/size interaction
+    // Leave move/size/pressed modes on release
 
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
+        // TODO: Do we want this reset cursor_mode from `pressed` if *any* button is released?
         qz_reset_cursor_mode(server);
         wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
         return;
     }
+
+    server->cursor_mode = qz_cursor_mode::pressed;
 
     // Focus window on any button press
 
@@ -435,6 +440,13 @@ void qz_server_cursor_axis(wl_listener* listener, void* data)
 {
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
     wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
+
+    if (qz_is_main_mod_down(server)) {
+        if (event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+            qz_cycle_focus_immediate(server, server->cursor, event->delta_discrete > 0);
+        }
+        return;
+    }
 
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
 }

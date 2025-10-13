@@ -106,9 +106,6 @@ void qz_unlisten(qz_listener* l)
 {
     if (l->listener.notify) {
         wl_list_remove(&l->listener.link);
-        l->listener.notify = nullptr;
-    } else {
-        wlr_log(WLR_INFO, "QUARTZ_TRACE: unlisten called on non-activated listener");
     }
     delete l;
 }
@@ -127,7 +124,7 @@ T qz_listener_userdata(wl_listener* listener)
 #if QZ_TYPE_CHECKED_LISTENERS
     if (&typeid(T) != l->typeinfo) {
         wlr_log(WLR_ERROR, "qz_listener_userdata type match, expected '%s' got '%s'", l->typeinfo->name(), typeid(T).name());
-        exit(1);
+        return {};
     }
 #endif
     T userdata;

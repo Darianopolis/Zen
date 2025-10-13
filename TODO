@@ -19,9 +19,9 @@
    - ✅ Remove client requested move/size operations
 - ✅ Enable viewporter protocol
 - ✅ Ensure that xwayland-satellite is sufficient for running Steam
-- Add drag support
+- ✅ Add drag support
    - ✅ Add drag icon/source support
-   - Continue mouse drag operations outside of window
+   - ✅ Send mouse events to last clicked window when pressed
 - ✅ Fullscreen support
 - ️✅ Basic window zone snapping logic
 - ✅ Server decorations
@@ -31,19 +31,27 @@
 - Improved pointer handling
    - Add pointer constraint protocol
    - Relative cursor motion protocol
-- Add layer shell protocol
+   - Cursor hiding
+- Shell layers
+   - Add multiple strata levels
+   - Add layer shell protocol
 - Add XWayland integration
+   - Cursor size difference over X11 windows
 
 ### Bugs
 
 - Minecraft, GIMP
    - [wayland] Data too big for buffer (X + Y > 4096)<br>
      [wayland] error in client communication (pid Z)
-- Minecraft, SDL3+Vulkan
-   - Extremely laggy resizing
+- SDL3/GLFW+Vulkan
+   - Occasional OUT-OF-DATE when resizing at extremely high frame rate (14k+fps)
 
 ### Additional
 
+- Spawn child clients in center of parent
+   - xdg_foreign support
+- Idle protocol
+- ✅ Compositor initiated fullscreen toggle
 - Throttle resize requests
    - Until surface commit received or vblank passed?
 - Consolidate interaction logic
@@ -57,8 +65,8 @@
 - Shortcut to grab all input back from any clients and ignore any constraints
 - Media control keybinds
 - Numlock default state
-- Improved window list/search/cycling
-   - MOD + MouseScroll - Cycle through toplevels under mouse cursor
+- ✅ Improved window list/search/cycling
+   - ✅ MOD + MouseScroll - Cycle through toplevels under mouse cursor
 - Output management
    - Dynamic output removal/creation/configuration
    - Output scaling

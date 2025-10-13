@@ -49,6 +49,7 @@ static constexpr double qz_libinput_mouse_speed = -0.66;
 enum class qz_cursor_mode
 {
     passthrough,
+    pressed,
     move,
     resize,
     zone,
@@ -165,6 +166,8 @@ struct qz_keyboard
 
 // ---- Policy ----
 
+void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwards);
+
 bool     qz_handle_keybinding(qz_server*, xkb_keysym_t);
 uint32_t qz_get_modifiers(    qz_server*);
 bool     qz_is_main_mod_down( qz_server*);
@@ -223,15 +226,19 @@ void qz_server_output_layout_change(wl_listener*, void*);
 
 // ---- Client ----
 
-wlr_box qz_client_get_bounds(qz_client*);
+wlr_box qz_client_get_bounds(      qz_client*);
+wlr_box qz_client_get_geometry(    qz_client*);
+wlr_box qz_client_get_coord_system(qz_client*);
 
 // ---- Client.Toplevel ----
 
 void         qz_focus_toplevel(           qz_toplevel*);
 void         qz_toplevel_set_bounds(      qz_toplevel*, wlr_box);
+void         qz_toplevel_set_activated(   qz_toplevel*, bool active);
 bool         qz_toplevel_wants_fullscreen(qz_toplevel*);
 void         qz_toplevel_set_fullscreen(  qz_toplevel*, bool fullscreen);
 wlr_surface* qz_toplevel_get_surface(     qz_toplevel*);
+bool         qz_toplevel_is_interactable( qz_toplevel*);
 
 qz_toplevel* qz_get_toplevel_at(qz_server*, double lx, double ly, wlr_surface**, double *sx, double *sy);
 
