@@ -71,7 +71,7 @@
 - Consolidate interaction logic
    - Rename `input.cpp` -> `seat.cpp`
    - Move input binding logic to `interaction.cpp`
-   - Replace `qz_cursor_mode` with `qz_interaction_state`
+   - Replace `cursor_mode` with `interaction_state`
    - Separate zoning logic from zone interaction binds
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to

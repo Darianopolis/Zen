@@ -2,34 +2,34 @@
 
 #include <libevdev/libevdev.h>
 
-uint32_t qz_get_modifiers(qz_server* server)
+uint32_t get_modifiers(Server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
     if (!keyboard) return false;
     return wlr_keyboard_get_modifiers(keyboard);
 }
 
-bool qz_is_main_mod_down(qz_server* server)
+bool is_main_mod_down(Server* server)
 {
-    return qz_get_modifiers(server) & server->modifier_key;
+    return get_modifiers(server) & server->modifier_key;
 }
 
-bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
+bool handle_keybinding(Server* server, xkb_keysym_t sym)
 {
     switch (sym)
     {
         case XKB_KEY_Escape:
-            wl_display_terminate(server->wl_display);
+            wl_display_terminate(server->display);
             break;
         case XKB_KEY_Tab:
         case XKB_KEY_ISO_Left_Tab:
-            qz_cycle_focus_immediate(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
+            cycle_focus_immediate(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
             break;
         case XKB_KEY_t:
-            qz_spawn("konsole", {"konsole"});
+            spawn("konsole", {"konsole"});
             break;
         case XKB_KEY_d:
-            qz_spawn("wofi", {"wofi", "--show", "drun"});
+            spawn("wofi", {"wofi", "--show", "drun"});
             break;
         case XKB_KEY_q:
             if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel) {
@@ -39,7 +39,7 @@ bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
         case XKB_KEY_f:
             if (server->focused_toplevel) {
                 bool fullscreen = server->focused_toplevel->xdg_toplevel->current.fullscreen;
-                qz_toplevel_set_fullscreen(server->focused_toplevel, !fullscreen);
+                toplevel_set_fullscreen(server->focused_toplevel, !fullscreen);
             }
         default:
             return false;
@@ -47,9 +47,9 @@ bool qz_handle_keybinding(qz_server* server, xkb_keysym_t sym)
     return true;
 }
 
-void qz_keyboard_handle_modifiers(wl_listener* listener, void*)
+void keyboard_handle_modifiers(wl_listener* listener, void*)
 {
-    qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
+    Keyboard* keyboard = listener_userdata<Keyboard*>(listener);
 
     // NOTE: Wayland only supports one keyboard at a time, so set the most recently used keyboard as the current one
     wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
@@ -58,10 +58,10 @@ void qz_keyboard_handle_modifiers(wl_listener* listener, void*)
     wlr_seat_keyboard_notify_modifiers(keyboard->server->seat, &keyboard->wlr_keyboard->modifiers);
 }
 
-void qz_keyboard_handle_key(wl_listener* listener, void* data)
+void keyboard_handle_key(wl_listener* listener, void* data)
 {
-    qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
-    qz_server* server = keyboard->server;
+    Keyboard* keyboard = listener_userdata<Keyboard*>(listener);
+    Server* server = keyboard->server;
     wlr_seat* seat = server->seat;
     wlr_keyboard_key_event* event = static_cast<wlr_keyboard_key_event*>(data);
 
@@ -73,11 +73,11 @@ void qz_keyboard_handle_key(wl_listener* listener, void* data)
     int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 
     bool handled = false;
-    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && qz_is_main_mod_down(server)) {
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
         // If MOD key is held down and this button was pressed, we attempt to process it as a compositor keybinding...
 
         for (int i = 0; i < nsyms; ++i) {
-            if ((handled = qz_handle_keybinding(server, syms[i]))) {
+            if ((handled = handle_keybinding(server, syms[i]))) {
                 break;
             }
         }
@@ -91,12 +91,12 @@ void qz_keyboard_handle_key(wl_listener* listener, void* data)
     }
 }
 
-void qz_keyboard_handle_destroy(wl_listener* listener, void*)
+void keyboard_handle_destroy(wl_listener* listener, void*)
 {
     // This event is raised by the keyboard base wlr_input_device to signal the destruction of the wlr_keyboard.
     // It will no longer receieve events and should be destroyed
 
-    qz_keyboard* keyboard = qz_listener_userdata<qz_keyboard*>(listener);
+    Keyboard* keyboard = listener_userdata<Keyboard*>(listener);
 
     std::erase(keyboard->server->keyboards, keyboard);
     delete keyboard;
@@ -104,56 +104,56 @@ void qz_keyboard_handle_destroy(wl_listener* listener, void*)
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
 }
 
-void qz_server_new_keyboard(qz_server* server, wlr_input_device* device)
+void server_new_keyboard(Server* server, wlr_input_device* device)
 {
     wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(device);
 
-    qz_keyboard* keyboard = new qz_keyboard{};
+    Keyboard* keyboard = new Keyboard{};
     keyboard->server = server;
     keyboard->wlr_keyboard = wlr_keyboard;
 
     xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    xkb_keymap* keymap = xkb_keymap_new_from_names(context, qz_ptr(xkb_rule_names{
-        .layout = qz_keyboard_layout,
+    xkb_keymap* keymap = xkb_keymap_new_from_names(context, ptr(xkb_rule_names{
+        .layout = keyboard_layout,
     }), XKB_KEYMAP_COMPILE_NO_FLAGS);
 
     wlr_keyboard_set_keymap(wlr_keyboard, keymap);
     xkb_keymap_unref(keymap);
     xkb_context_unref(context);
-    wlr_keyboard_set_repeat_info(wlr_keyboard, qz_keyboard_repeat_rate, qz_keyboard_repeat_delay);
+    wlr_keyboard_set_repeat_info(wlr_keyboard, keyboard_repeat_rate, keyboard_repeat_delay);
 
-    keyboard->listeners.listen(&wlr_keyboard->events.modifiers, keyboard, qz_keyboard_handle_modifiers);
-    keyboard->listeners.listen(&wlr_keyboard->events.key,       keyboard, qz_keyboard_handle_key);
-    keyboard->listeners.listen(&      device->events.destroy,   keyboard, qz_keyboard_handle_destroy);
+    keyboard->listeners.listen(&wlr_keyboard->events.modifiers, keyboard, keyboard_handle_modifiers);
+    keyboard->listeners.listen(&wlr_keyboard->events.key,       keyboard, keyboard_handle_key);
+    keyboard->listeners.listen(&      device->events.destroy,   keyboard, keyboard_handle_destroy);
 
     wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
 
     server->keyboards.emplace_back(keyboard);
 }
 
-void qz_server_new_pointer(qz_server* server, wlr_input_device* device)
+void server_new_pointer(Server* server, wlr_input_device* device)
 {
     libinput_device* libinput_device;
     if (wlr_input_device_is_libinput(device) && (libinput_device = wlr_libinput_get_device_handle(device))) {
         if (libinput_device_config_accel_is_available(libinput_device)) {
             libinput_device_config_accel_set_profile(libinput_device, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
-            libinput_device_config_accel_set_speed(  libinput_device, qz_libinput_mouse_speed);
+            libinput_device_config_accel_set_speed(  libinput_device, libinput_mouse_speed);
         }
     }
 
     wlr_cursor_attach_input_device(server->cursor, device);
 }
 
-void qz_server_new_input(wl_listener* listener, void* data)
+void server_new_input(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_input_device* device = static_cast<wlr_input_device*>(data);
     switch (device->type) {
         case WLR_INPUT_DEVICE_KEYBOARD:
-            qz_server_new_keyboard(server, device);
+            server_new_keyboard(server, device);
             break;
         case WLR_INPUT_DEVICE_POINTER:
-            qz_server_new_pointer(server, device);
+            server_new_pointer(server, device);
             break;
         default:
             break;
@@ -167,9 +167,9 @@ void qz_server_new_input(wl_listener* listener, void* data)
     wlr_seat_set_capabilities(server->seat, caps);
 }
 
-void qz_seat_request_set_cursor(wl_listener* listener, void* data)
+void seat_request_set_cursor(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_seat_pointer_request_set_cursor_event* event = static_cast<wlr_seat_pointer_request_set_cursor_event*>(data);
     wlr_seat_client* focused_client = server->seat->pointer_state.focused_client;
 
@@ -178,9 +178,9 @@ void qz_seat_request_set_cursor(wl_listener* listener, void* data)
     }
 }
 
-void qz_seat_pointer_focus_change(wl_listener* listener, void* data)
+void seat_pointer_focus_change(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
 
     wlr_seat_pointer_focus_change_event* event = static_cast<wlr_seat_pointer_focus_change_event*>(data);
     if (!event->new_surface) {
@@ -188,11 +188,11 @@ void qz_seat_pointer_focus_change(wl_listener* listener, void* data)
     }
 }
 
-void qz_seat_request_set_selection(wl_listener* listener, void* data)
+void seat_request_set_selection(wl_listener* listener, void* data)
 {
     // TODO: Validate serial?
 
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
 
     wlr_seat_request_set_selection_event* event = static_cast<wlr_seat_request_set_selection_event*>(data);
     wlr_seat_set_selection(server->seat, event->source, event->serial);
@@ -200,9 +200,9 @@ void qz_seat_request_set_selection(wl_listener* listener, void* data)
 
 // -----------------------------------------------------------------------------
 
-void qz_seat_request_start_drag(wl_listener* listener, void* data)
+void seat_request_start_drag(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_seat_request_start_drag_event* event = static_cast<wlr_seat_request_start_drag_event*>(data);
 
     if (wlr_seat_validate_pointer_grab_serial(server->seat, event->origin, event->serial)) {
@@ -213,29 +213,29 @@ void qz_seat_request_start_drag(wl_listener* listener, void* data)
 }
 
 static
-void qz_seat_drag_icon_destroy(wl_listener* listener, void*)
+void seat_drag_icon_destroy(wl_listener* listener, void*)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
 
     // Refocus last focused toplevel
-    qz_toplevel_focus(server->focused_toplevel);
-    qz_process_cursor_motion(server, 0);
+    toplevel_focus(server->focused_toplevel);
+    process_cursor_motion(server, 0);
 
-    qz_unlisten(qz_listener_from(listener));
+    unlisten(listener_from(listener));
 }
 
-void qz_seat_start_drag(wl_listener* listener, void* data)
+void seat_start_drag(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_drag* drag = static_cast<wlr_drag*>(data);
     if (!drag->icon) return;
 
     drag->icon->data = &wlr_scene_drag_icon_create(server->drag_icon_parent, drag->icon)->node;
-    qz_listen(&drag->icon->events.destroy, server, qz_seat_drag_icon_destroy);
+    listen(&drag->icon->events.destroy, server, seat_drag_icon_destroy);
 }
 
 static
-void qz_seat_drag_update_position(qz_server* server)
+void seat_drag_update_position(Server* server)
 {
     wlr_scene_node_set_position(&server->drag_icon_parent->node, int(std::round(server->cursor->x)), int(std::round(server->cursor->y)));
 
@@ -245,19 +245,19 @@ void qz_seat_drag_update_position(qz_server* server)
 
 // -----------------------------------------------------------------------------
 
-void qz_reset_cursor_mode(qz_server* server)
+void reset_cursor_mode(Server* server)
 {
-    server->cursor_mode = qz_cursor_mode::passthrough;
+    server->cursor_mode = CursorMode::passthrough;
     server->movesize.grabbed_toplevel = nullptr;
 }
 
-void qz_process_cursor_move(qz_server* server)
+void process_cursor_move(Server* server)
 {
-    qz_toplevel* toplevel = server->movesize.grabbed_toplevel;
+    Toplevel* toplevel = server->movesize.grabbed_toplevel;
     wlr_scene_node_set_position(&toplevel->scene_tree->node, server->cursor->x - server->movesize.grab_x, server->cursor->y - server->movesize.grab_y);
 }
 
-void qz_process_cursor_resize(qz_server* server)
+void process_cursor_resize(Server* server)
 {
     auto& movesize = server->movesize;
 
@@ -275,7 +275,7 @@ void qz_process_cursor_resize(qz_server* server)
     if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(border_x, right - 1);
     else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(border_x, left  + 1);
 
-    qz_toplevel_set_bounds(movesize.grabbed_toplevel, {
+    toplevel_set_bounds(movesize.grabbed_toplevel, {
         .x = left - movesize.grabbed_toplevel->xdg_toplevel->base->geometry.x,
         .y = top  - movesize.grabbed_toplevel->xdg_toplevel->base->geometry.y,
         .width  = right  - left,
@@ -283,36 +283,36 @@ void qz_process_cursor_resize(qz_server* server)
     });
 }
 
-void qz_process_cursor_motion(qz_server* server, uint32_t time_msecs)
+void process_cursor_motion(Server* server, uint32_t time_msecs)
 {
-    qz_seat_drag_update_position(server);
+    seat_drag_update_position(server);
 
-    if (server->cursor_mode == qz_cursor_mode::move) {
-        qz_process_cursor_move(server);
+    if (server->cursor_mode == CursorMode::move) {
+        process_cursor_move(server);
         return;
-    } else if (server->cursor_mode == qz_cursor_mode::resize) {
-        qz_process_cursor_resize(server);
+    } else if (server->cursor_mode == CursorMode::resize) {
+        process_cursor_resize(server);
         return;
-    } else if (server->cursor_mode == qz_cursor_mode::zone) {
-        qz_zone_process_cursor_motion(server);
+    } else if (server->cursor_mode == CursorMode::zone) {
+        zone_process_cursor_motion(server);
         return;
     }
 
     double sx, sy;
     wlr_seat* seat = server->seat;
     wlr_surface* surface = nullptr;
-    if (server->cursor_mode == qz_cursor_mode::pressed && seat->pointer_state.focused_surface) {
+    if (server->cursor_mode == CursorMode::pressed && seat->pointer_state.focused_surface) {
         if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(seat->pointer_state.focused_surface)) {
             surface = seat->pointer_state.focused_surface;
-            qz_client* client = static_cast<qz_client*>(xdg_surface->data);
-            wlr_box coord_system = qz_client_get_coord_system(client);
+            Client* client = static_cast<Client*>(xdg_surface->data);
+            wlr_box coord_system = client_get_coord_system(client);
             sx = server->cursor->x - coord_system.x;
             sy = server->cursor->y - coord_system.y;
         }
     }
 
     if (!surface) {
-        qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+        Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
         if (!toplevel) {
             wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
         }
@@ -327,31 +327,31 @@ void qz_process_cursor_motion(qz_server* server, uint32_t time_msecs)
     }
 }
 
-void qz_server_cursor_motion(wl_listener* listener, void* data)
+void server_cursor_motion(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_event* event = static_cast<wlr_pointer_motion_event*>(data);
 
     // TODO: Handle custom acceleration here
 
     wlr_cursor_move(server->cursor, &event->pointer->base, event->delta_x, event->delta_y);
-    qz_process_cursor_motion(server, event->time_msec);
+    process_cursor_motion(server, event->time_msec);
 }
 
-void qz_server_cursor_motion_absolute(wl_listener* listener, void* data)
+void server_cursor_motion_absolute(wl_listener* listener, void* data)
 {
     // TODO: Drawing tablet handling?
 
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_absolute_event* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
 
     wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
-    qz_process_cursor_motion(server, event->time_msec);
+    process_cursor_motion(server, event->time_msec);
 }
 
-void qz_server_cursor_button(wl_listener* listener, void* data)
+void server_cursor_button(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_button_event* event = static_cast<wlr_pointer_button_event*>(data);
 
     // TODO: Focus follows mouse?
@@ -359,42 +359,42 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
 
     // Zone interaction
 
-    if (qz_zone_process_cursor_button(server, event)) return;
+    if (zone_process_cursor_button(server, event)) return;
 
     // Leave move/size/pressed modes on release
 
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
         // TODO: Do we want this reset cursor_mode from `pressed` if *any* button is released?
-        qz_reset_cursor_mode(server);
+        reset_cursor_mode(server);
         wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
         return;
     }
 
-    server->cursor_mode = qz_cursor_mode::pressed;
+    server->cursor_mode = CursorMode::pressed;
 
     // Focus window on any button press
 
     double sx, sy;
     wlr_surface* surface = nullptr;
-    qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
     if (toplevel) {
-        qz_toplevel_focus(toplevel);
+        toplevel_focus(toplevel);
     } else {
-        qz_toplevel_unfocus(server->focused_toplevel);
+        toplevel_unfocus(server->focused_toplevel);
     }
 
     // Check for move/size interaction begin
 
-    if (toplevel && qz_is_main_mod_down(server)) {
-        if (event->button == BTN_LEFT && (qz_get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
-            qz_toplevel_begin_interactive(toplevel, qz_cursor_mode::move, 0);
+    if (toplevel && is_main_mod_down(server)) {
+        if (event->button == BTN_LEFT && (get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
+            toplevel_begin_interactive(toplevel, CursorMode::move, 0);
             return;
         } else if (event->button == BTN_RIGHT) {
-            wlr_box bounds = qz_client_get_bounds(toplevel);
+            wlr_box bounds = client_get_bounds(toplevel);
             int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
             int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
 
-            qz_cursor_mode type = qz_cursor_mode::resize;
+            CursorMode type = CursorMode::resize;
             uint32_t edges = 0;
 
             if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
@@ -404,9 +404,9 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
             else if (nine_slice_y > 1) edges |= WLR_EDGE_BOTTOM;
 
             // If no edges selected, must be center - switch to move
-            if (!edges) type = qz_cursor_mode::move;
+            if (!edges) type = CursorMode::move;
 
-            qz_toplevel_begin_interactive(toplevel, type, edges);
+            toplevel_begin_interactive(toplevel, type, edges);
             return;
         } else if (event->button == BTN_MIDDLE) {
             wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel);
@@ -419,14 +419,14 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
     wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 }
 
-void qz_server_cursor_axis(wl_listener* listener, void* data)
+void server_cursor_axis(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
 
-    if (qz_is_main_mod_down(server)) {
+    if (is_main_mod_down(server)) {
         if (event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-            qz_cycle_focus_immediate(server, server->cursor, event->delta_discrete > 0);
+            cycle_focus_immediate(server, server->cursor, event->delta_discrete > 0);
         }
         return;
     }
@@ -434,9 +434,9 @@ void qz_server_cursor_axis(wl_listener* listener, void* data)
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
 }
 
-void qz_server_cursor_frame(wl_listener* listener, void*)
+void server_cursor_frame(wl_listener* listener, void*)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
 
     wlr_seat_pointer_notify_frame(server->seat);
 }

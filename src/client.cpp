@@ -1,23 +1,23 @@
 #include "core.hpp"
 
 static
-void qz_toplevel_update_border(qz_toplevel* toplevel)
+void toplevel_update_border(Toplevel* toplevel)
 {
     static constexpr uint32_t left = 0;
     static constexpr uint32_t top = 1;
     static constexpr uint32_t right = 2;
     static constexpr uint32_t bottom = 3;
 
-    wlr_box bounds = qz_client_get_bounds(toplevel);
+    wlr_box bounds = client_get_bounds(toplevel);
 
     bool show = bounds.width && bounds.height;
     show &= !toplevel->xdg_toplevel->current.fullscreen;
 
     wlr_box positions[4];
-    positions[left]   = { -qz_border_width, -qz_border_width, qz_border_width, bounds.height + qz_border_width * 2 };
-    positions[right]  = {  bounds.width,    -qz_border_width, qz_border_width, bounds.height + qz_border_width * 2 };
-    positions[top]    = {  0,               -qz_border_width, bounds.width,    qz_border_width };
-    positions[bottom] = {  0,                bounds.height,   bounds.width,    qz_border_width };
+    positions[left]   = { -border_width, -border_width,  border_width, bounds.height + border_width * 2 };
+    positions[right]  = {  bounds.width, -border_width,  border_width, bounds.height + border_width * 2 };
+    positions[top]    = {  0,            -border_width,  bounds.width, border_width                     };
+    positions[bottom] = {  0,             bounds.height, bounds.width, border_width                     };
 
     for (uint32_t i = 0; i < 4; ++i) {
         if (show) {
@@ -26,15 +26,15 @@ void qz_toplevel_update_border(qz_toplevel* toplevel)
             wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
             wlr_scene_rect_set_color(toplevel->border[i],
                 toplevel->server->focused_toplevel == toplevel
-                    ? qz_border_color_focused.values
-                    : qz_border_color_unfocused.values);
+                    ? border_color_focused.values
+                    : border_color_unfocused.values);
         } else {
             wlr_scene_node_set_enabled(&toplevel->border[i]->node, false);
         }
     }
 }
 
-wlr_surface* qz_toplevel_get_surface(qz_toplevel* toplevel)
+wlr_surface* toplevel_get_surface(Toplevel* toplevel)
 {
     if (toplevel->xdg_toplevel && toplevel->xdg_toplevel->base) {
         return toplevel->xdg_toplevel->base->surface;
@@ -43,7 +43,7 @@ wlr_surface* qz_toplevel_get_surface(qz_toplevel* toplevel)
     return nullptr;
 }
 
-wlr_box qz_client_get_geometry(qz_client* client)
+wlr_box client_get_geometry(Client* client)
 {
     wlr_box geom = client->xdg_surface->current.geometry;
 
@@ -54,7 +54,7 @@ wlr_box qz_client_get_geometry(qz_client* client)
     return geom;
 }
 
-wlr_box qz_client_get_coord_system(qz_client* client)
+wlr_box client_get_coord_system(Client* client)
 {
     wlr_box box = {};
     wlr_scene_node_coords(&client->scene_tree->node, &box.x, &box.y);
@@ -69,19 +69,19 @@ wlr_box qz_client_get_coord_system(qz_client* client)
     return box;
 }
 
-wlr_box qz_client_get_bounds(qz_client* client)
+wlr_box client_get_bounds(Client* client)
 {
-    wlr_box box = qz_client_get_geometry(client);
+    wlr_box box = client_get_geometry(client);
     wlr_scene_node_coords(&client->scene_tree->node, &box.x, &box.y);
     return box;
 }
 
-void qz_toplevel_resize(qz_toplevel* toplevel, int width, int height)
+void toplevel_resize(Toplevel* toplevel, int width, int height)
 {
     if (toplevel->resize.enable_throttle_resize && toplevel->resize.last_resize_serial > toplevel->resize.last_commited_serial) {
         if (!toplevel->resize.any_pending || width != toplevel->resize.pending_width || height != toplevel->resize.pending_height) {
 
-#if QZ_NOISY_RESIZE
+#if NOISY_RESIZE
             wlr_log(WLR_INFO, "resize.pending[%i > %i] (%i, %i) -> (%i, %i)",
                 toplevel->resize.last_resize_serial, toplevel->resize.last_commited_serial,
                 toplevel->resize.pending_width, toplevel->resize.pending_height, width, height);
@@ -95,7 +95,7 @@ void qz_toplevel_resize(qz_toplevel* toplevel, int width, int height)
         toplevel->resize.any_pending = false;
 
         if (toplevel->xdg_toplevel->pending.width != width || toplevel->xdg_toplevel->pending.height != height) {
-#if QZ_NOISY_RESIZE
+#if NOISY_RESIZE
             wlr_log(WLR_INFO, "resize.request[%i] (%i, %i) -> (%i, %i)", toplevel->resize.last_resize_serial,
                 toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
                 width,                                 height);
@@ -107,7 +107,7 @@ void qz_toplevel_resize(qz_toplevel* toplevel, int width, int height)
 }
 
 static
-void qz_toplevel_resize_handle_commit(qz_toplevel* toplevel)
+void toplevel_resize_handle_commit(Toplevel* toplevel)
 {
     if (toplevel->resize.last_commited_serial == toplevel->xdg_toplevel->base->current.configure_serial) return;
     toplevel->resize.last_commited_serial = toplevel->xdg_toplevel->base->current.configure_serial;
@@ -115,9 +115,9 @@ void qz_toplevel_resize_handle_commit(qz_toplevel* toplevel)
     if (toplevel->resize.last_commited_serial < toplevel->resize.last_resize_serial) return;
     toplevel->resize.last_resize_serial = toplevel->resize.last_commited_serial;
 
-#if QZ_NOISY_RESIZE
+#if NOISY_RESIZE
     {
-        wlr_box box = qz_client_get_geometry(toplevel);
+        wlr_box box = client_get_geometry(toplevel);
         int buffer_width = toplevel->xdg_surface->surface->current.buffer_width;
         int buffer_height = toplevel->xdg_surface->surface->current.buffer_height;
 
@@ -128,53 +128,53 @@ void qz_toplevel_resize_handle_commit(qz_toplevel* toplevel)
     }
 #endif
 
-    wlr_box bounds = qz_client_get_bounds(toplevel);
-#if QZ_NOISY_RESIZE
+    wlr_box bounds = client_get_bounds(toplevel);
+#if NOISY_RESIZE
     wlr_log(WLR_INFO, "resize.commit[%i] (%i, %i)", toplevel->resize.last_commited_serial, bounds.width, bounds.height);
 #endif
 
     if (toplevel->resize.any_pending) {
-#if QZ_NOISY_RESIZE
+#if NOISY_RESIZE
         wlr_log(WLR_INFO, "  found pending resizes, sending new resize");
 #endif
         toplevel->resize.any_pending = false;
-        qz_toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height);
+        toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height);
     } else {
         if (bounds.width != toplevel->xdg_toplevel->current.width || bounds.height != toplevel->xdg_toplevel->current.height) {
             // Client has committed geometry that doesn't match our requested size
             // Resize toplevel to match committed geometry (client authoritative)
-#if QZ_NOISY_RESIZE
+#if NOISY_RESIZE
             wlr_log(WLR_INFO, "  no pending resizes, new bounds don't match requested toplevel size, overriding toplevel size (client authoritative)");
 #endif
-            qz_toplevel_resize(toplevel, bounds.width, bounds.height);
+            toplevel_resize(toplevel, bounds.width, bounds.height);
         }
     }
 }
 
-void qz_toplevel_set_bounds(qz_toplevel* toplevel, wlr_box box)
+void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
 {
     // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
     //       Thus you must be careful when setting/getting bounds with positioned parents
     // TODO: Tidy up this API and make it clear what is relative to what.
     wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
 
-    qz_toplevel_resize(toplevel, box.width, box.height);
+    toplevel_resize(toplevel, box.width, box.height);
 }
 
-bool qz_toplevel_wants_fullscreen(qz_toplevel* toplevel)
+bool toplevel_wants_fullscreen(Toplevel* toplevel)
 {
     return toplevel->xdg_toplevel->requested.fullscreen;
 }
 
-void qz_toplevel_set_fullscreen(qz_toplevel* toplevel, bool fullscreen)
+void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
 {
     if (fullscreen) {
-        wlr_box prev = qz_client_get_bounds(toplevel);
-        qz_output* output = qz_get_output_for_client(toplevel);
+        wlr_box prev = client_get_bounds(toplevel);
+        Output* output = get_output_for_client(toplevel);
         if (output) {
-            wlr_box b = qz_output_get_bounds(output);
+            wlr_box b = output_get_bounds(output);
             wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
-            qz_toplevel_set_bounds(toplevel, b);
+            toplevel_set_bounds(toplevel, b);
             toplevel->prev_bounds = prev;
             // TODO: With layers implemented, move output background rect to fullscreen layer
             //       The xdg-protocol specifies:
@@ -186,34 +186,34 @@ void qz_toplevel_set_fullscreen(qz_toplevel* toplevel, bool fullscreen)
         }
     } else {
         wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, false);
-        qz_toplevel_set_bounds(toplevel, toplevel->prev_bounds);
+        toplevel_set_bounds(toplevel, toplevel->prev_bounds);
     }
 }
 
-void qz_toplevel_set_activated(qz_toplevel* toplevel, bool active)
+void toplevel_set_activated(Toplevel* toplevel, bool active)
 {
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, active);
-    qz_toplevel_update_border(toplevel);
+    toplevel_update_border(toplevel);
 }
 
-void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwards)
+void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
 {
-    auto in_cycle = [&](qz_client* client) {
-        return !cursor || wlr_box_contains_point(qz_ptr(qz_client_get_bounds(client)), cursor->x, cursor->y);
+    auto in_cycle = [&](Client* client) {
+        return !cursor || wlr_box_contains_point(ptr(client_get_bounds(client)), cursor->x, cursor->y);
     };
 
     if (backwards) {
-        for (qz_toplevel* toplevel : server->toplevels) {
+        for (Toplevel* toplevel : server->toplevels) {
             if (toplevel == server->focused_toplevel) continue;
             if (!in_cycle(toplevel)) continue;
 
-            qz_toplevel_focus(toplevel);
+            toplevel_focus(toplevel);
             return;
         }
     } else {
         uint32_t i = server->toplevels.size();
         while (i-- > 0) {
-            qz_toplevel* toplevel = server->toplevels[i];
+            Toplevel* toplevel = server->toplevels[i];
             if (toplevel == server->focused_toplevel) continue;
             if (!in_cycle(toplevel)) continue;
 
@@ -224,22 +224,22 @@ void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwa
             }
 
             // Focus new window
-            qz_toplevel_focus(toplevel);
+            toplevel_focus(toplevel);
             return;
         }
     }
 }
 
-void qz_toplevel_focus(qz_toplevel* toplevel)
+void toplevel_focus(Toplevel* toplevel)
 {
     // NOTE: This function only deals with keyboard focus
 
     if (!toplevel) return;
 
-    qz_server* server = toplevel->server;
+    Server* server = toplevel->server;
     wlr_seat* seat = server->seat;
     wlr_surface* prev_surface = seat->keyboard_state.focused_surface;
-    wlr_surface* surface = qz_toplevel_get_surface(toplevel);
+    wlr_surface* surface = toplevel_get_surface(toplevel);
 
     server->focused_toplevel = toplevel;
 
@@ -248,7 +248,7 @@ void qz_toplevel_focus(qz_toplevel* toplevel)
     if (prev_surface) {
         wlr_xdg_toplevel* prev_toplevel = wlr_xdg_toplevel_try_from_wlr_surface(prev_surface);
         if (prev_toplevel) {
-            qz_toplevel_set_activated(static_cast<qz_toplevel*>(prev_toplevel->base->data), false);
+            toplevel_set_activated(static_cast<Toplevel*>(prev_toplevel->base->data), false);
         }
     }
 
@@ -256,16 +256,16 @@ void qz_toplevel_focus(qz_toplevel* toplevel)
     wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
     std::erase(server->toplevels, toplevel);
     server->toplevels.emplace_back(toplevel);
-    qz_toplevel_set_activated(toplevel, true);
+    toplevel_set_activated(toplevel, true);
 
     if (keyboard) {
         wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
 
-    qz_toplevel_update_border(toplevel);
+    toplevel_update_border(toplevel);
 }
 
-void qz_toplevel_unfocus(qz_toplevel* toplevel)
+void toplevel_unfocus(Toplevel* toplevel)
 {
     if (!toplevel) return;
     if (toplevel->server->focused_toplevel != toplevel)
@@ -274,10 +274,10 @@ void qz_toplevel_unfocus(qz_toplevel* toplevel)
     toplevel->server->focused_toplevel = nullptr;
     wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
 
-    qz_toplevel_update_border(toplevel);
+    toplevel_update_border(toplevel);
 }
 
-qz_toplevel* qz_get_toplevel_at(qz_server* server, double lx, double ly, wlr_surface** surface, double *sx, double *sy)
+Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** surface, double *sx, double *sy)
 {
     // This returns the topmost node in the scene at the given layout coords.
     // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a client
@@ -292,89 +292,89 @@ qz_toplevel* qz_get_toplevel_at(qz_server* server, double lx, double ly, wlr_sur
     *surface = scene_surface->surface;
 
     wlr_scene_tree* tree = node->parent;
-    while (tree && (!tree->node.data || static_cast<qz_client*>(tree->node.data)->type != qz_client_type::toplevel)) {
+    while (tree && (!tree->node.data || static_cast<Client*>(tree->node.data)->type != ClientType::toplevel)) {
         tree = tree->node.parent;
     }
 
-    return tree ? static_cast<qz_toplevel*>(tree->node.data) : nullptr;
+    return tree ? static_cast<Toplevel*>(tree->node.data) : nullptr;
 }
 
-void qz_toplevel_map(wl_listener* listener, void*)
+void toplevel_map(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     toplevel->server->toplevels.emplace_back(toplevel);
 
-    qz_toplevel_focus(toplevel);
+    toplevel_focus(toplevel);
 }
 
-void qz_toplevel_unmap(wl_listener* listener, void*)
+void toplevel_unmap(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     // Reset cursor mode if grabbed toplevel was unmapped
     if (toplevel == toplevel->server->movesize.grabbed_toplevel) {
-        qz_reset_cursor_mode(toplevel->server);
+        reset_cursor_mode(toplevel->server);
     }
 
     // TODO: Handle toplevel unmap during zone operation
 
-    qz_toplevel_unfocus(toplevel);
+    toplevel_unfocus(toplevel);
     std::erase(toplevel->server->toplevels, toplevel);
     if (!toplevel->server->toplevels.empty()) {
-        qz_toplevel_focus(toplevel->server->toplevels.back());
+        toplevel_focus(toplevel->server->toplevels.back());
     }
 }
 
-void qz_toplevel_commit(wl_listener* listener, void*)
+void toplevel_commit(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel->base->initial_commit) {
-        qz_decoration_set_mode(toplevel);
+        decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
     } else {
-        qz_toplevel_resize_handle_commit(toplevel);
-        qz_toplevel_update_border(toplevel);
+        toplevel_resize_handle_commit(toplevel);
+        toplevel_update_border(toplevel);
     }
 }
 
-void qz_toplevel_destroy(wl_listener* listener, void*)
+void toplevel_destroy(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     delete toplevel;
 }
 
-bool qz_toplevel_is_interactable(qz_toplevel* toplevel)
+bool toplevel_is_interactable(Toplevel* toplevel)
 {
     if (toplevel->xdg_toplevel->current.fullscreen) return false;
 
     return true;
 }
 
-void qz_toplevel_begin_interactive(qz_toplevel* toplevel, qz_cursor_mode mode, uint32_t edges)
+void toplevel_begin_interactive(Toplevel* toplevel, CursorMode mode, uint32_t edges)
 {
-    if (!qz_toplevel_is_interactable(toplevel)) return;
+    if (!toplevel_is_interactable(toplevel)) return;
 
-    qz_server* server = toplevel->server;
+    Server* server = toplevel->server;
 
     server->movesize.grabbed_toplevel = toplevel;
     server->cursor_mode = mode;
 
-    if (mode == qz_cursor_mode::move) {
+    if (mode == CursorMode::move) {
         server->movesize.grab_x = server->cursor->x - toplevel->scene_tree->node.x;
         server->movesize.grab_y = server->cursor->y - toplevel->scene_tree->node.y;
     } else {
-        wlr_box* geo_box = &toplevel->xdg_toplevel->base->geometry;
+        wlr_box geom = toplevel->xdg_toplevel->base->geometry;
 
-        double border_x = (toplevel->scene_tree->node.x + geo_box->x) + ((edges & WLR_EDGE_RIGHT ) ? geo_box->width  : 0);
-        double border_y = (toplevel->scene_tree->node.y + geo_box->y) + ((edges & WLR_EDGE_BOTTOM) ? geo_box->height : 0);
+        double border_x = (toplevel->scene_tree->node.x + geom.x) + ((edges & WLR_EDGE_RIGHT ) ? geom.width  : 0);
+        double border_y = (toplevel->scene_tree->node.y + geom.y) + ((edges & WLR_EDGE_BOTTOM) ? geom.height : 0);
 
         server->movesize.grab_x = server->cursor->x - border_x;
         server->movesize.grab_y = server->cursor->y - border_y;
 
-        server->movesize.grab_geobox = *geo_box;
+        server->movesize.grab_geobox = geom;
         server->movesize.grab_geobox.x += toplevel->scene_tree->node.x;
         server->movesize.grab_geobox.y += toplevel->scene_tree->node.y;
 
@@ -382,9 +382,9 @@ void qz_toplevel_begin_interactive(qz_toplevel* toplevel, qz_cursor_mode mode, u
     }
 }
 
-void qz_toplevel_request_maximize(wl_listener* listener, void*)
+void toplevel_request_maximize(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     // NOTE: We won't support maximization, but we have to send a configure event anyway
 
@@ -393,22 +393,22 @@ void qz_toplevel_request_maximize(wl_listener* listener, void*)
     }
 }
 
-void qz_toplevel_request_fullscreen(wl_listener* listener, void*)
+void toplevel_request_fullscreen(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel->base->initialized) {
-        qz_toplevel_set_fullscreen(toplevel, qz_toplevel_wants_fullscreen(toplevel));
+        toplevel_set_fullscreen(toplevel, toplevel_wants_fullscreen(toplevel));
     }
 }
 
-void qz_server_new_toplevel(wl_listener* listener, void* data)
+void server_new_toplevel(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_xdg_toplevel* xdg_toplevel = static_cast<wlr_xdg_toplevel*>(data);
 
-    qz_toplevel* toplevel = new qz_toplevel{};
-    toplevel->type = qz_client_type::toplevel;
+    Toplevel* toplevel = new Toplevel{};
+    toplevel->type = ClientType::toplevel;
     toplevel->server = server;
     toplevel->xdg_surface = xdg_toplevel->base;
     toplevel->xdg_surface->data = toplevel;
@@ -417,23 +417,23 @@ void qz_server_new_toplevel(wl_listener* listener, void* data)
     toplevel->scene_tree = wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
 
-    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, qz_toplevel_map);
-    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, qz_toplevel_unmap);
-    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.commit, toplevel, qz_toplevel_commit);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, toplevel_map);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, toplevel_unmap);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.commit, toplevel, toplevel_commit);
 
-    toplevel->listeners.listen(&xdg_toplevel->events.destroy, toplevel, qz_toplevel_destroy);
+    toplevel->listeners.listen(&xdg_toplevel->events.destroy, toplevel, toplevel_destroy);
 
-    toplevel->listeners.listen(&xdg_toplevel->events.request_maximize,   toplevel, qz_toplevel_request_maximize);
-    toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, qz_toplevel_request_fullscreen);
+    toplevel->listeners.listen(&xdg_toplevel->events.request_maximize,   toplevel, toplevel_request_maximize);
+    toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, toplevel_request_fullscreen);
 
     for (int i = 0; i < 4; ++i) {
-        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, qz_border_color_unfocused.values);
+        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, border_color_unfocused.values);
     }
 }
 
 // -----------------------------------------------------------------------------
 
-void qz_decoration_set_mode(qz_toplevel* toplevel)
+void decoration_set_mode(Toplevel* toplevel)
 {
     if (!toplevel->decoration.xdg_decoration) return;
 
@@ -442,11 +442,11 @@ void qz_decoration_set_mode(qz_toplevel* toplevel)
     }
 }
 
-void qz_decoration_new(wl_listener*, void* data)
+void decoration_new(wl_listener*, void* data)
 {
     wlr_xdg_toplevel_decoration_v1* xdg_decoration = static_cast<wlr_xdg_toplevel_decoration_v1*>(data);
 
-    qz_toplevel* toplevel = static_cast<qz_toplevel*>(xdg_decoration->toplevel->base->data);
+    Toplevel* toplevel = static_cast<Toplevel*>(xdg_decoration->toplevel->base->data);
     if (toplevel->decoration.xdg_decoration) {
         wlr_log(WLR_ERROR, "Toplevel already has attached decoration!");
         return;
@@ -454,21 +454,21 @@ void qz_decoration_new(wl_listener*, void* data)
 
     toplevel->decoration.xdg_decoration = xdg_decoration;
 
-    toplevel->decoration.listeners.listen(&xdg_decoration->events.request_mode, toplevel, qz_decoration_request_mode);
-    toplevel->decoration.listeners.listen(&xdg_decoration->events.destroy,      toplevel, qz_decoration_destroy);
+    toplevel->decoration.listeners.listen(&xdg_decoration->events.request_mode, toplevel, decoration_request_mode);
+    toplevel->decoration.listeners.listen(&xdg_decoration->events.destroy,      toplevel, decoration_destroy);
 
-    qz_decoration_set_mode(toplevel);
+    decoration_set_mode(toplevel);
 }
 
-void qz_decoration_request_mode(wl_listener* listener, void*)
+void decoration_request_mode(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
-    qz_decoration_set_mode(toplevel);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+    decoration_set_mode(toplevel);
 }
 
-void qz_decoration_destroy(wl_listener* listener, void*)
+void decoration_destroy(wl_listener* listener, void*)
 {
-    qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     toplevel->decoration.xdg_decoration = nullptr;
     toplevel->decoration.listeners.clear();
@@ -476,9 +476,9 @@ void qz_decoration_destroy(wl_listener* listener, void*)
 
 // -----------------------------------------------------------------------------
 
-void qz_popup_commit(wl_listener* listener, void*)
+void popup_commit(wl_listener* listener, void*)
 {
-    qz_popup* popup = qz_listener_userdata<qz_popup*>(listener);
+    Popup* popup = listener_userdata<Popup*>(listener);
 
     wlr_xdg_popup* xdg_popup = popup->xdg_popup;
 
@@ -487,22 +487,22 @@ void qz_popup_commit(wl_listener* listener, void*)
     }
 
     wlr_xdg_surface* xdg_parent = wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
-    qz_client* parent = static_cast<qz_client*>(xdg_parent->data);
+    Client* parent = static_cast<Client*>(xdg_parent->data);
     popup->scene_tree = wlr_scene_xdg_surface_create(parent->scene_tree, xdg_popup->base);
 
-    qz_output* output = qz_get_output_for_client(parent);
+    Output* output = get_output_for_client(parent);
     if (output) {
-        wlr_box output_bounds = qz_output_get_bounds(output);
+        wlr_box output_bounds = output_get_bounds(output);
 
         {
-            // TODO: Move this into a helper for getting a qz_toplevel from an wlr_(xdg_)surface
-            qz_client* cur = parent;
-            while (cur->type == qz_client_type::popup) {
-                cur = static_cast<qz_client*>(wlr_xdg_surface_try_from_wlr_surface(static_cast<qz_popup*>(cur)->xdg_popup->parent)->data);
+            // TODO: Move this into a helper for getting a toplevel from an wlr_(xdg_)surface
+            Client* cur = parent;
+            while (cur->type == ClientType::popup) {
+                cur = static_cast<Client*>(wlr_xdg_surface_try_from_wlr_surface(static_cast<Popup*>(cur)->xdg_popup->parent)->data);
             }
 
             // Adjust output bounds to be in the root toplevel's surface coordinate system.
-            wlr_box coord_system = qz_client_get_coord_system(cur);
+            wlr_box coord_system = client_get_coord_system(cur);
             output_bounds.x -= coord_system.x;
             output_bounds.y -= coord_system.y;
         }
@@ -513,26 +513,26 @@ void qz_popup_commit(wl_listener* listener, void*)
     }
 }
 
-void qz_popup_destroy(wl_listener* listener, void*)
+void popup_destroy(wl_listener* listener, void*)
 {
-    qz_popup* popup = qz_listener_userdata<qz_popup*>(listener);
+    Popup* popup = listener_userdata<Popup*>(listener);
 
     delete popup;
 }
 
-void qz_server_new_popup(wl_listener* listener, void* data)
+void server_new_popup(wl_listener* listener, void* data)
 {
-    qz_server* server = qz_listener_userdata<qz_server*>(listener);
+    Server* server = listener_userdata<Server*>(listener);
     wlr_xdg_popup* xdg_popup = static_cast<wlr_xdg_popup*>(data);
 
-    qz_popup* popup = new qz_popup{};
-    popup->type = qz_client_type::popup;
+    Popup* popup = new Popup{};
+    popup->type = ClientType::popup;
     popup->server = server;
     popup->xdg_surface = xdg_popup->base;
     popup->xdg_surface->data = popup;
 
     popup->xdg_popup = xdg_popup;
 
-    popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup, qz_popup_commit);
-    popup->listeners.listen(&               xdg_popup->events.destroy, popup, qz_popup_destroy);
+    popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup, popup_commit);
+    popup->listeners.listen(&               xdg_popup->events.destroy, popup, popup_destroy);
 }

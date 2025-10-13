@@ -3,7 +3,7 @@
 #include <vector>
 #include <string>
 
-void qz_spawn(const char* file, std::span<const std::string_view> argv)
+void spawn(const char* file, std::span<const std::string_view> argv)
 {
     std::vector<std::string> argv_str;
     for (std::string_view a : argv) argv_str.emplace_back(a);

@@ -9,29 +9,29 @@
 
 // -----------------------------------------------------------------------------
 
-struct qz_color
+struct Color
 {
     float values[4];
 
-    constexpr qz_color() = default;
+    constexpr Color() = default;
 
-    constexpr qz_color(float r, float g, float b, float a)
+    constexpr Color(float r, float g, float b, float a)
         : values { r * a, g * a, b * a, a }
     {}
 };
 
-struct qz_point
+struct Point
 {
     double x, y;
 };
 
-struct qz_box
+struct Box
 {
     double x, y, width, height;
 };
 
 constexpr
-wlr_box qz_box_round_to_wlr_box(qz_box in)
+wlr_box box_round_to_wlr_box(Box in)
 {
     wlr_box out;
     out.x = std::floor(in.x);
@@ -42,7 +42,7 @@ wlr_box qz_box_round_to_wlr_box(qz_box in)
 };
 
 constexpr
-qz_box qz_box_outer(qz_box a, qz_box b)
+Box box_outer(Box a, Box b)
 {
     auto left   = std::min(a.x,            b.x);
     auto top    = std::min(a.y,            b.y);
@@ -57,7 +57,7 @@ qz_box qz_box_outer(qz_box a, qz_box b)
 };
 
 constexpr
-bool qz_box_contains_point(qz_box box, qz_point p)
+bool box_contains_point(Box box, Point p)
 {
     auto l = box.x;
     auto t = box.y;
@@ -68,31 +68,31 @@ bool qz_box_contains_point(qz_box box, qz_point p)
 
 // -----------------------------------------------------------------------------
 
-void qz_spawn(const char* file, std::span<const std::string_view> argv);
-constexpr auto qz_ptr(auto&& value) { return &value; }
+void spawn(const char* file, std::span<const std::string_view> argv);
+constexpr auto ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------
 
-#define QZ_TYPE_CHECKED_LISTENERS 1
+#define TYPE_CHECKED_LISTENERS 1
 
-struct qz_listener
+struct Listener
 {
-    qz_listener* next;
+    Listener* next;
     void* userdata;
     wl_listener listener;
 
-#if QZ_TYPE_CHECKED_LISTENERS
+#if TYPE_CHECKED_LISTENERS
     const std::type_info* typeinfo;
 #endif
 };
 
 template<typename T>
-qz_listener* qz_listen(wl_signal* signal, T userdata, void(*notify_func)(wl_listener*, void*))
+Listener* listen(wl_signal* signal, T userdata, void(*notify_func)(wl_listener*, void*))
 {
     static_assert(sizeof(userdata) <= sizeof(void*));
 
-    qz_listener* l = new qz_listener{};
-#if QZ_TYPE_CHECKED_LISTENERS
+    Listener* l = new Listener{};
+#if TYPE_CHECKED_LISTENERS
     l->typeinfo = &typeid(T);
 #endif
     std::memcpy(&l->userdata, &userdata, sizeof(T));
@@ -102,7 +102,7 @@ qz_listener* qz_listen(wl_signal* signal, T userdata, void(*notify_func)(wl_list
 }
 
 inline
-void qz_unlisten(qz_listener* l)
+void unlisten(Listener* l)
 {
     if (l->listener.notify) {
         wl_list_remove(&l->listener.link);
@@ -111,19 +111,19 @@ void qz_unlisten(qz_listener* l)
 }
 
 inline
-qz_listener* qz_listener_from(wl_listener* listener)
+Listener* listener_from(wl_listener* listener)
 {
-    qz_listener* l = wl_container_of(listener, l, listener);
+    Listener* l = wl_container_of(listener, l, listener);
     return l;
 }
 
 template<typename T>
-T qz_listener_userdata(wl_listener* listener)
+T listener_userdata(wl_listener* listener)
 {
-    qz_listener* l = qz_listener_from(listener);
-#if QZ_TYPE_CHECKED_LISTENERS
+    Listener* l = listener_from(listener);
+#if TYPE_CHECKED_LISTENERS
     if (&typeid(T) != l->typeinfo) {
-        wlr_log(WLR_ERROR, "qz_listener_userdata type match, expected '%s' got '%s'", l->typeinfo->name(), typeid(T).name());
+        wlr_log(WLR_ERROR, "listener_userdata type match, expected '%s' got '%s'", l->typeinfo->name(), typeid(T).name());
         return {};
     }
 #endif
@@ -132,24 +132,24 @@ T qz_listener_userdata(wl_listener* listener)
     return userdata;
 }
 
-struct qz_listener_set
+struct ListenerSet
 {
-    qz_listener* first = nullptr;
+    Listener* first = nullptr;
 
-    ~qz_listener_set() { clear(); }
+    ~ListenerSet() { clear(); }
 
     void clear()
     {
-        qz_listener* cur = first;
+        Listener* cur = first;
         while (cur) {
-            qz_listener* next = cur->next;
-            qz_unlisten(cur);
+            Listener* next = cur->next;
+            unlisten(cur);
             cur = next;
         }
         first = nullptr;
     }
 
-    void add(qz_listener* l)
+    void add(Listener* l)
     {
         l->next = first;
         first = l;
@@ -158,6 +158,6 @@ struct qz_listener_set
     template<typename T>
     void listen(wl_signal* signal, T* userdata, void(*notify_func)(wl_listener*, void*))
     {
-        add(qz_listen(signal, userdata, notify_func));
+        add(::listen(signal, userdata, notify_func));
     }
 };

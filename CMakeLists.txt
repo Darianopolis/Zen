@@ -7,8 +7,8 @@ add_subdirectory(3rdparty/wayland)
 
 # ------------------------------------------------------------------------------
 
-set(QZ_USE_GIT_WLROOTS OFF)
-if (QZ_USE_GIT_WLROOTS)
+set(USE_GIT_WLROOTS OFF)
+if (USE_GIT_WLROOTS)
     add_subdirectory(3rdparty/wlroots-install)
 else()
     add_library(               wlroots INTERFACE)
@@ -35,7 +35,7 @@ add_subdirectory(3rdparty/backward-cpp)
 # ------------------------------------------------------------------------------
 
 add_executable(            ${PROJECT_NAME})
-target_compile_definitions(${PROJECT_NAME} PUBLIC "QZ_PROGRAM_NAME=\"${PROJECT_NAME}\"")
+target_compile_definitions(${PROJECT_NAME} PUBLIC "PROGRAM_NAME=\"${PROJECT_NAME}\"")
 target_compile_options(    ${PROJECT_NAME} PUBLIC
     -std=c++26
     -Wall
