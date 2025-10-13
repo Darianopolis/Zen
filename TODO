@@ -43,8 +43,9 @@
 - Minecraft, GIMP
    - [wayland] Data too big for buffer (X + Y > 4096)<br>
      [wayland] error in client communication (pid Z)
-- SDL3/GLFW+Vulkan
-   - Occasional OUT-OF-DATE when resizing at extremely high frame rate (14k+fps)
+- SDL3/GLFW + Vulkan (AMD)
+   - Occasional OUT-OF-DATE when resizing at extremely high frame rate (14k+fps). Appears to be a Vulkan WSI bug
+      - Currently tested only with separate render thread. Need to test with syncronous rendering and other drivers
 - BeamNG + VSync-disabled + wlroots DRM Backend
    - Stuttery presentation but high framerate
    - Stutters go away if
@@ -65,8 +66,7 @@
    - xdg_foreign support
 - Idle protocol
 - ✅ Compositor initiated fullscreen toggle
-- Throttle resize requests
-   - Until surface commit received or vblank passed?
+- ✅ Throttle resize requests
 - Consolidate interaction logic
    - Rename `quartz_input.cpp` -> `quartz_seat.cpp`
    - Move input binding logic to `quartz_interaction.cpp`

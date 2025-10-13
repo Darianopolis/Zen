@@ -21,6 +21,12 @@
 
 // -----------------------------------------------------------------------------
 
+#ifndef QZ_NOISY_RESIZE
+# define QZ_NOISY_RESIZE 0
+#endif
+
+// -----------------------------------------------------------------------------
+
 static constexpr int      qz_border_width = 2;
 static constexpr qz_color qz_border_color_unfocused = { 0.3f, 0.3f, 0.3f, 1.0f };
 static constexpr qz_color qz_border_color_focused   = { 0.4f, 0.4f, 1.0f, 1.0f };
@@ -147,6 +153,17 @@ struct qz_toplevel : qz_client
     } decoration;
 
     wlr_box prev_bounds;
+
+    struct {
+        bool enable_throttle_resize = true;
+
+        bool any_pending = false;
+        int pending_width;
+        int pending_height;
+
+        uint32_t last_resize_serial = 0;
+        uint32_t last_commited_serial = 0;
+    } resize;
 };
 
 struct qz_popup : qz_client
@@ -234,6 +251,7 @@ wlr_box qz_client_get_coord_system(qz_client*);
 
 void         qz_toplevel_focus(           qz_toplevel*);
 void         qz_toplevel_unfocus(         qz_toplevel*);
+void         qz_toplevel_resize(          qz_toplevel* toplevel, int width, int height);
 void         qz_toplevel_set_bounds(      qz_toplevel*, wlr_box);
 void         qz_toplevel_set_activated(   qz_toplevel*, bool active);
 bool         qz_toplevel_wants_fullscreen(qz_toplevel*);

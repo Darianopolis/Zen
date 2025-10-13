@@ -47,7 +47,7 @@ wlr_box qz_client_get_geometry(qz_client* client)
 {
     wlr_box geom = client->xdg_surface->current.geometry;
 
-    // Some clients fail to report valid geometry. Fall back to surface dimensions.
+    // Some clients (E.g. SDL3 + Vulkan) fail to report valid geometry. Fall back to surface dimensions.
     if (geom.width == 0)  geom.width  = client->xdg_surface->surface->current.width  - geom.x;
     if (geom.height == 0) geom.height = client->xdg_surface->surface->current.height - geom.y;
 
@@ -76,17 +76,86 @@ wlr_box qz_client_get_bounds(qz_client* client)
     return box;
 }
 
+void qz_toplevel_resize(qz_toplevel* toplevel, int width, int height)
+{
+    if (toplevel->resize.enable_throttle_resize && toplevel->resize.last_resize_serial > toplevel->resize.last_commited_serial) {
+        if (!toplevel->resize.any_pending || width != toplevel->resize.pending_width || height != toplevel->resize.pending_height) {
+
+#if QZ_NOISY_RESIZE
+            wlr_log(WLR_INFO, "resize.pending[%i > %i] (%i, %i) -> (%i, %i)",
+                toplevel->resize.last_resize_serial, toplevel->resize.last_commited_serial,
+                toplevel->resize.pending_width, toplevel->resize.pending_height, width, height);
+#endif
+
+            toplevel->resize.any_pending = true;
+            toplevel->resize.pending_width = width;
+            toplevel->resize.pending_height = height;
+        }
+    } else {
+        toplevel->resize.any_pending = false;
+        toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, width, height);
+
+#if QZ_NOISY_RESIZE
+        wlr_log(WLR_INFO, "resize.request[%i] (%i, %i) -> (%i, %i)", toplevel->resize.last_resize_serial,
+            toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
+            width,                                 height);
+#endif
+    }
+}
+
+static
+void qz_toplevel_resize_handle_commit(qz_toplevel* toplevel)
+{
+    if (toplevel->resize.last_commited_serial == toplevel->xdg_toplevel->base->current.configure_serial) return;
+    toplevel->resize.last_commited_serial = toplevel->xdg_toplevel->base->current.configure_serial;
+
+    if (toplevel->resize.last_commited_serial < toplevel->resize.last_resize_serial) return;
+    toplevel->resize.last_resize_serial = toplevel->resize.last_commited_serial;
+
+#if QZ_NOISY_RESIZE
+    {
+        wlr_box box = qz_client_get_geometry(toplevel);
+        int buffer_width = toplevel->xdg_surface->surface->current.buffer_width;
+        int buffer_height = toplevel->xdg_surface->surface->current.buffer_height;
+
+        wlr_log(WLR_INFO, "resize_handle_commit geom = (%i, %i), toplevel = (%i, %i), buffer = (%i, %i)",
+            box.width, box.height,
+            toplevel->xdg_toplevel->current.width, toplevel->xdg_toplevel->current.height,
+            buffer_width, buffer_height);
+    }
+#endif
+
+    wlr_box bounds = qz_client_get_bounds(toplevel);
+#if QZ_NOISY_RESIZE
+    wlr_log(WLR_INFO, "resize.commit[%i] (%i, %i)", toplevel->resize.last_commited_serial, bounds.width, bounds.height);
+#endif
+
+    if (toplevel->resize.any_pending) {
+#if QZ_NOISY_RESIZE
+        wlr_log(WLR_INFO, "  found pending resizes, sending new resize");
+#endif
+        toplevel->resize.any_pending = false;
+        qz_toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height);
+    } else {
+        if (bounds.width != toplevel->xdg_toplevel->current.width || bounds.height != toplevel->xdg_toplevel->current.height) {
+            // Client has committed geometry that doesn't match our requested size
+            // Resize toplevel to match committed geometry (client authoritative)
+#if QZ_NOISY_RESIZE
+            wlr_log(WLR_INFO, "  no pending resizes, new bounds don't match requested toplevel size, overriding toplevel size (client authoritative)");
+#endif
+            qz_toplevel_resize(toplevel, bounds.width, bounds.height);
+        }
+    }
+}
+
 void qz_toplevel_set_bounds(qz_toplevel* toplevel, wlr_box box)
 {
     // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
     //       Thus you must be careful when setting/getting bounds with positioned parents
     // TODO: Tidy up this API and make it clear what is relative to what.
-    //       Investigate Wayland's/wlroot's coordinate systems
-
-    // TODO: Rate limit resize requests
-
-    wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, box.width, box.height);
     wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
+
+    qz_toplevel_resize(toplevel, box.width, box.height);
 }
 
 bool qz_toplevel_wants_fullscreen(qz_toplevel* toplevel)
@@ -268,15 +337,10 @@ void qz_toplevel_commit(wl_listener* listener, void*)
     if (toplevel->xdg_toplevel->base->initial_commit) {
         qz_decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
+    } else {
+        qz_toplevel_resize_handle_commit(toplevel);
+        qz_toplevel_update_border(toplevel);
     }
-
-    if (!toplevel->xdg_toplevel->current.width || !toplevel->xdg_toplevel->current.height) {
-        // Update initial toplevel size to reflect commited geometry
-        wlr_box geom = qz_client_get_geometry(toplevel);
-        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, geom.width, geom.height);
-    }
-
-    qz_toplevel_update_border(toplevel);
 }
 
 void qz_toplevel_destroy(wl_listener* listener, void*)

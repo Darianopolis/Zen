@@ -58,7 +58,10 @@ void qz_init(qz_server* server, const qz_startup_options& /* options */)
     wlr_fractional_scale_manager_v1_create(server->wl_display, 1);
     wlr_presentation_create(server->wl_display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->wl_display);
-    wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
+
+    // NOTE: syncobj is not currently usuable due to driver/toolkit issues
+    //
+    //       wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
 
     server->output_layout = wlr_output_layout_create(server->wl_display);
     server->listeners.listen(&server->output_layout->events.change, server, qz_server_output_layout_change);
