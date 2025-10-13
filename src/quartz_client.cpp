@@ -134,7 +134,7 @@ void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwa
                 if (!wlr_box_contains_point(&bounds, cursor->x, cursor->y)) continue;
             }
 
-            qz_focus_toplevel(toplevel);
+            qz_toplevel_focus(toplevel);
             return;
         }
     } else {
@@ -154,13 +154,13 @@ void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwa
             }
 
             // Focus new window
-            qz_focus_toplevel(toplevel);
+            qz_toplevel_focus(toplevel);
             return;
         }
     }
 }
 
-void qz_focus_toplevel(qz_toplevel* toplevel)
+void qz_toplevel_focus(qz_toplevel* toplevel)
 {
     // NOTE: This function only deals with keyboard focus
 
@@ -191,6 +191,20 @@ void qz_focus_toplevel(qz_toplevel* toplevel)
     if (keyboard) {
         wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
+
+    qz_toplevel_update_border(toplevel);
+}
+
+void qz_toplevel_unfocus(qz_toplevel* toplevel)
+{
+    if (!toplevel) return;
+    if (toplevel->server->focused_toplevel != toplevel)
+        return;
+
+    toplevel->server->focused_toplevel = nullptr;
+    wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
+
+    qz_toplevel_update_border(toplevel);
 }
 
 qz_toplevel* qz_get_toplevel_at(qz_server* server, double lx, double ly, wlr_surface** surface, double *sx, double *sy)
@@ -226,7 +240,7 @@ void qz_toplevel_map(wl_listener* listener, void*)
 
     toplevel->server->toplevels.emplace_back(toplevel);
 
-    qz_focus_toplevel(toplevel);
+    qz_toplevel_focus(toplevel);
 }
 
 void qz_toplevel_unmap(wl_listener* listener, void*)
@@ -238,7 +252,13 @@ void qz_toplevel_unmap(wl_listener* listener, void*)
         qz_reset_cursor_mode(toplevel->server);
     }
 
+    // TODO: Handle toplevel unmap during zone operation
+
+    qz_toplevel_unfocus(toplevel);
     std::erase(toplevel->server->toplevels, toplevel);
+    if (!toplevel->server->toplevels.empty()) {
+        qz_toplevel_focus(toplevel->server->toplevels.back());
+    }
 }
 
 void qz_toplevel_commit(wl_listener* listener, void*)
@@ -262,10 +282,6 @@ void qz_toplevel_commit(wl_listener* listener, void*)
 void qz_toplevel_destroy(wl_listener* listener, void*)
 {
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
-
-    if (toplevel->server->focused_toplevel == toplevel) {
-        toplevel->server->focused_toplevel = nullptr;
-    }
 
     delete toplevel;
 }

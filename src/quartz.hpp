@@ -232,7 +232,8 @@ wlr_box qz_client_get_coord_system(qz_client*);
 
 // ---- Client.Toplevel ----
 
-void         qz_focus_toplevel(           qz_toplevel*);
+void         qz_toplevel_focus(           qz_toplevel*);
+void         qz_toplevel_unfocus(         qz_toplevel*);
 void         qz_toplevel_set_bounds(      qz_toplevel*, wlr_box);
 void         qz_toplevel_set_activated(   qz_toplevel*, bool active);
 bool         qz_toplevel_wants_fullscreen(qz_toplevel*);

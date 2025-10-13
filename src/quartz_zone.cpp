@@ -22,7 +22,7 @@ bool qz_zone_process_cursor_button(qz_server* server, wlr_pointer_button_event* 
             wlr_surface* surface = nullptr;
             qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
             if (toplevel) {
-                qz_focus_toplevel(toplevel);
+                qz_toplevel_focus(toplevel);
 
                 if (qz_toplevel_is_interactable(toplevel)) {
                     wlr_scene_rect_set_color(server->zone.selector, qz_zone_color_inital.values);

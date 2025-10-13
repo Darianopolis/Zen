@@ -221,7 +221,7 @@ void qz_seat_drag_icon_destroy(wl_listener* listener, void*)
     qz_server* server = qz_listener_userdata<qz_server*>(listener);
 
     // Refocus last focused toplevel
-    qz_focus_toplevel(server->focused_toplevel);
+    qz_toplevel_focus(server->focused_toplevel);
     qz_process_cursor_motion(server, 0);
 
     qz_unlisten(qz_listener_from(listener));
@@ -400,7 +400,9 @@ void qz_server_cursor_button(wl_listener* listener, void* data)
     wlr_surface* surface = nullptr;
     qz_toplevel* toplevel = qz_get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
     if (toplevel) {
-        qz_focus_toplevel(toplevel);
+        qz_toplevel_focus(toplevel);
+    } else {
+        qz_toplevel_unfocus(server->focused_toplevel);
     }
 
     // Check for move/size interaction begin
