@@ -337,7 +337,9 @@ void qz_toplevel_request_fullscreen(wl_listener* listener, void*)
 {
     qz_toplevel* toplevel = qz_listener_userdata<qz_toplevel*>(listener);
 
-    qz_toplevel_set_fullscreen(toplevel, qz_toplevel_wants_fullscreen(toplevel));
+    if (toplevel->xdg_toplevel->base->initialized) {
+        qz_toplevel_set_fullscreen(toplevel, qz_toplevel_wants_fullscreen(toplevel));
+    }
 }
 
 void qz_server_new_toplevel(wl_listener* listener, void* data)

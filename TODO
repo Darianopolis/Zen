@@ -45,9 +45,22 @@
      [wayland] error in client communication (pid Z)
 - SDL3/GLFW+Vulkan
    - Occasional OUT-OF-DATE when resizing at extremely high frame rate (14k+fps)
+- BeamNG + VSync-disabled + wlroots DRM Backend
+   - Stuttery presentation but high framerate
+   - Stutters go away if
+      - Ran in nested compositor (TESTED: nested quartz+xwayland-satellite AND gamescope)
+      - Ran in standalone Niri with same xwayland-satellite binary
+      - Ran with VSync enabled
+   - Stutters also present in
+      - Native Vulkan binary, Proton Vulkan mode, Proton DirectX11 mode
+      - DWL with direct XWayland integration
 
 ### Additional
 
+- Add IPC with messaging client
+   - Spawn message
+- Scaling
+   - xdg_output_manager_v1
 - Spawn child clients in center of parent
    - xdg_foreign support
 - Idle protocol

@@ -7,6 +7,7 @@ using namespace std::literals;
 
 struct qz_startup_options
 {
+    const char* xwayland_socket;
     const char* startup_cmd;
     const char* log_file;
 };
@@ -126,7 +127,11 @@ void qz_run(qz_server* server, const qz_startup_options& options)
     setenv("ELECTRON_OZONE_PLATFORM_HINT", "auto", true);
     setenv("SDL_VIDEO_DRIVER", "wayland", true);
 
-    unsetenv("DISPLAY");
+    if (options.xwayland_socket) {
+        setenv("DISPLAY", options.xwayland_socket, true);
+    } else {
+        unsetenv("DISPLAY");
+    }
 
     if (options.startup_cmd) {
         qz_spawn("/bin/sh", {"/bin/sh", "-c", options.startup_cmd});
@@ -153,6 +158,7 @@ void qz_cleanup(qz_server* server)
 }
 
 constexpr const char* qz_help_prompt = R"(Usage: quartz [options]
+  --xwayland [socket]   specify X11 socket
   --log-file [path]     log to file
   --startup  [cmd]      startup command
 )";
@@ -198,6 +204,8 @@ int qz_main(int argc, char* argv[])
             options.log_file = param();
         } else if ("--startup"sv == arg) {
             options.startup_cmd = param();
+        } else if ("--xwayland"sv == arg) {
+            options.xwayland_socket = param();
         } else if ("--help"sv == arg) {
             print_usage();
         }
