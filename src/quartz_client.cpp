@@ -198,13 +198,14 @@ void qz_toplevel_set_activated(qz_toplevel* toplevel, bool active)
 
 void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwards)
 {
+    auto in_cycle = [&](qz_client* client) {
+        return !cursor || wlr_box_contains_point(qz_ptr(qz_client_get_bounds(client)), cursor->x, cursor->y);
+    };
+
     if (backwards) {
         for (qz_toplevel* toplevel : server->toplevels) {
             if (toplevel == server->focused_toplevel) continue;
-            if (cursor) {
-                wlr_box bounds = qz_client_get_bounds(toplevel);
-                if (!wlr_box_contains_point(&bounds, cursor->x, cursor->y)) continue;
-            }
+            if (!in_cycle(toplevel)) continue;
 
             qz_toplevel_focus(toplevel);
             return;
@@ -214,13 +215,10 @@ void qz_cycle_focus_immediate(qz_server* server, wlr_cursor* cursor, bool backwa
         while (i-- > 0) {
             qz_toplevel* toplevel = server->toplevels[i];
             if (toplevel == server->focused_toplevel) continue;
-            if (cursor) {
-                wlr_box bounds = qz_client_get_bounds(toplevel);
-                if (!wlr_box_contains_point(&bounds, cursor->x, cursor->y)) continue;
-            }
+            if (!in_cycle(toplevel)) continue;
 
-            if (server->focused_toplevel) {
-                // Re-insert currently focused window at bottom of focus stack
+            if (server->focused_toplevel && in_cycle(server->focused_toplevel)) {
+                // Re-insert currently focused window at bottom of focus stack if in cycle
                 std::erase(server->toplevels, server->focused_toplevel);
                 server->toplevels.insert(server->toplevels.begin(), server->focused_toplevel);
             }
