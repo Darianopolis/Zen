@@ -126,12 +126,9 @@ void run(Server* server, const startup_options& options)
 
     setenv("WAYLAND_DISPLAY", socket, true);
 
-    // TODO: Set this per spawned application
-    setenv("ELECTRON_OZONE_PLATFORM_HINT", "auto", true);
-    setenv("SDL_VIDEO_DRIVER", "wayland", true);
-
     if (options.xwayland_socket) {
         setenv("DISPLAY", options.xwayland_socket, true);
+        spawn("xwayland-satellite", {"xwayland-satellite", options.xwayland_socket});
     } else {
         unsetenv("DISPLAY");
     }

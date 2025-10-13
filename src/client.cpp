@@ -202,6 +202,19 @@ void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
         return !cursor || wlr_box_contains_point(ptr(client_get_bounds(client)), cursor->x, cursor->y);
     };
 
+    auto move_to_back_of_cycle = [&](Toplevel* client) {
+        std::erase(server->toplevels, client);
+
+        auto iter = server->toplevels.begin();
+        while (!in_cycle(*iter) && ++iter != server->toplevels.end());
+        server->toplevels.insert(iter, client);
+
+        // Fixup visual window order
+        for (Toplevel* toplevel : server->toplevels) {
+            wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+        }
+    };
+
     if (backwards) {
         for (Toplevel* toplevel : server->toplevels) {
             if (toplevel == server->focused_toplevel) continue;
@@ -211,29 +224,29 @@ void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
             return;
         }
     } else {
-        uint32_t i = server->toplevels.size();
-        while (i-- > 0) {
+        Toplevel* first = nullptr;
+        for (uint32_t i = server->toplevels.size(); i-- > 0;) {
             Toplevel* toplevel = server->toplevels[i];
-            if (toplevel == server->focused_toplevel) continue;
-            if (!in_cycle(toplevel)) continue;
 
-            if (server->focused_toplevel && in_cycle(server->focused_toplevel)) {
-                // Re-insert currently focused window at bottom of focus stack if in cycle
-                std::erase(server->toplevels, server->focused_toplevel);
-                server->toplevels.insert(server->toplevels.begin(), server->focused_toplevel);
+            if (!in_cycle(toplevel)) continue;
+            if ((cursor && !first) || toplevel == server->focused_toplevel) {
+                first = toplevel;
+                continue;
             }
 
-            // Focus new window
+            move_to_back_of_cycle(first);
             toplevel_focus(toplevel);
             return;
+        }
+
+        if (first) {
+            toplevel_focus(first);
         }
     }
 }
 
 void toplevel_focus(Toplevel* toplevel)
 {
-    // NOTE: This function only deals with keyboard focus
-
     if (!toplevel) return;
 
     Server* server = toplevel->server;
