@@ -9,6 +9,25 @@
 
 // -----------------------------------------------------------------------------
 
+#define CONCAT_(a, b) a##b
+#define CONCAT(a, b) CONCAT_(a, b)
+#define UNIQUE_IDENT() CONCAT(jade_non_, __COUNTER__)
+
+// -----------------------------------------------------------------------------
+
+template<typename Fn>
+struct Defer
+{
+    Fn fn;
+
+    Defer(Fn&& fn): fn(std::move(fn)) {}
+    ~Defer() { fn(); };
+};
+
+#define defer Defer UNIQUE_IDENT() = [&]
+
+// -----------------------------------------------------------------------------
+
 struct Color
 {
     float values[4];
@@ -167,6 +186,7 @@ struct ListenerSet
 template<typename Fn>
 bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double sy, Fn&& for_each)
 {
+    if (!node->enabled) return true;
     if (node->type == WLR_SCENE_NODE_TREE) {
         wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
         wlr_scene_node* child;

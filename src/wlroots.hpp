@@ -31,6 +31,7 @@ extern "C" {
 // utils
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
+#include <wlr/util/region.h>
 
 // types
 #include <wlr/types/wlr_cursor.h>

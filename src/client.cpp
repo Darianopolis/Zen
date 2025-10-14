@@ -198,6 +198,8 @@ void toplevel_set_activated(Toplevel* toplevel, bool active)
 
 void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
 {
+    // TODO: If only one window in cycle and cursor then *don't* focus
+
     auto in_cycle = [&](Client* client) {
         return !cursor || wlr_box_contains_point(ptr(client_get_bounds(client)), cursor->x, cursor->y);
     };
@@ -234,7 +236,7 @@ void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
                 continue;
             }
 
-            move_to_back_of_cycle(first);
+            if (first) move_to_back_of_cycle(first);
             toplevel_focus(toplevel);
             return;
         }
@@ -277,6 +279,9 @@ void toplevel_focus(Toplevel* toplevel)
     }
 
     toplevel_update_border(toplevel);
+
+    // TODO: Tidy up and consolidate API for handling (re)focus
+    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
 }
 
 void toplevel_unfocus(Toplevel* toplevel)
@@ -306,6 +311,10 @@ Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_
         *p_surface = scene_surface->surface;
         *p_sx = lx - node_x;
         *p_sy = ly - node_y;
+
+        if (scene_buffer->point_accepts_input && !scene_buffer->point_accepts_input(scene_buffer, p_sx, p_sy)) {
+            return true;
+        }
 
         wlr_scene_tree* tree = node->parent;
         while (tree && (!tree->node.data || static_cast<Client*>(tree->node.data)->type != ClientType::toplevel)) {

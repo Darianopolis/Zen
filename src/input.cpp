@@ -20,31 +20,31 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
     {
         case XKB_KEY_Escape:
             wl_display_terminate(server->display);
-            break;
+            return true;
         case XKB_KEY_Tab:
         case XKB_KEY_ISO_Left_Tab:
             cycle_focus_immediate(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
-            break;
+            return true;
         case XKB_KEY_t:
             spawn("konsole", {"konsole"});
-            break;
+            return true;
         case XKB_KEY_d:
             spawn("wofi", {"wofi", "--show", "drun"});
-            break;
+            return true;
         case XKB_KEY_q:
             if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel) {
                 wlr_xdg_toplevel_send_close(server->focused_toplevel->xdg_toplevel);
             }
-            break;
+            return true;
         case XKB_KEY_f:
             if (server->focused_toplevel) {
                 bool fullscreen = server->focused_toplevel->xdg_toplevel->current.fullscreen;
                 toplevel_set_fullscreen(server->focused_toplevel, !fullscreen);
             }
+            return true;
         default:
             return false;
     }
-    return true;
 }
 
 void keyboard_handle_modifiers(wl_listener* listener, void*)
@@ -246,20 +246,49 @@ void seat_drag_update_position(Server* server)
 
 // -----------------------------------------------------------------------------
 
-void server_pointer_constraint_destroy(wl_listener* listener, void*)
+void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 {
-    wlr_log(WLR_INFO, "destroying pointer constraint");
+    wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
+    wlr_log(WLR_INFO, "destroying pointer constraint: %p", (void*)constraint);
+
+    Server* server = listener_userdata<Server*>(listener);
+    if (server->pointer.active_constraint == constraint) {
+        wlr_log(WLR_INFO, "  was active!");
+        server->pointer.active_constraint = nullptr;
+    }
+
+    wlr_pointer_constraint_v1* new_constraint;
+    wl_list_for_each(new_constraint, &server->pointer.pointer_constraints->constraints, link) {
+        if (constraint == new_constraint) {
+            continue;
+        }
+
+        // TODO: Select constraint based on focused window at cursor move time
+
+        wlr_log(WLR_INFO, "  replacing with next constriant: %p", (void*)new_constraint);
+
+        server->pointer.active_constraint = new_constraint;
+        wlr_pointer_constraint_v1_send_activated(new_constraint);
+    }
 
     unlisten(listener_from(listener));
 }
 
-void server_pointer_constraint_new(wl_listener*, void* data)
+void server_pointer_constraint_new(wl_listener* listener, void* data)
 {
-    wlr_log(WLR_INFO, "creating pointer constraint");
-
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
+    wlr_log(WLR_INFO, "creating pointer constraint: %p", (void*)constraint);
 
-    listen(&constraint->events.destroy, constraint, server_pointer_constraint_destroy);
+    Server* server = listener_userdata<Server*>(listener);
+
+    if (server->pointer.active_constraint) {
+        wlr_log(WLR_INFO, "  replacing previous constraint: %p", (void*)server->pointer.active_constraint);
+        wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
+    }
+    server->pointer.active_constraint = constraint;
+    wlr_pointer_constraint_v1_send_activated(constraint);
+
+    listen(&constraint->events.destroy, server, server_pointer_constraint_destroy);
 }
 
 // -----------------------------------------------------------------------------
@@ -304,11 +333,27 @@ void process_cursor_resize(Server* server)
 
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device *device, double dx, double dy, double dx_unaccel, double dy_unaccel)
 {
-    if (time_msecs && device) {
-        wlr_relative_pointer_manager_v1_send_relative_motion(server->relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, dx, dy, dx_unaccel, dy_unaccel);
-        wlr_cursor_move(server->cursor, device, dx, dy);
-    }
+    // defer {
+    //     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, true);
+    //     wlr_scene_node_set_position(&server->pointer.debug_visual->node, server->cursor->x - 6, server->cursor->y - 6);
+    //     wlr_scene_node_raise_to_top(&server->pointer.debug_visual->node);
+    // };
 
+    // Handle compositor interactions
+
+    if (server->cursor_mode == CursorMode::move) {
+        wlr_cursor_move(server->cursor, device, dx, dy);
+        process_cursor_move(server);
+        return;
+    } else if (server->cursor_mode == CursorMode::resize) {
+        wlr_cursor_move(server->cursor, device, dx, dy);
+        process_cursor_resize(server);
+        return;
+    } else if (server->cursor_mode == CursorMode::zone) {
+        wlr_cursor_move(server->cursor, device, dx, dy);
+        zone_process_cursor_motion(server);
+        return;
+    }
 
     // Get focused surface
 
@@ -325,28 +370,60 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         }
     }
 
-    // Handle compositor interactions
+    if (!surface) {
+        // TODO: Create get_client_at to handle toplevels, popups, layer shells (when implemented)
+        get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    }
 
-    seat_drag_update_position(server);
+    // Handle constraints and update mouse
 
-    if (server->cursor_mode == CursorMode::move) {
-        process_cursor_move(server);
-        return;
-    } else if (server->cursor_mode == CursorMode::resize) {
-        process_cursor_resize(server);
-        return;
-    } else if (server->cursor_mode == CursorMode::zone) {
-        zone_process_cursor_motion(server);
-        return;
+    if (time_msecs && device) {
+        // wlr_log(WLR_INFO, "delta (%lf, %lf) unaccel (%lf %lf)", dx, dy, dx_unaccel, dy_unaccel);
+        wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, dx, dy, dx_unaccel, dy_unaccel);
+
+        if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint) {
+            // wlr_log(WLR_INFO, "move.active_constraint: %p", (void*)constraint);
+            // wlr_log(WLR_INFO, "  constraint type: %s", constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED ? "locked" : "confined");
+
+            // Client* client = static_cast<Client*>(constraint->surface->data);
+            wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(constraint->surface);
+            Client* client = xdg_surface ? static_cast<Client*>(xdg_surface->data) : nullptr;
+
+            // wlr_log(WLR_INFO, "  surface = %p, surface.data = %p", (void*)surface, surface->data);
+            // wlr_log(WLR_INFO, "  client = %p, constraint.surface = %p, focused_surface = %p", (void*)client, (void*)constraint->surface, (void*)server->seat->pointer_state.focused_surface);
+
+            // if (client && constraint->surface == server->seat->pointer_state.focused_surface) {
+            if (client == server->focused_toplevel) {
+                // wlr_log(WLR_INFO, "  constrained surface is client and matches focused surface");
+
+                wlr_box bounds = client_get_bounds(client);
+                sx = server->cursor->x - bounds.x;
+                sy = server->cursor->y - bounds.y;
+
+                // wlr_log(WLR_INFO, "  s = (%lf, %lf) d = (%lf, %lf)", sx, sy, dx, dy);
+
+                double sx_confined, sy_confined;
+                if (wlr_region_confine(&constraint->region, sx, sy, sx + dx, sy + dy, &sx_confined, &sy_confined)) {
+                    dx = sx_confined - sx;
+                    dy = sy_confined - sy;
+
+                    // wlr_log(WLR_INFO, "  d.confined = (%lf, %lf)", dx, dy);
+                }
+
+                if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+                    // wlr_log(WLR_INFO, "  locked, leaving before moving cursor");
+                    return;
+                }
+            }
+        }
+
+        wlr_cursor_move(server->cursor, device, dx, dy);
     }
 
     // Update xcursor
 
     if (!surface) {
-        Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-        if (!toplevel) {
-            wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-        }
+        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
     }
 
     // Notify
@@ -358,8 +435,9 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         wlr_seat_pointer_notify_clear_focus(seat);
     }
 
-    wlr_scene_node_set_position(&server->debug_cursor_visual->node, server->cursor->x - 6, server->cursor->y - 6);
-    wlr_scene_node_raise_to_top(&server->debug_cursor_visual->node);
+    // Update drag
+
+    seat_drag_update_position(server);
 }
 
 void server_cursor_motion(wl_listener* listener, void* data)

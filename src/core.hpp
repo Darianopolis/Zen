@@ -93,9 +93,13 @@ struct Server
 
     wlr_seat* seat;
     std::vector<Keyboard*> keyboards;
-    wlr_pointer_constraints_v1* pointer_constraints;
-    wlr_relative_pointer_manager_v1* relative_pointer_manager;
-    wlr_scene_rect* debug_cursor_visual;
+
+    struct {
+        wlr_pointer_constraints_v1* pointer_constraints;
+        wlr_pointer_constraint_v1* active_constraint;
+        wlr_relative_pointer_manager_v1* relative_pointer_manager;
+        wlr_scene_rect* debug_visual;
+    } pointer;
 
     CursorMode cursor_mode;
 
