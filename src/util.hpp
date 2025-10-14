@@ -161,3 +161,25 @@ struct ListenerSet
         add(::listen(signal, userdata, notify_func));
     }
 };
+
+// -----------------------------------------------------------------------------
+
+template<typename Fn>
+bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double sy, Fn&& for_each)
+{
+    if (node->type == WLR_SCENE_NODE_TREE) {
+        wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
+        wlr_scene_node* child;
+        wl_list_for_each_reverse(child, &tree->children, link) {
+            double nx = sx + child->x;
+            double ny = sy + child->y;
+            if (!walk_scene_tree_reverse_depth_first(child, nx, ny, std::forward<Fn>(for_each))) {
+                return false;
+            }
+        }
+    } else {
+        if (!for_each(node, sx, sy)) return false;
+    }
+
+    return true;
+}

@@ -56,6 +56,12 @@
 
 ### Additional
 
+- Fix keyboard focus
+   - Correctly unfocus keyboard when grab ends
+   - Fix desync between server.focused_toplevel and seat.keyboard_state.focused_surface
+   - seat.events.keyboard_grab_[begin/end]
+- Use updated protocol version
+   - xdg_shell -> version 7
 - Debug options
    - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
 - Remove wlr_primary_selection_v1_device_manager_create?

@@ -42,6 +42,7 @@ static constexpr Point    zone_zone_selection_leeway = { 200, 200 };
 static constexpr double   zone_external_padding_ltrb[] = { 7 + border_width, 7 + border_width, 7 + border_width, 7 + border_width };
 static constexpr double   zone_internal_padding = 4 +  + border_width * 2;
 
+static constexpr uint32_t additional_outputs = 0;
 struct OutputRule { const char* name; int x, y; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0 },
@@ -92,6 +93,9 @@ struct Server
 
     wlr_seat* seat;
     std::vector<Keyboard*> keyboards;
+    wlr_pointer_constraints_v1* pointer_constraints;
+    wlr_relative_pointer_manager_v1* relative_pointer_manager;
+    wlr_scene_rect* debug_cursor_visual;
 
     CursorMode cursor_mode;
 
@@ -202,11 +206,11 @@ void keyboard_handle_modifiers(wl_listener*, void*);
 void keyboard_handle_key(      wl_listener*, void*);
 void keyboard_handle_destroy(  wl_listener*, void*);
 
-// ---- Mouse ----
+// ---- Pointer ----
 
 void reset_cursor_mode(    Server*);
 void process_cursor_resize(Server*);
-void process_cursor_motion(Server*, uint32_t time_msecs);
+void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device *, double dx, double dy, double dx_unaccel, double dy_unaccel);
 
 void seat_request_set_cursor(      wl_listener*, void*);
 void seat_pointer_focus_change(    wl_listener*, void*);
@@ -215,6 +219,11 @@ void server_cursor_motion_absolute(wl_listener*, void*);
 void server_cursor_button(         wl_listener*, void*);
 void server_cursor_axis(           wl_listener*, void*);
 void server_cursor_frame(          wl_listener*, void*);
+
+// ---- Pointer.Constraints
+
+void server_pointer_constraint_new(wl_listener*, void*);
+void server_pointer_constraint_destroy(wl_listener*, void*);
 
 // ---- Input ----
 

@@ -256,6 +256,7 @@ void toplevel_focus(Toplevel* toplevel)
 
     server->focused_toplevel = toplevel;
 
+    // TODO: This causes issues when server.focused_toplevel and keyboard.focused_surface are desyncd
     if (prev_surface == surface) return;
 
     if (prev_surface) {
@@ -286,30 +287,40 @@ void toplevel_unfocus(Toplevel* toplevel)
 
     toplevel->server->focused_toplevel = nullptr;
     wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
+    // TODO: If keyboard is grabbed this leaves server.focused_toplevel and keyboard.focused_surface desynced!
 
     toplevel_update_border(toplevel);
 }
 
-Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** surface, double *sx, double *sy)
+Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
 {
-    // This returns the topmost node in the scene at the given layout coords.
-    // We only care about surface nodes as we are specifically looking for a surface in the surface tree of a client
+    Toplevel* toplevel = nullptr;
+    walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, [&](wlr_scene_node* node, double node_x, double node_y) {
+        if (!node || node->type != WLR_SCENE_NODE_BUFFER) return true;
 
-    wlr_scene_node* node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
-    if (!node || node->type != WLR_SCENE_NODE_BUFFER) return nullptr;
+        wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
+        wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
+        if (!scene_surface) return true;
+        if (lx < node_x || ly < node_y || lx - node_x >= scene_buffer->dst_width || ly - node_y >= scene_buffer->dst_height) return true;
 
-    wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
-    wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
-    if (!scene_surface) return nullptr;
+        *p_surface = scene_surface->surface;
+        *p_sx = lx - node_x;
+        *p_sy = ly - node_y;
 
-    *surface = scene_surface->surface;
+        wlr_scene_tree* tree = node->parent;
+        while (tree && (!tree->node.data || static_cast<Client*>(tree->node.data)->type != ClientType::toplevel)) {
+            tree = tree->node.parent;
+        }
 
-    wlr_scene_tree* tree = node->parent;
-    while (tree && (!tree->node.data || static_cast<Client*>(tree->node.data)->type != ClientType::toplevel)) {
-        tree = tree->node.parent;
-    }
+        if (tree) {
+            toplevel = static_cast<Toplevel*>(tree->node.data);
+            return false;
+        }
 
-    return tree ? static_cast<Toplevel*>(tree->node.data) : nullptr;
+        return true;
+    });
+
+    return toplevel;
 }
 
 void toplevel_map(wl_listener* listener, void*)

@@ -26,6 +26,9 @@ void init(Server* server, const startup_options& /* options */)
     wlr_multi_for_each_backend(server->backend, [](wlr_backend* backend, void* data) {
         if (wlr_backend_is_wl(backend) || wlr_backend_is_x11(backend)) {
             static_cast<Server*>(data)->modifier_key = WLR_MODIFIER_ALT;
+            for (uint32_t i = 0; i < additional_outputs; ++i) {
+                wlr_wl_output_create(backend);
+            }
         }
     }, server);
 
@@ -86,10 +89,17 @@ void init(Server* server, const startup_options& /* options */)
     server->xdg_decoration_manager = wlr_xdg_decoration_manager_v1_create(server->display);
     server->listeners.listen(&server->xdg_decoration_manager->events.new_toplevel_decoration, server, decoration_new);
 
+    server->pointer_constraints = wlr_pointer_constraints_v1_create(server->display);
+    server->listeners.listen(&server->pointer_constraints->events.new_constraint, server, server_pointer_constraint_new);
+
+    server->relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server->display);
+
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, 24);
+
+    server->debug_cursor_visual = wlr_scene_rect_create(&server->scene->tree, 12, 12, Color{1, 0, 0, 1}.values);
 
     server->cursor_mode = CursorMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, server_cursor_motion);

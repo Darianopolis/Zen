@@ -219,7 +219,8 @@ void seat_drag_icon_destroy(wl_listener* listener, void*)
 
     // Refocus last focused toplevel
     toplevel_focus(server->focused_toplevel);
-    process_cursor_motion(server, 0);
+
+    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
 
     unlisten(listener_from(listener));
 }
@@ -241,6 +242,24 @@ void seat_drag_update_position(Server* server)
 
     // TODO: This should be on a separate layer that is always on top (above even the OVERLAY layer)
     wlr_scene_node_raise_to_top(&server->drag_icon_parent->node);
+}
+
+// -----------------------------------------------------------------------------
+
+void server_pointer_constraint_destroy(wl_listener* listener, void*)
+{
+    wlr_log(WLR_INFO, "destroying pointer constraint");
+
+    unlisten(listener_from(listener));
+}
+
+void server_pointer_constraint_new(wl_listener*, void* data)
+{
+    wlr_log(WLR_INFO, "creating pointer constraint");
+
+    wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
+
+    listen(&constraint->events.destroy, constraint, server_pointer_constraint_destroy);
 }
 
 // -----------------------------------------------------------------------------
@@ -283,8 +302,31 @@ void process_cursor_resize(Server* server)
     });
 }
 
-void process_cursor_motion(Server* server, uint32_t time_msecs)
+void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device *device, double dx, double dy, double dx_unaccel, double dy_unaccel)
 {
+    if (time_msecs && device) {
+        wlr_relative_pointer_manager_v1_send_relative_motion(server->relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, dx, dy, dx_unaccel, dy_unaccel);
+        wlr_cursor_move(server->cursor, device, dx, dy);
+    }
+
+
+    // Get focused surface
+
+    double sx = 0, sy = 0;
+    wlr_seat* seat = server->seat;
+    wlr_surface* surface = nullptr;
+    if (server->cursor_mode == CursorMode::pressed && seat->pointer_state.focused_surface) {
+        if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(seat->pointer_state.focused_surface)) {
+            surface = seat->pointer_state.focused_surface;
+            Client* client = static_cast<Client*>(xdg_surface->data);
+            wlr_box coord_system = client_get_coord_system(client);
+            sx = server->cursor->x - coord_system.x;
+            sy = server->cursor->y - coord_system.y;
+        }
+    }
+
+    // Handle compositor interactions
+
     seat_drag_update_position(server);
 
     if (server->cursor_mode == CursorMode::move) {
@@ -298,18 +340,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs)
         return;
     }
 
-    double sx, sy;
-    wlr_seat* seat = server->seat;
-    wlr_surface* surface = nullptr;
-    if (server->cursor_mode == CursorMode::pressed && seat->pointer_state.focused_surface) {
-        if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(seat->pointer_state.focused_surface)) {
-            surface = seat->pointer_state.focused_surface;
-            Client* client = static_cast<Client*>(xdg_surface->data);
-            wlr_box coord_system = client_get_coord_system(client);
-            sx = server->cursor->x - coord_system.x;
-            sy = server->cursor->y - coord_system.y;
-        }
-    }
+    // Update xcursor
 
     if (!surface) {
         Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
@@ -318,13 +349,17 @@ void process_cursor_motion(Server* server, uint32_t time_msecs)
         }
     }
 
+    // Notify
+
     if (surface) {
-        // TODO: If mouse button held down, send mouse motion events to window that button was pressed in
         wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
         wlr_seat_pointer_notify_motion(seat, time_msecs, sx, sy);
     } else {
         wlr_seat_pointer_notify_clear_focus(seat);
     }
+
+    wlr_scene_node_set_position(&server->debug_cursor_visual->node, server->cursor->x - 6, server->cursor->y - 6);
+    wlr_scene_node_raise_to_top(&server->debug_cursor_visual->node);
 }
 
 void server_cursor_motion(wl_listener* listener, void* data)
@@ -334,19 +369,32 @@ void server_cursor_motion(wl_listener* listener, void* data)
 
     // TODO: Handle custom acceleration here
 
-    wlr_cursor_move(server->cursor, &event->pointer->base, event->delta_x, event->delta_y);
-    process_cursor_motion(server, event->time_msec);
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, event->delta_x, event->delta_y, event->unaccel_dx, event->unaccel_dy);
 }
 
 void server_cursor_motion_absolute(wl_listener* listener, void* data)
 {
-    // TODO: Drawing tablet handling?
-
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_absolute_event* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
 
-    wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
-    process_cursor_motion(server, event->time_msec);
+    double lx, ly;
+    if (event->pointer->output_name) {
+        for (Output* output : server->outputs) {
+            if (strcmp(output->wlr_output->name, event->pointer->output_name) == 0) {
+                wlr_box bounds = output_get_bounds(output);
+                lx = bounds.x + bounds.width * event->x;
+                ly = bounds.y + bounds.height * event->y;
+                break;
+            }
+        }
+    } else {
+        // TODO: *can* output_name be null?
+        wlr_cursor_absolute_to_layout_coords(server->cursor, &event->pointer->base, event->x, event->y, &lx, &ly);
+    }
+
+    double dx = lx - server->cursor->x;
+    double dy = ly - server->cursor->y;
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, dx, dy, dx, dy);
 }
 
 void server_cursor_button(wl_listener* listener, void* data)
