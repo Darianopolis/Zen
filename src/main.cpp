@@ -24,7 +24,12 @@ void init(Server* server, const startup_options& /* options */)
     server->modifier_key = WLR_MODIFIER_LOGO;
     wlr_multi_for_each_backend(server->backend, [](wlr_backend* backend, void* data) {
         if (wlr_backend_is_wl(backend) || wlr_backend_is_x11(backend)) {
-            static_cast<Server*>(data)->modifier_key = WLR_MODIFIER_ALT;
+            Server* server = static_cast<Server*>(data);
+            server->modifier_key = WLR_MODIFIER_ALT;
+
+            log_warn("Running compositor nested, mouse constraints will be silently ignored!");
+            server->debug.ignore_mouse_constraints = true;
+
             for (uint32_t i = 0; i < additional_outputs; ++i) {
                 wlr_wl_output_create(backend);
             }
@@ -96,7 +101,8 @@ void init(Server* server, const startup_options& /* options */)
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
-    server->cursor_manager = wlr_xcursor_manager_create(nullptr, 24);
+    server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
+	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
 
     server->pointer.debug_visual = wlr_scene_rect_create(&server->scene->tree, 12, 12, Color{1, 0, 0, 1}.values);
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);

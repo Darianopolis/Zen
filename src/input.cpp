@@ -31,14 +31,20 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
         case XKB_KEY_d:
             spawn("wofi", {"wofi", "--show", "drun"});
             return true;
+        case XKB_KEY_i:
+            spawn("xeyes", {"xeyes"});
+            return true;
+        case XKB_KEY_g:
+            spawn("steam", {"steam"});
+            return true;
         case XKB_KEY_q:
-            if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel) {
-                wlr_xdg_toplevel_send_close(server->focused_toplevel->xdg_toplevel);
+            if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel()) {
+                wlr_xdg_toplevel_send_close(server->focused_toplevel->xdg_toplevel());
             }
             return true;
         case XKB_KEY_f:
             if (server->focused_toplevel) {
-                bool fullscreen = server->focused_toplevel->xdg_toplevel->current.fullscreen;
+                bool fullscreen = server->focused_toplevel->xdg_toplevel()->current.fullscreen;
                 toplevel_set_fullscreen(server->focused_toplevel, !fullscreen);
             }
             return true;
@@ -324,8 +330,8 @@ void process_cursor_resize(Server* server)
     else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(border_x, left  + 1);
 
     toplevel_set_bounds(movesize.grabbed_toplevel, {
-        .x = left - movesize.grabbed_toplevel->xdg_toplevel->base->geometry.x,
-        .y = top  - movesize.grabbed_toplevel->xdg_toplevel->base->geometry.y,
+        .x = left - movesize.grabbed_toplevel->xdg_toplevel()->base->geometry.x,
+        .y = top  - movesize.grabbed_toplevel->xdg_toplevel()->base->geometry.y,
         .width  = right  - left,
         .height = bottom - top,
     });
@@ -359,59 +365,40 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
     double sx = 0, sy = 0;
     wlr_seat* seat = server->seat;
-    wlr_surface* surface = nullptr;
-    if (server->cursor_mode == CursorMode::pressed && seat->pointer_state.focused_surface) {
-        if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(seat->pointer_state.focused_surface)) {
-            surface = seat->pointer_state.focused_surface;
-            Client* client = static_cast<Client*>(xdg_surface->data);
-            wlr_box coord_system = client_get_coord_system(client);
-            sx = server->cursor->x - coord_system.x;
-            sy = server->cursor->y - coord_system.y;
-        }
+    struct wlr_surface* wlr_surface = nullptr;
+    if (Surface* surface; server->cursor_mode == CursorMode::pressed && (surface = Surface::from(seat->pointer_state.focused_surface))) {
+        wlr_surface = surface->wlr_surface;
+        wlr_box coord_system = surface_get_coord_system(surface);
+        sx = server->cursor->x - coord_system.x;
+        sy = server->cursor->y - coord_system.y;
     }
 
-    if (!surface) {
-        // TODO: Create get_client_at to handle toplevels, popups, layer shells (when implemented)
-        get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    if (!wlr_surface) {
+        // TODO: Create get_surface_at to handle toplevels, popups, layer shells (when implemented)
+        get_toplevel_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy);
     }
 
     // Handle constraints and update mouse
 
     if (time_msecs && device) {
-        // log_info("delta ({}, {}) unaccel ({}, {})", dx, dy, dx_unaccel, dy_unaccel);
         wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, dx, dy, dx_unaccel, dy_unaccel);
 
-        if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint) {
-            // log_info("move.active_constraint: {}", (void*)constraint);
-            // log_info("  constraint type: {}", constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED ? "locked" : "confined");
+        if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint; constraint && !server->debug.ignore_mouse_constraints) {
 
-            // Client* client = static_cast<Client*>(constraint->surface->data);
-            wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(constraint->surface);
-            Client* client = xdg_surface ? static_cast<Client*>(xdg_surface->data) : nullptr;
+            Surface* surface = Surface::from(constraint->surface);
+            if (surface == server->focused_toplevel) {
 
-            // log_info("  surface = {}, surface.data = {}", (void*)surface, surface->data);
-            // log_info("  client = {}, constraint.surface = {}, focused_surface = {}", (void*)client, (void*)constraint->surface, (void*)server->seat->pointer_state.focused_surface);
-
-            // if (client && constraint->surface == server->seat->pointer_state.focused_surface) {
-            if (client == server->focused_toplevel) {
-                // log_info("  constrained surface is client and matches focused surface");
-
-                wlr_box bounds = client_get_bounds(client);
+                wlr_box bounds = surface_get_bounds(surface);
                 sx = server->cursor->x - bounds.x;
                 sy = server->cursor->y - bounds.y;
-
-                // log_info("  s = ({}, {}) d = ({}, {})", sx, sy, dx, dy);
 
                 double sx_confined, sy_confined;
                 if (wlr_region_confine(&constraint->region, sx, sy, sx + dx, sy + dy, &sx_confined, &sy_confined)) {
                     dx = sx_confined - sx;
                     dy = sy_confined - sy;
-
-                    // log_info("  d.confined = ({}, {})", dx, dy);
                 }
 
                 if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-                    // log_info("  locked, leaving before moving cursor");
                     return;
                 }
             }
@@ -422,14 +409,14 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
     // Update xcursor
 
-    if (!surface) {
+    if (!wlr_surface) {
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
     }
 
     // Notify
 
-    if (surface) {
-        wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
+    if (wlr_surface) {
+        wlr_seat_pointer_notify_enter(seat, wlr_surface, sx, sy);
         wlr_seat_pointer_notify_motion(seat, time_msecs, sx, sy);
     } else {
         wlr_seat_pointer_notify_clear_focus(seat);
@@ -457,11 +444,11 @@ void server_cursor_motion_absolute(wl_listener* listener, void* data)
 
     double lx, ly;
     if (event->pointer->output_name) {
-        for (Output* output : server->outputs) {
-            if (strcmp(output->wlr_output->name, event->pointer->output_name) == 0) {
-                wlr_box bounds = output_get_bounds(output);
-                lx = bounds.x + bounds.width * event->x;
-                ly = bounds.y + bounds.height * event->y;
+        wlr_output_layout_output* layout_output;
+        wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
+            if (strcmp(layout_output->output->name, event->pointer->output_name) == 0) {
+                lx = layout_output->x + layout_output->output->width * event->x;
+                ly = layout_output->y + layout_output->output->height * event->y;
                 break;
             }
         }
@@ -516,7 +503,7 @@ void server_cursor_button(wl_listener* listener, void* data)
             toplevel_begin_interactive(toplevel, CursorMode::move, 0);
             return;
         } else if (event->button == BTN_RIGHT) {
-            wlr_box bounds = client_get_bounds(toplevel);
+            wlr_box bounds = surface_get_bounds(toplevel);
             int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
             int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
 
@@ -535,7 +522,7 @@ void server_cursor_button(wl_listener* listener, void* data)
             toplevel_begin_interactive(toplevel, type, edges);
             return;
         } else if (event->button == BTN_MIDDLE) {
-            wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel);
+            wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
             return;
         }
     }

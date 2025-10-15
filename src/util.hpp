@@ -12,7 +12,7 @@
 
 #define CONCAT_(a, b) a##b
 #define CONCAT(a, b) CONCAT_(a, b)
-#define UNIQUE_IDENT() CONCAT(jade_non_, __COUNTER__)
+#define UNIQUE_IDENT() CONCAT(_unique_, __COUNTER__)
 
 // -----------------------------------------------------------------------------
 
@@ -26,6 +26,10 @@ struct Defer
 };
 
 #define defer Defer UNIQUE_IDENT() = [&]
+
+// -----------------------------------------------------------------------------
+
+constexpr auto ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------
 
@@ -44,6 +48,14 @@ struct Point
 {
     double x, y;
 };
+
+constexpr
+double distance_between(Point a, Point b)
+{
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return std::sqrt(dx * dx + dy * dy);
+}
 
 struct Box
 {
@@ -88,8 +100,37 @@ bool box_contains_point(Box box, Point p)
 
 // -----------------------------------------------------------------------------
 
-void spawn(const char* file, std::span<const std::string_view> argv);
-constexpr auto ptr(auto&& value) { return &value; }
+constexpr int box_left(wlr_box box)   { return box.x; }
+constexpr int box_top(wlr_box box)    { return box.y; }
+constexpr int box_right(wlr_box box)  { return box.x + box.width;  }
+constexpr int box_bottom(wlr_box box) { return box.y + box.height; }
+
+constexpr
+wlr_box constrain_box(wlr_box box, wlr_box bounds)
+{
+    if (box.width >= bounds.width) {
+        box.x = bounds.x;
+        box.width = bounds.width;
+    } else {
+        if (int overlap_x = box_right(box) - box_right(bounds);  overlap_x > 0) box.x -= overlap_x;
+        box.x = std::max(box.x, bounds.x);
+    }
+
+    if (box.height >= bounds.height) {
+        box.y = bounds.y;
+        box.height = bounds.height;
+    } else {
+        if (int overlap_y = box_bottom(box) - box_bottom(bounds); overlap_y > 0) box.y -= overlap_y;
+        box.y = std::max(box.y, bounds.y);
+    }
+
+    return box;
+}
+
+// -----------------------------------------------------------------------------
+
+struct SpawnEnvAction { const char* name; const char* value; };
+void spawn(const char* file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {});
 
 // -----------------------------------------------------------------------------
 
@@ -176,7 +217,7 @@ struct ListenerSet
     }
 
     template<typename T>
-    void listen(wl_signal* signal, T* userdata, void(*notify_func)(wl_listener*, void*))
+    void listen(wl_signal* signal, T userdata, void(*notify_func)(wl_listener*, void*))
     {
         add(::listen(signal, userdata, notify_func));
     }

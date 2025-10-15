@@ -1,5 +1,6 @@
-.cache
-.vscode
+.cache/
+.vscode/
+.idea/
 
 3rdparty/*
 build

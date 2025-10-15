@@ -4,6 +4,21 @@
 
 #include <optional>
 
+wlr_box zone_apply_external_padding(wlr_box box)
+{
+    auto pad = zone_external_padding_ltrb;
+
+    if (box.width > pad.left + pad.right) {
+        box.x += pad.left;
+        box.width -= pad.left + pad.right;
+    }
+    if (box.height > pad.top + pad.bottom) {
+        box.y += pad.top;
+        box.height -= pad.top + pad.bottom;
+    }
+    return box;
+}
+
 void zone_init(Server* server)
 {
     server->zone.selector = wlr_scene_rect_create(&server->scene->tree, 0, 0, zone_color_inital.values);
@@ -62,7 +77,7 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
 
 void zone_process_cursor_motion(Server* server)
 {
-    auto output = get_output_at(server, server->cursor->x, server->cursor->y);
+    auto output = get_output_at(server, {server->cursor->x, server->cursor->y});
     auto bounds = output_get_bounds(output);
 
     Point point{ server->cursor->x, server->cursor->y };
@@ -88,10 +103,12 @@ void zone_process_cursor_motion(Server* server)
 
             if (box_contains_point(check_rect, point)) {
 
+                auto outer = zone_external_padding_ltrb;
+
                 // Compute padding
-                constexpr auto pad = [](int i, bool c) { return c ? zone_external_padding_ltrb[i] : zone_internal_padding / 2; };
-                Point tl_inset{ pad(0, zone_x == 0),                           pad(1, zone_y == 0)                         };
-                Point br_inset{ pad(2, zone_x == (zone_horizontal_zones - 1)), pad(3, zone_y == (zone_vertical_zones - 1)) };
+                constexpr auto pad = [](int external_padding, bool c) { return c ? external_padding : zone_internal_padding / 2; };
+                Point tl_inset{ pad(outer.left,  zone_x == 0),                           pad(outer.top,    zone_y == 0)                         };
+                Point br_inset{ pad(outer.right, zone_x == (zone_horizontal_zones - 1)), pad(outer.bottom, zone_y == (zone_vertical_zones - 1)) };
                 rect.x += tl_inset.x;
                 rect.y += tl_inset.y;
                 rect.width  -= tl_inset.x + br_inset.x;

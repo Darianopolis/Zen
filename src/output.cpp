@@ -1,19 +1,44 @@
 #include "core.hpp"
 
-Output* get_output_at(Server* server, double x, double y)
+Output* get_output_at(Server* server, Point point)
 {
-    wlr_output* o = wlr_output_layout_output_at(server->output_layout, x, y);
-    return o ? static_cast<Output*>(o->data) : nullptr;
+    return Output::from(wlr_output_layout_output_at(server->output_layout, point.x, point.y));
 }
 
-Output* get_output_for_client(Client* client)
+Output* get_nearest_output_to_point(Server* server, Point point)
 {
-    wlr_box bounds = client_get_bounds(client);
-    int x = bounds.x + bounds.width / 2;
-    int y = bounds.y + bounds.height / 2;
-    // TODO: - Keep track of the last monitor to be associated with this window
-    //       - Check monitor output based on bounds instead of centroid?
-    return get_output_at(client->server, x, y);
+    double closest_distance = INFINITY;
+    wlr_output* closest = nullptr;
+
+    log_trace("Finding nearest output to ({:.1f}, {:.1f})", point.x, point.y);
+
+    wlr_output_layout_output* layout_output;
+    wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
+        wlr_box box;
+        wlr_output_layout_get_box(server->output_layout, layout_output->output, &box);
+        Point on_output;
+        wlr_box_closest_point(&box, point.x, point.y, &on_output.x, &on_output.y);
+
+        double distance = distance_between(point, on_output);
+        log_trace("{} Output[{}] ({:.1f}, {:.1f}) = {:.1f}", distance < closest_distance ? "*" : " ", layout_output->output->name, on_output.x, on_output.y, distance);
+        if (distance < closest_distance) {
+            closest_distance = distance;
+            closest = layout_output->output;
+        }
+        if (distance == 0) break;
+    }
+
+    return Output::from(closest);
+}
+
+Output* get_nearest_output_to_box(Server* server, wlr_box box)
+{
+    return get_nearest_output_to_point(server, { box.x + box.width  / 2.0, box.y + box.height / 2.0 });
+}
+
+Output* get_output_for_surface(Surface* surface)
+{
+    return get_nearest_output_to_box(surface->server, surface_get_bounds(surface));
 }
 
 wlr_box output_get_bounds(Output* output)
@@ -53,8 +78,6 @@ void output_request_state(wl_listener* listener, void* data)
 void output_destroy(wl_listener* listener, void*)
 {
     Output* output = listener_userdata<Output*>(listener);
-
-    std::erase(output->server->outputs, output);
 
     wlr_scene_node_destroy(&output->background->node);
 
@@ -100,8 +123,6 @@ void server_new_output(wl_listener* listener, void* data)
     output->listeners.listen(&wlr_output->events.request_state, output, output_request_state);
     output->listeners.listen(&wlr_output->events.destroy,       output, output_destroy);
 
-    server->outputs.emplace_back(output);
-
     const OutputRule* matched_rule = nullptr;
     for (const OutputRule& rule : output_rules) {
         if (std::string_view(rule.name) == wlr_output->name) {
@@ -132,7 +153,8 @@ void server_output_layout_change(wl_listener* listener, void*)
 
     // TODO: Handled output removal, addition
 
-    for (Output* output : server->outputs) {
-        output_reconfigure(output);
+    wlr_output_layout_output* layout_output;
+    wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
+        output_reconfigure(Output::from(layout_output->output));
     }
 }

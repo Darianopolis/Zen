@@ -1,13 +1,5 @@
 #pragma once
 
-#include <assert.h>
-#include <getopt.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <time.h>
-#include <unistd.h>
-
 #include <wayland-server-core.h>
 
 #include <xkbcommon/xkbcommon.h>
@@ -15,8 +7,6 @@
 #include "wlroots.hpp"
 #include "util.hpp"
 #include "log.hpp"
-
-#include <libinput.h>
 
 #include <vector>
 
@@ -27,6 +17,8 @@
 #endif
 
 // -----------------------------------------------------------------------------
+
+static constexpr uint32_t cursor_size = 24;
 
 static constexpr int   border_width = 2;
 static constexpr Color border_color_unfocused = { 0.3f, 0.3f, 0.3f, 1.0f };
@@ -40,8 +32,13 @@ static constexpr Color zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
 static constexpr uint32_t zone_horizontal_zones = 6;
 static constexpr uint32_t zone_vertical_zones   = 2;
 static constexpr Point    zone_zone_selection_leeway = { 200, 200 };
-static constexpr double   zone_external_padding_ltrb[] = { 7 + border_width, 7 + border_width, 7 + border_width, 7 + border_width };
-static constexpr double   zone_internal_padding = 4 +  + border_width * 2;
+static constexpr struct {
+    int left   = 7 + border_width;
+    int top    = 7 + border_width;
+    int right  = 7 + border_width;
+    int bottom = 7 + border_width;
+} zone_external_padding_ltrb;
+static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 
 static constexpr uint32_t additional_outputs = 0;
 struct OutputRule { const char* name; int x, y; };
@@ -80,6 +77,10 @@ struct Server
     wlr_renderer* renderer;
     wlr_allocator* allocator;
 
+    struct {
+        bool ignore_mouse_constraints = false;
+    } debug;
+
     wlr_scene* scene;
     wlr_scene_output_layout* scene_output_layout;
     wlr_compositor* compositor;
@@ -114,7 +115,6 @@ struct Server
     Toplevel* focused_toplevel;
 
     wlr_output_layout* output_layout;
-    std::vector<Output*> outputs;
 
     uint32_t modifier_key;
 
@@ -130,6 +130,14 @@ struct Server
     } zone;
 };
 
+struct Keyboard
+{
+    ListenerSet listeners;
+
+    Server* server;
+    struct wlr_keyboard* wlr_keyboard;
+};
+
 struct Output
 {
     ListenerSet listeners;
@@ -139,28 +147,42 @@ struct Output
     wlr_scene_output* scene_output;
 
     wlr_scene_rect* background;
+
+    static Output* from(struct wlr_output* output) { return output ? static_cast<Output*>(output->data) : nullptr; }
 };
 
-enum class ClientType
+// -----------------------------------------------------------------------------
+
+enum class SurfaceRole
 {
     toplevel,
     popup,
 };
 
-struct Client
+struct Surface
 {
-    ClientType type;
+    SurfaceRole role;
 
     Server* server;
     wlr_scene_tree* scene_tree;
-    wlr_xdg_surface* xdg_surface;
+    struct wlr_surface* wlr_surface;
+
+    static Surface* from(struct wlr_surface* surface) { return surface ? static_cast<Surface*>(surface->data) : nullptr; }
+    static Surface* from(    wlr_scene_node* node)    { return node    ? static_cast<Surface*>(node->data)    : nullptr; }
 };
 
-struct Toplevel : Client
+struct Toplevel : Surface
 {
+    static Toplevel* from(Surface* surface)
+    {
+        return (surface && surface->role == SurfaceRole::toplevel) ? static_cast<Toplevel*>(surface) : nullptr;
+    }
+    static Toplevel* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
+    static Toplevel* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
+
     ListenerSet listeners;
 
-    wlr_xdg_toplevel* xdg_toplevel;
+    wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
 
     wlr_scene_rect* border[4];
     struct {
@@ -182,22 +204,21 @@ struct Toplevel : Client
     } resize;
 };
 
-struct Popup : Client
+struct Popup : Surface
 {
+    static Popup* from(Surface* surface)
+    {
+        return (surface && surface->role == SurfaceRole::popup) ? static_cast<Popup*>(surface) : nullptr;
+    }
+    static Popup* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
+    static Popup* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
+
     ListenerSet listeners;
 
-    wlr_xdg_popup* xdg_popup;
+    wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
 };
 
-struct Keyboard
-{
-    ListenerSet listeners;
-
-    Server* server;
-    struct wlr_keyboard* wlr_keyboard;
-};
-
-// ---- Policy ----
+// ---- Policy -----------------------------------------------------------------
 
 void cycle_focus_immediate(Server*, wlr_cursor*, bool backwards);
 
@@ -205,13 +226,13 @@ bool     handle_keybinding(Server*, xkb_keysym_t);
 uint32_t get_modifiers(    Server*);
 bool     is_main_mod_down( Server*);
 
-// ---- Keyboard ----
+// ---- Keyboard ---------------------------------------------------------------
 
 void keyboard_handle_modifiers(wl_listener*, void*);
 void keyboard_handle_key(      wl_listener*, void*);
 void keyboard_handle_destroy(  wl_listener*, void*);
 
-// ---- Pointer ----
+// ---- Pointer ----------------------------------------------------------------
 
 void reset_cursor_mode(    Server*);
 void process_cursor_resize(Server*);
@@ -225,12 +246,12 @@ void server_cursor_button(         wl_listener*, void*);
 void server_cursor_axis(           wl_listener*, void*);
 void server_cursor_frame(          wl_listener*, void*);
 
-// ---- Pointer.Constraints
+// ---- Pointer.Constraints ----------------------------------------------------
 
 void server_pointer_constraint_new(wl_listener*, void*);
 void server_pointer_constraint_destroy(wl_listener*, void*);
 
-// ---- Input ----
+// ---- Input ------------------------------------------------------------------
 
 void server_new_keyboard(Server*, wlr_input_device*);
 void server_new_pointer( Server*, wlr_input_device*);
@@ -240,7 +261,7 @@ void seat_request_set_selection(wl_listener*, void*);
 void seat_request_start_drag(   wl_listener*, void*);
 void seat_start_drag(           wl_listener*, void*);
 
-// ---- Zone ----
+// ---- Zone -------------------------------------------------------------------
 
 void zone_init(                 Server*);
 void zone_process_cursor_motion(Server*);
@@ -248,10 +269,14 @@ bool zone_process_cursor_button(Server*, wlr_pointer_button_event*);
 void zone_begin_selection(      Server*);
 void zone_end_selection(        Server*);
 
-// ---- Output ----
+wlr_box zone_apply_external_padding(wlr_box);
 
-Output* get_output_at(        Server*, double x, double y);
-Output* get_output_for_client(Client*);
+// ---- Output -----------------------------------------------------------------
+
+Output* get_output_at(              Server*, Point);
+Output* get_nearest_output_to_point(Server*, Point);
+Output* get_nearest_output_to_box(  Server*, wlr_box);
+Output* get_output_for_surface(     Surface*);
 
 wlr_box output_get_bounds( Output*);
 void    output_reconfigure(Output*);
@@ -262,13 +287,13 @@ void output_destroy(             wl_listener*, void*);
 void server_new_output(          wl_listener*, void*);
 void server_output_layout_change(wl_listener*, void*);
 
-// ---- Client ----
+// ---- Surface ----------------------------------------------------------------
 
-wlr_box client_get_bounds(      Client*);
-wlr_box client_get_geometry(    Client*);
-wlr_box client_get_coord_system(Client*);
+wlr_box surface_get_bounds(      Surface*);
+wlr_box surface_get_geometry(    Surface*);
+wlr_box surface_get_coord_system(Surface*);
 
-// ---- Client.Toplevel ----
+// ---- Surface.Toplevel -------------------------------------------------------
 
 void         toplevel_focus(           Toplevel*);
 void         toplevel_unfocus(         Toplevel*);
@@ -293,7 +318,7 @@ void toplevel_request_maximize(  wl_listener*, void*);
 void toplevel_request_fullscreen(wl_listener*, void*);
 void server_new_toplevel(        wl_listener*, void*);
 
-// ---- Client.Toplevel.Decoration ----
+// ---- Surface.Toplevel.Decoration --------------------------------------------
 
 void decoration_set_mode(Toplevel*);
 
@@ -301,7 +326,7 @@ void decoration_new(         wl_listener*, void*);
 void decoration_request_mode(wl_listener*, void*);
 void decoration_destroy(     wl_listener*, void*);
 
-// ---- Client.Popup ----
+// ---- Surface.Popup ----------------------------------------------------------
 
 void popup_commit(    wl_listener*, void*);
 void popup_destroy(   wl_listener*, void*);

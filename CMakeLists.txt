@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 4.0)
 project(zen)
 
 # ------------------------------------------------------------------------------
@@ -7,7 +7,7 @@ add_subdirectory(3rdparty/wayland)
 
 # ------------------------------------------------------------------------------
 
-set(USE_GIT_WLROOTS OFF)
+set(USE_GIT_WLROOTS ON)
 if (USE_GIT_WLROOTS)
     add_subdirectory(3rdparty/wlroots-install)
 else()
@@ -48,7 +48,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     )
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_sources(            ${PROJECT_NAME} PUBLIC
-    src/client.cpp
+    src/surface.cpp
     src/input.cpp
     src/log.cpp
     src/main.cpp

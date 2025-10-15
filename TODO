@@ -26,10 +26,10 @@
    - ✅ Add decoration manager to tell clients to prefer server side decorations
    - ✅ Add thin border around windows
 - ✅ Minimal multi display configuration
-- Improved pointer handling
-   - Add pointer constraint protocol
-   - Relative cursor motion protocol
-   - Cursor hiding
+- ✅ Improved pointer handling
+   - ✅ Add pointer constraint protocol
+   - ✅ Relative cursor motion protocol
+   - ✅ Cursor hiding
 - Shell layers
    - Add multiple strata levels
    - Add layer shell protocol
@@ -53,9 +53,14 @@
    - Stutters also present in
       - Native Vulkan binary, Proton Vulkan mode, Proton DirectX11 mode
       - DWL with direct XWayland integration
+- Steam + wofi drun mode
+   - When opened via `wofi --show drun`, Steam window shows, then is shortly closed, then repeats
+      - NOTE: If `wofi` is launched without `WAYLAND_SERVER` set (E.g. `env -u WAYLAND_SERVER=0 wofi --show drun`), it searches for a display server manually and opens in the parent compositor (which has a lower socket name)
+   - Does not occur when launching via `env -u WAYLAND_SERVER rofi -show drun` (can't test without wayland server masked until layer shell protocol is implemented)
 
 ### Additional
 
+- Support xdg-positioner requests to position child windows
 - Fix keyboard focus
    - Correctly unfocus keyboard when grab ends
    - Fix desync between server.focused_toplevel and seat.keyboard_state.focused_surface
@@ -69,8 +74,8 @@
    - Spawn message
 - Scaling
    - xdg_output_manager_v1
-- Spawn child clients in center of parent
-   - xdg_foreign support
+- ✅ Spawn child clients in center of parent
+- xdg_foreign support
 - Idle protocol
 - ✅ Compositor initiated fullscreen toggle
 - ✅ Throttle resize requests
