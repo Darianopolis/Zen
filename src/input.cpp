@@ -249,11 +249,11 @@ void seat_drag_update_position(Server* server)
 void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 {
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
-    wlr_log(WLR_INFO, "destroying pointer constraint: %p", (void*)constraint);
+    log_info("destroying pointer constraint: {}", (void*)constraint);
 
     Server* server = listener_userdata<Server*>(listener);
     if (server->pointer.active_constraint == constraint) {
-        wlr_log(WLR_INFO, "  was active!");
+        log_info("  was active!");
         server->pointer.active_constraint = nullptr;
     }
 
@@ -265,7 +265,7 @@ void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 
         // TODO: Select constraint based on focused window at cursor move time
 
-        wlr_log(WLR_INFO, "  replacing with next constriant: %p", (void*)new_constraint);
+        log_info("  replacing with next constriant: {}", (void*)new_constraint);
 
         server->pointer.active_constraint = new_constraint;
         wlr_pointer_constraint_v1_send_activated(new_constraint);
@@ -277,12 +277,12 @@ void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 void server_pointer_constraint_new(wl_listener* listener, void* data)
 {
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
-    wlr_log(WLR_INFO, "creating pointer constraint: %p", (void*)constraint);
+    log_info("creating pointer constraint: {}", (void*)constraint);
 
     Server* server = listener_userdata<Server*>(listener);
 
     if (server->pointer.active_constraint) {
-        wlr_log(WLR_INFO, "  replacing previous constraint: %p", (void*)server->pointer.active_constraint);
+        log_info("  replacing previous constraint: {}", (void*)server->pointer.active_constraint);
         wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
     }
     server->pointer.active_constraint = constraint;
@@ -378,40 +378,40 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     // Handle constraints and update mouse
 
     if (time_msecs && device) {
-        // wlr_log(WLR_INFO, "delta (%lf, %lf) unaccel (%lf %lf)", dx, dy, dx_unaccel, dy_unaccel);
+        // log_info("delta ({}, {}) unaccel ({}, {})", dx, dy, dx_unaccel, dy_unaccel);
         wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, dx, dy, dx_unaccel, dy_unaccel);
 
         if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint) {
-            // wlr_log(WLR_INFO, "move.active_constraint: %p", (void*)constraint);
-            // wlr_log(WLR_INFO, "  constraint type: %s", constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED ? "locked" : "confined");
+            // log_info("move.active_constraint: {}", (void*)constraint);
+            // log_info("  constraint type: {}", constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED ? "locked" : "confined");
 
             // Client* client = static_cast<Client*>(constraint->surface->data);
             wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(constraint->surface);
             Client* client = xdg_surface ? static_cast<Client*>(xdg_surface->data) : nullptr;
 
-            // wlr_log(WLR_INFO, "  surface = %p, surface.data = %p", (void*)surface, surface->data);
-            // wlr_log(WLR_INFO, "  client = %p, constraint.surface = %p, focused_surface = %p", (void*)client, (void*)constraint->surface, (void*)server->seat->pointer_state.focused_surface);
+            // log_info("  surface = {}, surface.data = {}", (void*)surface, surface->data);
+            // log_info("  client = {}, constraint.surface = {}, focused_surface = {}", (void*)client, (void*)constraint->surface, (void*)server->seat->pointer_state.focused_surface);
 
             // if (client && constraint->surface == server->seat->pointer_state.focused_surface) {
             if (client == server->focused_toplevel) {
-                // wlr_log(WLR_INFO, "  constrained surface is client and matches focused surface");
+                // log_info("  constrained surface is client and matches focused surface");
 
                 wlr_box bounds = client_get_bounds(client);
                 sx = server->cursor->x - bounds.x;
                 sy = server->cursor->y - bounds.y;
 
-                // wlr_log(WLR_INFO, "  s = (%lf, %lf) d = (%lf, %lf)", sx, sy, dx, dy);
+                // log_info("  s = ({}, {}) d = ({}, {})", sx, sy, dx, dy);
 
                 double sx_confined, sy_confined;
                 if (wlr_region_confine(&constraint->region, sx, sy, sx + dx, sy + dy, &sx_confined, &sy_confined)) {
                     dx = sx_confined - sx;
                     dy = sy_confined - sy;
 
-                    // wlr_log(WLR_INFO, "  d.confined = (%lf, %lf)", dx, dy);
+                    // log_info("  d.confined = ({}, {})", dx, dy);
                 }
 
                 if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-                    // wlr_log(WLR_INFO, "  locked, leaving before moving cursor");
+                    // log_info("  locked, leaving before moving cursor");
                     return;
                 }
             }

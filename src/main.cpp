@@ -1,7 +1,6 @@
 #include "core.hpp"
 
-#include <string_view>
-#include <iostream>
+#include <log.hpp>
 
 using namespace std::literals;
 
@@ -18,7 +17,7 @@ void init(Server* server, const startup_options& /* options */)
     server->display = wl_display_create();
     server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), nullptr);
     if (!server->backend) {
-        wlr_log(WLR_ERROR, "Failed to create wlr_backend");
+        log_error("Failed to create wlr_backend");
         return;
     }
 
@@ -34,7 +33,7 @@ void init(Server* server, const startup_options& /* options */)
 
     server->renderer = wlr_renderer_autocreate(server->backend);
     if (!server->renderer) {
-        wlr_log(WLR_ERROR, "Failed to create wlr_renderer");
+        log_error("Failed to create wlr_renderer");
         return;
     }
 
@@ -42,7 +41,7 @@ void init(Server* server, const startup_options& /* options */)
 
     server->allocator = wlr_allocator_autocreate(server->backend, server->renderer);
     if (server->allocator == nullptr) {
-        wlr_log(WLR_ERROR, "Failed to create wlr_allocator");
+        log_error("Failed to create wlr_allocator");
         return;
     }
 
@@ -148,7 +147,7 @@ void run(Server* server, const startup_options& options)
         spawn("/bin/sh", {"/bin/sh", "-c", options.startup_cmd});
     }
 
-    wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket);
+    log_info("Running Wayland compositor on WAYLAND_DISPLAY={}", socket);
     wl_display_run(server->display);
 }
 
@@ -173,27 +172,6 @@ constexpr const char* help_prompt = R"(Usage: %s [options]
   --log-file [path]     log to file
   --startup  [cmd]      startup command
 )";
-
-static struct {
-    FILE* log_file;
-} log_state = {};
-
-void log_callback(wlr_log_importance importance, const char *fmt, va_list args)
-{
-    if (importance > WLR_INFO) return;
-
-    char buffer[65'536];
-    int len = vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
-
-    buffer[len++] = '\n';
-    buffer[len] = '\0';
-
-    std::cout << buffer;
-    if (log_state.log_file) {
-        fwrite(buffer, 1, len, log_state.log_file);
-        fflush(log_state.log_file);
-    }
-}
 
 int main(int argc, char* argv[])
 {
@@ -222,10 +200,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (options.log_file) {
-        log_state.log_file = fopen(options.log_file, "wb");
-    }
-    wlr_log_init(WLR_INFO, log_callback);
+    init_log(LogLevel::trace, WLR_INFO, options.log_file);
 
     // Init
 

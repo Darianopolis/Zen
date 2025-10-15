@@ -14,6 +14,7 @@
 
 #include "wlroots.hpp"
 #include "util.hpp"
+#include "log.hpp"
 
 #include <libinput.h>
 
@@ -276,6 +277,7 @@ void         toplevel_set_bounds(      Toplevel*, wlr_box);
 void         toplevel_set_activated(   Toplevel*, bool active);
 bool         toplevel_wants_fullscreen(Toplevel*);
 void         toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
+void         toplevel_update_border(   Toplevel*);
 wlr_surface* toplevel_get_surface(     Toplevel*);
 bool         toplevel_is_interactable( Toplevel*);
 

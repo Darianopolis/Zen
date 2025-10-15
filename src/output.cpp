@@ -111,9 +111,9 @@ void server_new_output(wl_listener* listener, void* data)
     }
 
     if (matched_rule) {
-        wlr_log(WLR_INFO, "Output [%s] matched rule. x = %i, y = %i", wlr_output->name, matched_rule->x, matched_rule->y);
+        log_info("Output [{}] matched rule. x = {}, y = {}", wlr_output->name, matched_rule->x, matched_rule->y);
     } else {
-        wlr_log(WLR_INFO, "Output [%s] matches no rules, using auto layout", wlr_output->name);
+        log_info("Output [{}] matches no rules, using auto layout", wlr_output->name);
     }
 
     output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, background_color.values);

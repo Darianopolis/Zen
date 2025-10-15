@@ -1,6 +1,5 @@
 #include "core.hpp"
 
-static
 void toplevel_update_border(Toplevel* toplevel)
 {
     static constexpr uint32_t left = 0;
@@ -82,7 +81,7 @@ void toplevel_resize(Toplevel* toplevel, int width, int height)
         if (!toplevel->resize.any_pending || width != toplevel->resize.pending_width || height != toplevel->resize.pending_height) {
 
 #if NOISY_RESIZE
-            wlr_log(WLR_INFO, "resize.pending[%i > %i] (%i, %i) -> (%i, %i)",
+            log_debug("resize.pending[{} > {}] ({}, {}) -> ({}, {})",
                 toplevel->resize.last_resize_serial, toplevel->resize.last_commited_serial,
                 toplevel->resize.pending_width, toplevel->resize.pending_height, width, height);
 #endif
@@ -96,7 +95,7 @@ void toplevel_resize(Toplevel* toplevel, int width, int height)
 
         if (toplevel->xdg_toplevel->pending.width != width || toplevel->xdg_toplevel->pending.height != height) {
 #if NOISY_RESIZE
-            wlr_log(WLR_INFO, "resize.request[%i] (%i, %i) -> (%i, %i)", toplevel->resize.last_resize_serial,
+            log_debug("resize.request[{}] ({}, {}) -> ({}, {})", toplevel->resize.last_resize_serial,
                 toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
                 width,                                 height);
 #endif
@@ -121,7 +120,7 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
         int buffer_width = toplevel->xdg_surface->surface->current.buffer_width;
         int buffer_height = toplevel->xdg_surface->surface->current.buffer_height;
 
-        wlr_log(WLR_INFO, "resize_handle_commit geom = (%i, %i), toplevel = (%i, %i), buffer = (%i, %i)",
+        log_debug("resize_handle_commit geom = ({}, {}), toplevel = ({}, {}), buffer = ({}, {})",
             box.width, box.height,
             toplevel->xdg_toplevel->current.width, toplevel->xdg_toplevel->current.height,
             buffer_width, buffer_height);
@@ -130,12 +129,12 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
 
     wlr_box bounds = client_get_bounds(toplevel);
 #if NOISY_RESIZE
-    wlr_log(WLR_INFO, "resize.commit[%i] (%i, %i)", toplevel->resize.last_commited_serial, bounds.width, bounds.height);
+    log_debug("resize.commit[{}] ({}, {})", toplevel->resize.last_commited_serial, bounds.width, bounds.height);
 #endif
 
     if (toplevel->resize.any_pending) {
 #if NOISY_RESIZE
-        wlr_log(WLR_INFO, "  found pending resizes, sending new resize");
+        log_debug("  found pending resizes, sending new resize");
 #endif
         toplevel->resize.any_pending = false;
         toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height);
@@ -144,7 +143,7 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
             // Client has committed geometry that doesn't match our requested size
             // Resize toplevel to match committed geometry (client authoritative)
 #if NOISY_RESIZE
-            wlr_log(WLR_INFO, "  no pending resizes, new bounds don't match requested toplevel size, overriding toplevel size (client authoritative)");
+            log_debug("  no pending resizes, new bounds don't match requested toplevel size, overriding toplevel size (client authoritative)");
 #endif
             toplevel_resize(toplevel, bounds.width, bounds.height);
         }
@@ -481,7 +480,7 @@ void decoration_new(wl_listener*, void* data)
 
     Toplevel* toplevel = static_cast<Toplevel*>(xdg_decoration->toplevel->base->data);
     if (toplevel->decoration.xdg_decoration) {
-        wlr_log(WLR_ERROR, "Toplevel already has attached decoration!");
+        log_error("Toplevel already has attached decoration!");
         return;
     }
 
@@ -542,7 +541,7 @@ void popup_commit(wl_listener* listener, void*)
 
         wlr_xdg_popup_unconstrain_from_box(xdg_popup, &output_bounds);
     } else {
-        wlr_log(WLR_ERROR, "No output for toplevel while opening popup!");
+        log_error("No output for toplevel while opening popup!");
     }
 }
 

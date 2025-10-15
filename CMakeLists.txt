@@ -50,6 +50,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_sources(            ${PROJECT_NAME} PUBLIC
     src/client.cpp
     src/input.cpp
+    src/log.cpp
     src/main.cpp
     src/output.cpp
     src/util.cpp

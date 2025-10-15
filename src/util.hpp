@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wlroots.hpp"
+#include "log.hpp"
 
 #include <typeinfo>
 #include <cstring>
@@ -142,7 +143,7 @@ T listener_userdata(wl_listener* listener)
     Listener* l = listener_from(listener);
 #if TYPE_CHECKED_LISTENERS
     if (&typeid(T) != l->typeinfo) {
-        wlr_log(WLR_ERROR, "listener_userdata type match, expected '%s' got '%s'", l->typeinfo->name(), typeid(T).name());
+        log_error("listener_userdata type match, expected '{}' got '{}'", l->typeinfo->name(), typeid(T).name());
         return {};
     }
 #endif
