@@ -52,7 +52,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_sources(            ${PROJECT_NAME} PUBLIC
     src/surface.cpp
-    src/input.cpp
+    src/seat.cpp
     src/log.cpp
     src/main.cpp
     src/output.cpp
