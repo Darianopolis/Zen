@@ -56,7 +56,7 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
             server->cursor_mode = CursorMode::passthrough;
             server->zone.moving = false;
-            return pressed;
+            return true;
         }
     }
     else if (event->button == BTN_RIGHT && server->zone.moving) {

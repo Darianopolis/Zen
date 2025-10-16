@@ -92,8 +92,6 @@ void output_reconfigure(Output* output)
 
 void server_new_output(wl_listener* listener, void* data)
 {
-    // This event is raised by the backend when a new output (aka a display or monitor) becomes available
-
     Server* server = listener_userdata<Server*>(listener);
     wlr_output* wlr_output = static_cast<struct wlr_output*>(data);
 

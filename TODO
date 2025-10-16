@@ -30,18 +30,20 @@
    - ✅ Add pointer constraint protocol
    - ✅ Relative cursor motion protocol
    - ✅ Cursor hiding
+- ✅ Add XWayland integration
+   - ✅ Cursor size difference over X11 windows
 - Shell layers
    - Add multiple strata levels
    - Add layer shell protocol
-- Add XWayland integration
-   - Cursor size difference over X11 windows
 
 ### Bugs
 
 - Minecraft, GIMP
+   - The following error occasionally occurs if the window is moved during startup
+      - (possibly because it's not properly responding to wayland events in that time?)
    - [wayland] Data too big for buffer (X + Y > 4096)<br>
      [wayland] error in client communication (pid Z)
-- SDL3/GLFW + Vulkan (AMD)
+- SDL3/GLFW + Vulkan (AMD) + syncobj
    - Occasional OUT-OF-DATE when resizing at extremely high frame rate (14k+fps). Appears to be a Vulkan WSI bug
       - Currently tested only with separate render thread. Need to test with syncronous rendering and other drivers
 - BeamNG + VSync-disabled + wlroots DRM Backend
@@ -57,9 +59,20 @@
    - When opened via `wofi --show drun`, Steam window shows, then is shortly closed, then repeats
       - NOTE: If `wofi` is launched without `WAYLAND_SERVER` set (E.g. `env -u WAYLAND_SERVER=0 wofi --show drun`), it searches for a display server manually and opens in the parent compositor (which has a lower socket name)
    - Does not occur when launching via `env -u WAYLAND_SERVER rofi -show drun` (can't test without wayland server masked until layer shell protocol is implemented)
+- Steam client gamma problem
+   - Sometimes, after closing a steam game, the steam client's gamma is messed up.
+   - Closing and reopening the Steam window does not fix it, the entire processh as to be completely restarted
+- Steam client popups appearing in other XWayland windows
+   - When steam and xeyes are open, can observe Steam top menu popups showing in xeyes (even when xeyes is in a completely different part of the screen)
 
 ### Additional
 
+- ✅ Prevent clients from hiding the cursor unless they have keyboard focus
+- Compositor interaction state management
+   - Newly spawned windows should not take focus when in the middle of an interaction (e.g. zone/move/size)
+   - Unify input processing into single callback + state machine?
+   - Interlocks to prevent invalid interaction interactions
+      - While cursor is hidden, should be considered to not exist - add centralised way of querying cursor position/state
 - xdg-activation
 - Support xdg-positioner requests to position child windows
 - Use updated protocol version
@@ -84,7 +97,7 @@
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
    - Readjust all toplevel zone constraint on workspace/output configuration change
-- Shortcut to grab all input back from any clients and ignore any constraints
+- ✅ Shortcut to grab all input back from any clients and ignore any constraints
 - Media control keybinds
 - Numlock default state
 - ✅ Improved window list/search/cycling

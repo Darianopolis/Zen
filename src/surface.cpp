@@ -215,56 +215,114 @@ void toplevel_set_activated(Toplevel* toplevel, bool active)
     toplevel_update_border(toplevel);
 }
 
-void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
+// -----------------------------------------------------------------------------
+
+void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
 {
-    // TODO: If only one window in cycle and cursor then *don't* focus
-
-    auto in_cycle = [&](Surface* surface) {
-        return !cursor || wlr_box_contains_point(ptr(surface_get_bounds(surface)), cursor->x, cursor->y);
+    auto fn = [&](wlr_scene_node* node, double, double) -> bool {
+        if (Toplevel* toplevel = Toplevel::from(node)) return for_each(for_each_data, toplevel);
+        return true;
     };
-
-    auto move_to_back_of_cycle = [&](Toplevel* toplevel) {
-        std::erase(server->toplevels, toplevel);
-
-        auto iter = server->toplevels.begin();
-        while (!in_cycle(*iter) && ++iter != server->toplevels.end());
-        server->toplevels.insert(iter, toplevel);
-
-        // Fixup visual window order
-        for (Toplevel* tl : server->toplevels) {
-            wlr_scene_node_raise_to_top(&tl->scene_tree->node);
-        }
-    };
-
-    if (backwards) {
-        for (Toplevel* toplevel : server->toplevels) {
-            if (toplevel == get_focused_toplevel(toplevel->server)) continue;
-            if (!in_cycle(toplevel)) continue;
-
-            toplevel_focus(toplevel);
-            return;
-        }
-    } else {
-        Toplevel* first = nullptr;
-        for (uint32_t i = server->toplevels.size(); i-- > 0;) {
-            Toplevel* toplevel = server->toplevels[i];
-
-            if (!in_cycle(toplevel)) continue;
-            if ((cursor && !first) || toplevel == get_focused_toplevel(toplevel->server)) {
-                first = toplevel;
-                continue;
-            }
-
-            if (first) move_to_back_of_cycle(first);
-            toplevel_focus(toplevel);
-            return;
-        }
-
-        if (first) {
-            toplevel_focus(first);
-        }
-    }
+    walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
 }
+
+void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
+{
+    auto fn = [&](wlr_scene_node* node, double, double) -> bool {
+        if (Toplevel* toplevel = Toplevel::from(node)) return for_each(for_each_data, toplevel);
+        return true;
+    };
+    walk_scene_tree_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+}
+
+// -----------------------------------------------------------------------------
+
+static
+bool focus_cycle_toplevel_is_enabled(Toplevel* toplevel)
+{
+    return toplevel->scene_tree->node.enabled;
+}
+
+static
+void focus_cycle_toplevel_set_enabled(Toplevel* toplevel, bool enabled)
+{
+    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, enabled);
+}
+
+void focus_cycle_begin(Server* server)
+{
+    server->cursor_mode = CursorMode::focus_cycle;
+
+    Toplevel* current = get_focused_toplevel(server);
+    toplevel_unfocus(current, true);
+
+    auto fn = [&](Toplevel* toplevel) -> bool {
+        focus_cycle_toplevel_set_enabled(toplevel, !current || toplevel == current);
+        if (!current) current = toplevel;
+        return true;
+    };
+    walk_toplevels_front_to_back(server, FUNC_REF(fn));
+}
+
+void focus_cycle_end(Server* server)
+{
+    server->cursor_mode = CursorMode::passthrough;
+
+    Toplevel* focused = nullptr;
+    auto fn = [&](Toplevel* toplevel) -> bool {
+        if (focus_cycle_toplevel_is_enabled(toplevel)) {
+            if (!focused) focused = toplevel;
+        }
+        focus_cycle_toplevel_set_enabled(toplevel, true);
+        return true;
+    };
+    walk_toplevels_front_to_back(server, FUNC_REF(fn));
+
+    toplevel_focus(focused);
+}
+
+void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
+{
+    // TODO: Fixup visibility if focus changes mid-cycle (e.g. window added/destroyed)
+
+    Toplevel* first = nullptr;
+    bool next_is_active = false;
+    Toplevel* new_active = nullptr;
+
+    auto iter_fn = backwards ? walk_toplevels_back_to_front : walk_toplevels_front_to_back;
+
+    auto pick = [&](Toplevel* toplevel) -> bool {
+        bool in_cycle = !cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y);
+        if (!in_cycle) return true;
+
+        // Is this is the first window in the cycle, mark incase we need to
+        if (!first) first = toplevel;
+
+        // Previous window was active, moving to this one
+        if (next_is_active) {
+            new_active = toplevel;
+            return false;
+        }
+
+        // This is the first active window in the cycle, cycle to next
+        if (focus_cycle_toplevel_is_enabled(toplevel)) {
+            next_is_active = true;
+        }
+
+        return true;
+    };
+    iter_fn(server, FUNC_REF(pick));
+
+    if (!new_active && first) new_active = first;
+
+    auto update = [&](Toplevel* toplevel) -> bool {
+        focus_cycle_toplevel_set_enabled(toplevel, toplevel == new_active);
+        return true;
+    };
+    iter_fn(server, FUNC_REF(update));
+}
+
+// -----------------------------------------------------------------------------
 
 void toplevel_focus(Toplevel* toplevel)
 {
@@ -284,8 +342,6 @@ void toplevel_focus(Toplevel* toplevel)
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
-    std::erase(server->toplevels, toplevel);
-    server->toplevels.emplace_back(toplevel);
     toplevel_set_activated(toplevel, true);
 
     if (keyboard) {
@@ -313,7 +369,7 @@ Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_
 {
     Toplevel* toplevel = nullptr;
     auto fn = [&](wlr_scene_node* node, double node_x, double node_y) {
-        if (!node || node->type != WLR_SCENE_NODE_BUFFER) return true;
+        if (!node->enabled || node->type != WLR_SCENE_NODE_BUFFER) return true;
 
         wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
         wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
@@ -344,27 +400,30 @@ void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    toplevel->server->toplevels.emplace_back(toplevel);
-
     toplevel_focus(toplevel);
 }
 
 void toplevel_unmap(wl_listener* listener, void*)
 {
-    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+    Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
 
     // Reset cursor mode if grabbed toplevel was unmapped
-    if (toplevel == toplevel->server->movesize.grabbed_toplevel) {
-        reset_cursor_mode(toplevel->server);
+    if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
+        reset_cursor_mode(unmapped_toplevel->server);
     }
 
     // TODO: Handle toplevel unmap during zone operation
 
-    toplevel_unfocus(toplevel, true);
-    std::erase(toplevel->server->toplevels, toplevel);
-    if (!toplevel->server->toplevels.empty()) {
-        toplevel_focus(toplevel->server->toplevels.back());
-    }
+    toplevel_unfocus(unmapped_toplevel, true);
+
+    auto fn = [&](Toplevel* toplevel) {
+        if (toplevel != unmapped_toplevel) {
+            toplevel_focus(toplevel);
+            return false;
+        }
+        return true;
+    };
+    walk_toplevels_front_to_back(unmapped_toplevel->server, FUNC_REF(fn));
 }
 
 void toplevel_commit(wl_listener* listener, void*)

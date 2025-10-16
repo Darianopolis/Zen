@@ -21,11 +21,16 @@ void init(Server* server, const startup_options& /* options */)
         return;
     }
 
-    server->modifier_key = WLR_MODIFIER_LOGO;
+    server->main_modifier = WLR_MODIFIER_LOGO;
+    server->main_modifier_keysym_left = XKB_KEY_Super_L;
+    server->main_modifier_keysym_right = XKB_KEY_Super_R;
+
     wlr_multi_for_each_backend(server->backend, [](wlr_backend* backend, void* data) {
         if (wlr_backend_is_wl(backend) || wlr_backend_is_x11(backend)) {
             Server* server = static_cast<Server*>(data);
-            server->modifier_key = WLR_MODIFIER_ALT;
+            server->main_modifier = WLR_MODIFIER_ALT;
+            server->main_modifier_keysym_left = XKB_KEY_Alt_L;
+            server->main_modifier_keysym_right = XKB_KEY_Alt_R;
 
             log_warn("Running compositor nested, mouse constraints will be silently ignored!");
             server->debug.ignore_mouse_constraints = true;

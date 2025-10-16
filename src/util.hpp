@@ -224,4 +224,5 @@ struct ListenerSet
 
 // -----------------------------------------------------------------------------
 
+bool walk_scene_tree_depth_first(        wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data);
 bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data);

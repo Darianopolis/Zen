@@ -54,6 +54,7 @@ enum class CursorMode
     move,
     resize,
     zone,
+    focus_cycle,
 };
 
 struct Toplevel;
@@ -82,7 +83,6 @@ struct Server
     wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
 
     wlr_xdg_shell* xdg_shell;
-    std::vector<Toplevel*> toplevels;
 
     wlr_cursor* cursor;
     wlr_xcursor_manager* cursor_manager;
@@ -106,8 +106,9 @@ struct Server
         uint32_t resize_edges;
     } movesize;
 
-
-    uint32_t modifier_key;
+    uint32_t main_modifier;
+    xkb_keysym_t main_modifier_keysym_left;
+    xkb_keysym_t main_modifier_keysym_right;
 
     wlr_scene_tree* drag_icon_parent;
 
@@ -211,7 +212,9 @@ struct Popup : Surface
 
 // ---- Policy -----------------------------------------------------------------
 
-void cycle_focus_immediate(Server*, wlr_cursor*, bool backwards);
+void focus_cycle_begin(Server*);
+void focus_cycle_step( Server*, wlr_cursor*, bool backwards);
+void focus_cycle_end(  Server*);
 
 bool     handle_keybinding(Server*, xkb_keysym_t);
 uint32_t get_modifiers(    Server*);
@@ -301,7 +304,9 @@ void         toplevel_update_border(   Toplevel*);
 wlr_surface* toplevel_get_surface(     Toplevel*);
 bool         toplevel_is_interactable( Toplevel*);
 
-Toplevel* get_toplevel_at(Server*, double lx, double ly, wlr_surface**, double *sx, double *sy);
+Toplevel* get_toplevel_at(        Server*, double lx, double ly, wlr_surface**, double *sx, double *sy);
+void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
+void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 
 void toplevel_begin_interactive(Toplevel*, CursorMode, uint32_t edges);
 

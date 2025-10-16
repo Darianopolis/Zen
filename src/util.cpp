@@ -24,9 +24,27 @@ void spawn(const char* file, std::span<const std::string_view> argv, std::span<c
 
 // -----------------------------------------------------------------------------
 
+bool walk_scene_tree_depth_first(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data)
+{
+    if (!for_each(for_each_data, node, sx, sy)) return false;
+
+    if (node->type == WLR_SCENE_NODE_TREE) {
+        wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
+        wlr_scene_node* child;
+        wl_list_for_each(child, &tree->children, link) {
+            double nx = sx + child->x;
+            double ny = sy + child->y;
+            if (!walk_scene_tree_depth_first(child, nx, ny, for_each, for_each_data)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data)
 {
-    if (!node->enabled) return true;
     if (node->type == WLR_SCENE_NODE_TREE) {
         wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
         wlr_scene_node* child;
@@ -37,9 +55,7 @@ bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double
                 return false;
             }
         }
-    } else {
-        if (!for_each(for_each_data, node, sx, sy)) return false;
     }
 
-    return true;
+    return for_each(for_each_data, node, sx, sy);
 }
