@@ -1,3 +1,4 @@
+#include "pch.hpp"
 #include "core.hpp"
 
 void toplevel_update_border(Toplevel* toplevel)

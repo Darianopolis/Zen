@@ -1,9 +1,5 @@
 #include "core.hpp"
-
-#include <unistd.h>
-
-#include <vector>
-#include <string>
+#include "pch.hpp"
 
 void spawn(const char* file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions)
 {

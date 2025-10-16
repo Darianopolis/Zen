@@ -1,12 +1,7 @@
 #pragma once
 
-#include "wlroots.hpp"
+#include "pch.hpp"
 #include "log.hpp"
-
-#include <typeinfo>
-#include <cstring>
-#include <span>
-#include <string_view>
 
 // -----------------------------------------------------------------------------
 

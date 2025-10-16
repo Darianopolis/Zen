@@ -1,6 +1,5 @@
+#include "pch.hpp"
 #include "core.hpp"
-
-#include <libevdev/libevdev.h>
 
 uint32_t get_modifiers(Server* server)
 {

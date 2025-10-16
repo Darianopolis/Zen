@@ -1,14 +1,8 @@
 #pragma once
 
-#include <wayland-server-core.h>
-
-#include <xkbcommon/xkbcommon.h>
-
-#include "wlroots.hpp"
+#include "pch.hpp"
 #include "util.hpp"
 #include "log.hpp"
-
-#include <vector>
 
 // -----------------------------------------------------------------------------
 

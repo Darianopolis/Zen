@@ -1,8 +1,5 @@
+#include "pch.hpp"
 #include "core.hpp"
-
-#include <libevdev/libevdev.h>
-
-#include <optional>
 
 wlr_box zone_apply_external_padding(wlr_box box)
 {

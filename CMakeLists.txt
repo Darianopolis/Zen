@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 4.0)
+
 project(zen)
 
 # ------------------------------------------------------------------------------
@@ -35,6 +36,7 @@ add_subdirectory(3rdparty/backward-cpp)
 # ------------------------------------------------------------------------------
 
 add_executable(            ${PROJECT_NAME})
+target_precompile_headers( ${PROJECT_NAME} PUBLIC src/pch.hpp)
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PROGRAM_NAME=\"${PROJECT_NAME}\"")
 target_compile_options(    ${PROJECT_NAME} PUBLIC
     -std=c++26
@@ -42,6 +44,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wextra
     -Wpedantic
     -Werror
+    -Wno-sometimes-uninitialized
     -Wno-missing-designated-field-initializers
     -Wno-missing-field-initializers
     -Wno-unknown-pragmas

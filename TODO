@@ -60,6 +60,7 @@
 
 ### Additional
 
+- xdg-activation
 - Support xdg-positioner requests to position child windows
 - Fix keyboard focus
    - Correctly unfocus keyboard when grab ends

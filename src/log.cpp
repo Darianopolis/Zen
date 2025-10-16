@@ -1,9 +1,5 @@
+#include "pch.hpp"
 #include "log.hpp"
-
-#include <iostream>
-#include <fstream>
-
-#include <stdarg.h>
 
 using namespace std::literals;
 
