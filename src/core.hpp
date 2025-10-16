@@ -212,7 +212,7 @@ struct Popup : Surface
 
 // ---- Policy -----------------------------------------------------------------
 
-void focus_cycle_begin(Server*);
+void focus_cycle_begin(Server*, wlr_cursor*);
 void focus_cycle_step( Server*, wlr_cursor*, bool backwards);
 void focus_cycle_end(  Server*);
 

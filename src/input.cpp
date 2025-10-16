@@ -25,7 +25,7 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
             bool do_cycle = true;
             if (server->cursor_mode ==  CursorMode::passthrough) {
                 do_cycle = get_focused_toplevel(server);
-                focus_cycle_begin(server);
+                focus_cycle_begin(server, nullptr);
             }
             if (do_cycle && server->cursor_mode == CursorMode::focus_cycle) {
                 focus_cycle_step(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
@@ -100,8 +100,9 @@ void keyboard_handle_key(wl_listener* listener, void* data)
 
         // TODO: Separate out into centralized input handle callback
         if (event->state == WL_KEYBOARD_KEY_STATE_RELEASED && server->cursor_mode == CursorMode::focus_cycle) {
-            if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right)
+            if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right) {
                 focus_cycle_end(server);
+            }
         }
     }
 
@@ -526,15 +527,6 @@ void server_cursor_button(wl_listener* listener, void* data)
         if (zone_process_cursor_button(server, event)) return;
     }
 
-    // Focus window on any button press
-
-    if (toplevel_under_cursor) {
-        if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) toplevel_focus(toplevel_under_cursor);
-    } else {
-        log_warn("Unfocusing window");
-        toplevel_unfocus(get_focused_toplevel(server), false);
-    }
-
     // Leave move/size/pressed modes on release
 
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
@@ -542,6 +534,15 @@ void server_cursor_button(wl_listener* listener, void* data)
         reset_cursor_mode(server);
         wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
         return;
+    }
+
+    // Focus window on any button press
+
+    if (toplevel_under_cursor) {
+        toplevel_focus(toplevel_under_cursor);
+    } else {
+        log_warn("Unfocusing window");
+        toplevel_unfocus(get_focused_toplevel(server), false);
     }
 
     server->cursor_mode = CursorMode::pressed;
@@ -589,10 +590,7 @@ void server_cursor_axis(wl_listener* listener, void* data)
 
     if (is_main_mod_down(server) && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         if (server->cursor_mode ==  CursorMode::passthrough) {
-            wlr_surface* wlr_surface;
-            double sx, sy;
-            toplevel_focus(get_toplevel_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy));
-            focus_cycle_begin(server);
+            focus_cycle_begin(server, server->cursor);
         }
         if (server->cursor_mode == CursorMode::focus_cycle) {
             focus_cycle_step(server, server->cursor, event->delta > 0);

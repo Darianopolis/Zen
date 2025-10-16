@@ -205,6 +205,13 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
         }
     } else {
         wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), false);
+
+        // Constrain prev bounds to output when exiting fullscreen to avoid the case
+        // where the window is still full size and the borders are now hidden.
+        if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
+            wlr_box output_bounds = zone_apply_external_padding(output_get_bounds(output));
+            toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, output_bounds);
+        }
         toplevel_set_bounds(toplevel, toplevel->prev_bounds);
     }
 }
@@ -249,16 +256,17 @@ void focus_cycle_toplevel_set_enabled(Toplevel* toplevel, bool enabled)
     wlr_scene_node_set_enabled(&toplevel->scene_tree->node, enabled);
 }
 
-void focus_cycle_begin(Server* server)
+void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
     server->cursor_mode = CursorMode::focus_cycle;
 
-    Toplevel* current = get_focused_toplevel(server);
-    toplevel_unfocus(current, true);
+    toplevel_unfocus(get_focused_toplevel(server), true);
 
+    Toplevel* current = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
-        focus_cycle_toplevel_set_enabled(toplevel, !current || toplevel == current);
-        if (!current) current = toplevel;
+        bool new_current = !current && (!cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y));
+        focus_cycle_toplevel_set_enabled(toplevel, new_current);
+        if (new_current) current = toplevel;
         return true;
     };
     walk_toplevels_front_to_back(server, FUNC_REF(fn));
