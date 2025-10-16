@@ -51,59 +51,6 @@ vendor_dir = ensure_dir("3rdparty")
 
 # -----------------------------------------------------------------------------
 
-def list_wayland_protocols():
-
-    wayland_protocols = []
-
-    system_protocol_dir = Path("/usr/share/wayland-protocols")
-    for category in os.listdir(system_protocol_dir):
-        category_path = system_protocol_dir / category
-        for subfolder in os.listdir(category_path):
-            subfolder_path = category_path / subfolder
-            for name in os.listdir(subfolder_path):
-                wayland_protocols += [(subfolder_path / name, Path(name).stem)]
-
-    return wayland_protocols
-
-def generate_wayland_protocols():
-
-    wayland_scanner = "wayland-scanner"                   # Wayland scanner executable
-    wayland_dir = vendor_dir / "wayland"                  #
-    wayland_src = ensure_dir(wayland_dir / "src")         # Directory for generate sources
-    wayland_include = ensure_dir(wayland_dir / "include") # Directory for generate headers
-
-    cmake_target_name = "wayland-header"
-    with open(wayland_dir / "CMakeLists.txt", "w") as cmakelists:
-        cmakelists.write(f"add_library({cmake_target_name}\n")
-
-        for xml_path, name in list_wayland_protocols():
-
-            # Generate header
-            header_name = f"{name}-protocol.h"
-            header_path = wayland_include / header_name
-            if not header_path.exists():
-                cmd = [wayland_scanner, "server-header", xml_path, header_name]
-                log_debug(f"Generating wayland header: {header_name}")
-                subprocess.run(cmd, cwd = wayland_include)
-
-            # Generate source
-            source_name = f"{name}-protocol.c"
-            source_path = wayland_src / source_name
-            if not source_path.exists():
-                cmd = [wayland_scanner, "private-code", xml_path, source_name]
-                log_debug(f"Generating wayland source: {source_name}")
-                subprocess.run(cmd, cwd = wayland_src)
-
-            # Add source to CMakeLists
-            cmakelists.write(f"    \"src/{source_name}\"\n")
-
-        cmakelists.write("    )\n")
-        cmakelists.write(f"target_include_directories({cmake_target_name} PUBLIC include)\n")
-
-generate_wayland_protocols()
-
-# -----------------------------------------------------------------------------
-
 def git_fetch(dir, repo, branch):
     if dir.exists():
         cmd = ["git", "pull"]
@@ -156,3 +103,61 @@ def build_wlroots():
         cmakelists.write( "target_compile_definitions(wlroots INTERFACE -DWLR_USE_UNSTABLE)")
 
 build_wlroots()
+
+# -----------------------------------------------------------------------------
+
+def list_wayland_protocols():
+
+    wayland_protocols = []
+
+    system_protocol_dir = Path("/usr/share/wayland-protocols")
+    for category in os.listdir(system_protocol_dir):
+        category_path = system_protocol_dir / category
+        for subfolder in os.listdir(category_path):
+            subfolder_path = category_path / subfolder
+            for name in os.listdir(subfolder_path):
+                wayland_protocols += [(subfolder_path / name, Path(name).stem)]
+
+    wlroots_protocol_dir = wlroots_src_dir / "protocol"
+    for name in os.listdir(wlroots_protocol_dir):
+        if Path(name).suffix == ".xml":
+            wayland_protocols += [(wlroots_protocol_dir.absolute() / name, Path(name).stem)]
+
+    return wayland_protocols
+
+def generate_wayland_protocols():
+
+    wayland_scanner = "wayland-scanner"                   # Wayland scanner executable
+    wayland_dir = vendor_dir / "wayland"                  #
+    wayland_src = ensure_dir(wayland_dir / "src")         # Directory for generate sources
+    wayland_include = ensure_dir(wayland_dir / "include") # Directory for generate headers
+
+    cmake_target_name = "wayland-header"
+    with open(wayland_dir / "CMakeLists.txt", "w") as cmakelists:
+        cmakelists.write(f"add_library({cmake_target_name}\n")
+
+        for xml_path, name in list_wayland_protocols():
+
+            # Generate header
+            header_name = f"{name}-protocol.h"
+            header_path = wayland_include / header_name
+            if not header_path.exists():
+                cmd = [wayland_scanner, "server-header", xml_path, header_name]
+                log_debug(f"Generating wayland header: {header_name}")
+                subprocess.run(cmd, cwd = wayland_include)
+
+            # Generate source
+            source_name = f"{name}-protocol.c"
+            source_path = wayland_src / source_name
+            if not source_path.exists():
+                cmd = [wayland_scanner, "private-code", xml_path, source_name]
+                log_debug(f"Generating wayland source: {source_name}")
+                subprocess.run(cmd, cwd = wayland_src)
+
+            # Add source to CMakeLists
+            cmakelists.write(f"    \"src/{source_name}\"\n")
+
+        cmakelists.write("    )\n")
+        cmakelists.write(f"target_include_directories({cmake_target_name} PUBLIC include)\n")
+
+generate_wayland_protocols()

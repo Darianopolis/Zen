@@ -47,6 +47,24 @@ static constexpr double libinput_mouse_speed = -0.66;
 
 // -----------------------------------------------------------------------------
 
+namespace Strata
+{
+    static constexpr uint32_t background = 0;
+    static constexpr uint32_t bottom     = 1;
+    static constexpr uint32_t floating   = 2;
+    static constexpr uint32_t top        = 3;
+    static constexpr uint32_t overlay    = 4;
+    static constexpr uint32_t debug      = 5;
+    static constexpr uint32_t count      = 6;
+};
+
+constexpr uint32_t strata_from_wlr[] = {
+    [ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND] = Strata::background,
+    [ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]     = Strata::bottom,
+    [ZWLR_LAYER_SHELL_V1_LAYER_TOP]        = Strata::top,
+    [ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY]    = Strata::overlay,
+};
+
 enum class InteractionMode
 {
     passthrough,
@@ -75,6 +93,7 @@ struct Server
     } debug;
 
     wlr_scene* scene;
+    wlr_scene_tree* layers[Strata::count];
     wlr_output_layout* output_layout;
     wlr_scene_output_layout* scene_output_layout;
 

@@ -278,9 +278,6 @@ static
 void seat_drag_update_position(Server* server)
 {
     wlr_scene_node_set_position(&server->drag_icon_parent->node, int(std::round(server->cursor->x)), int(std::round(server->cursor->y)));
-
-    // TODO: This should be on a separate layer that is always on top (above even the OVERLAY layer)
-    wlr_scene_node_raise_to_top(&server->drag_icon_parent->node);
 }
 
 // -----------------------------------------------------------------------------
@@ -381,7 +378,6 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     // defer {
     //     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, true);
     //     wlr_scene_node_set_position(&server->pointer.debug_visual->node, server->cursor->x - 6, server->cursor->y - 6);
-    //     wlr_scene_node_raise_to_top(&server->pointer.debug_visual->node);
     // };
 
     // Handle compositor interactions

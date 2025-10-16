@@ -548,7 +548,7 @@ void server_new_toplevel(wl_listener* listener, void* data)
     toplevel->wlr_surface = xdg_toplevel->base->surface;
     toplevel->wlr_surface->data = toplevel;
 
-    toplevel->scene_tree = wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
+    toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
 
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, toplevel_map);

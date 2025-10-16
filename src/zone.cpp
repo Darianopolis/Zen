@@ -18,7 +18,7 @@ wlr_box zone_apply_external_padding(wlr_box box)
 
 void zone_init(Server* server)
 {
-    server->zone.selector = wlr_scene_rect_create(&server->scene->tree, 0, 0, zone_color_inital.values);
+    server->zone.selector = wlr_scene_rect_create(server->layers[uint32_t(Strata::overlay)], 0, 0, zone_color_inital.values);
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 
@@ -134,8 +134,6 @@ void zone_process_cursor_motion(Server* server)
 
         wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
         wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);
-        // TODO: Put in top-most layer
-        wlr_scene_node_raise_to_top(&server->zone.selector->node);
     }
 }
 

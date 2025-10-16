@@ -81,9 +81,12 @@ void init(Server* server, const startup_options& /* options */)
     server->listeners.listen(&server->backend->events.new_output, server, server_new_output);
 
     server->scene = wlr_scene_create();
+    for (uint32_t i = 0; i < Strata::count; ++i) {
+        server->layers[i] = wlr_scene_tree_create(&server->scene->tree);
+    }
+
     server->scene_output_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
-    // TODO: drag icon should be in a layer above everything else (implement layer shell extension!)
-    server->drag_icon_parent = wlr_scene_tree_create(&server->scene->tree);
+    server->drag_icon_parent = wlr_scene_tree_create(server->layers[Strata::overlay]);
 
     server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
     server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, server_new_toplevel);
@@ -109,7 +112,7 @@ void init(Server* server, const startup_options& /* options */)
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
 	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
 
-    server->pointer.debug_visual = wlr_scene_rect_create(&server->scene->tree, 12, 12, Color{1, 0, 0, 1}.values);
+    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], 12, 12, Color{1, 0, 0, 1}.values);
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
     server->interaction_mode = InteractionMode::passthrough;

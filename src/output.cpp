@@ -133,7 +133,7 @@ void server_new_output(wl_listener* listener, void* data)
         log_info("Output [{}] matches no rules, using auto layout", wlr_output->name);
     }
 
-    output->background = wlr_scene_rect_create(&server->scene->tree, wlr_output->width, wlr_output->height, background_color.values);
+    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, background_color.values);
 
     wlr_output_layout_output* l_output = matched_rule
         ? wlr_output_layout_add(server->output_layout, wlr_output, matched_rule->x, matched_rule->y)
