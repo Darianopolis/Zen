@@ -48,9 +48,9 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
             return true;
         } else if (server->zone.moving) {
             if (server->zone.selecting) {
-                if (server->focused_toplevel) {
+                if (get_focused_toplevel(server)) {
                     wlr_box box = box_round_to_wlr_box(server->zone.final_zone);
-                    toplevel_set_bounds(server->focused_toplevel, box);
+                    toplevel_set_bounds(get_focused_toplevel(server), box);
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
@@ -74,29 +74,30 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
 
 void zone_process_cursor_motion(Server* server)
 {
-    auto output = get_output_at(server, {server->cursor->x, server->cursor->y});
-    auto bounds = output_get_bounds(output);
+    Output* output = get_output_at(server, {server->cursor->x, server->cursor->y});
+    wlr_box bounds = output_get_bounds(output);
 
-    Point point{ server->cursor->x, server->cursor->y };
+    Point point { server->cursor->x, server->cursor->y };
 
     Box pointer_zone = {};
     bool any_zones = false;
 
-    auto extent = Point(double(bounds.width) / zone_horizontal_zones, double(bounds.height) / zone_vertical_zones);
+    Point extent { double(bounds.width) / zone_horizontal_zones, double(bounds.height) / zone_vertical_zones };
     for (uint32_t zone_x = 0; zone_x < zone_horizontal_zones; ++zone_x) {
         for (uint32_t zone_y = 0; zone_y < zone_vertical_zones; ++zone_y) {
-            auto rect = Box {
+            Box rect {
                 .x = bounds.x + extent.x * zone_x,
                 .y = bounds.y + extent.y * zone_y,
                 .width = extent.x,
                 .height = extent.y,
             };
 
-            auto check_rect = rect;
-            check_rect.x -= zone_zone_selection_leeway.x;
-            check_rect.y -= zone_zone_selection_leeway.y;
-            check_rect.width += zone_zone_selection_leeway.x * 2;
-            check_rect.height += zone_zone_selection_leeway.y * 2;
+            Box check_rect {
+                .x      = rect.x      - zone_selection_leeway.x,
+                .y      = rect.y      - zone_selection_leeway.y,
+                .width  = rect.width  + zone_selection_leeway.x * 2,
+                .height = rect.height + zone_selection_leeway.y * 2,
+            };
 
             if (box_contains_point(check_rect, point)) {
 
@@ -125,7 +126,7 @@ void zone_process_cursor_motion(Server* server)
             server->zone.final_zone = server->zone.initial_zone = pointer_zone;
         }
 
-        auto b = box_round_to_wlr_box(server->zone.final_zone);
+        wlr_box b = box_round_to_wlr_box(server->zone.final_zone);
 
         wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
         wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);

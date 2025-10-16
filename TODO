@@ -62,10 +62,6 @@
 
 - xdg-activation
 - Support xdg-positioner requests to position child windows
-- Fix keyboard focus
-   - Correctly unfocus keyboard when grab ends
-   - Fix desync between server.focused_toplevel and seat.keyboard_state.focused_surface
-   - seat.events.keyboard_grab_[begin/end]
 - Use updated protocol version
    - xdg_shell -> version 7
 - Debug options

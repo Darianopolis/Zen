@@ -1,3 +1,4 @@
+#include "pch.hpp"
 #include "core.hpp"
 
 Output* get_output_at(Server* server, Point point)
@@ -10,8 +11,6 @@ Output* get_nearest_output_to_point(Server* server, Point point)
     double closest_distance = INFINITY;
     wlr_output* closest = nullptr;
 
-    log_trace("Finding nearest output to ({:.1f}, {:.1f})", point.x, point.y);
-
     wlr_output_layout_output* layout_output;
     wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
         wlr_box box;
@@ -20,7 +19,6 @@ Output* get_nearest_output_to_point(Server* server, Point point)
         wlr_box_closest_point(&box, point.x, point.y, &on_output.x, &on_output.y);
 
         double distance = distance_between(point, on_output);
-        log_trace("{} Output[{}] ({:.1f}, {:.1f}) = {:.1f}", distance < closest_distance ? "*" : " ", layout_output->output->name, on_output.x, on_output.y, distance);
         if (distance < closest_distance) {
             closest_distance = distance;
             closest = layout_output->output;

@@ -19,37 +19,41 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
     {
         case XKB_KEY_Escape:
             wl_display_terminate(server->display);
-            return true;
+            break;
         case XKB_KEY_Tab:
         case XKB_KEY_ISO_Left_Tab:
             cycle_focus_immediate(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
-            return true;
+            break;
         case XKB_KEY_t:
             spawn("konsole", {"konsole"});
-            return true;
+            break;
         case XKB_KEY_d:
             spawn("wofi", {"wofi", "--show", "drun"});
-            return true;
+            break;
         case XKB_KEY_i:
             spawn("xeyes", {"xeyes"});
-            return true;
+            break;
         case XKB_KEY_g:
             spawn("steam", {"steam"});
-            return true;
+            break;
+        case XKB_KEY_s:
+            toplevel_unfocus(get_focused_toplevel(server), false);
+            wlr_seat_pointer_clear_focus(server->seat);
+            break;
         case XKB_KEY_q:
-            if (server->focused_toplevel && server->focused_toplevel->xdg_toplevel()) {
-                wlr_xdg_toplevel_send_close(server->focused_toplevel->xdg_toplevel());
+            if (Toplevel* focused = get_focused_toplevel(server)) {
+                wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
             }
-            return true;
+            break;
         case XKB_KEY_f:
-            if (server->focused_toplevel) {
-                bool fullscreen = server->focused_toplevel->xdg_toplevel()->current.fullscreen;
-                toplevel_set_fullscreen(server->focused_toplevel, !fullscreen);
+            if (Toplevel* focused = get_focused_toplevel(server)) {
+                toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
             }
-            return true;
+            break;
         default:
             return false;
     }
+    return true;
 }
 
 void keyboard_handle_modifiers(wl_listener* listener, void*)
@@ -107,6 +111,14 @@ void keyboard_handle_destroy(wl_listener* listener, void*)
     delete keyboard;
 
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
+}
+
+void seat_keyboard_focus_change(wl_listener*, void* data)
+{
+    wlr_seat_keyboard_focus_change_event* event = static_cast<wlr_seat_keyboard_focus_change_event*>(data);
+
+    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) toplevel_update_border(toplevel);
+    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_border(toplevel);
 }
 
 void server_new_keyboard(Server* server, wlr_input_device* device)
@@ -222,8 +234,7 @@ void seat_drag_icon_destroy(wl_listener* listener, void*)
 {
     Server* server = listener_userdata<Server*>(listener);
 
-    // Refocus last focused toplevel
-    toplevel_focus(server->focused_toplevel);
+    // TODO: Refocus last focused toplevel
 
     process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
 
@@ -385,7 +396,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint; constraint && !server->debug.ignore_mouse_constraints) {
 
             Surface* surface = Surface::from(constraint->surface);
-            if (surface == server->focused_toplevel) {
+            if (surface == get_focused_toplevel(server)) {
 
                 wlr_box bounds = surface_get_bounds(surface);
                 sx = server->cursor->x - bounds.x;
@@ -492,7 +503,7 @@ void server_cursor_button(wl_listener* listener, void* data)
     if (toplevel) {
         toplevel_focus(toplevel);
     } else {
-        toplevel_unfocus(server->focused_toplevel);
+        toplevel_unfocus(get_focused_toplevel(server), false);
     }
 
     // Check for move/size interaction begin

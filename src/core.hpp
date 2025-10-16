@@ -6,9 +6,7 @@
 
 // -----------------------------------------------------------------------------
 
-#ifndef NOISY_RESIZE
-# define NOISY_RESIZE 0
-#endif
+#define NOISY_RESIZE 0
 
 // -----------------------------------------------------------------------------
 
@@ -25,7 +23,7 @@ static constexpr Color zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
 
 static constexpr uint32_t zone_horizontal_zones = 6;
 static constexpr uint32_t zone_vertical_zones   = 2;
-static constexpr Point    zone_zone_selection_leeway = { 200, 200 };
+static constexpr Point    zone_selection_leeway = { 200, 200 };
 static constexpr struct {
     int left   = 7 + border_width;
     int top    = 7 + border_width;
@@ -76,7 +74,9 @@ struct Server
     } debug;
 
     wlr_scene* scene;
+    wlr_output_layout* output_layout;
     wlr_scene_output_layout* scene_output_layout;
+
     wlr_compositor* compositor;
     wlr_subcompositor* subcompositor;
     wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
@@ -106,9 +106,6 @@ struct Server
         uint32_t resize_edges;
     } movesize;
 
-    Toplevel* focused_toplevel;
-
-    wlr_output_layout* output_layout;
 
     uint32_t modifier_key;
 
@@ -222,6 +219,8 @@ bool     is_main_mod_down( Server*);
 
 // ---- Keyboard ---------------------------------------------------------------
 
+void seat_keyboard_focus_change(wl_listener*, void*);
+
 void keyboard_handle_modifiers(wl_listener*, void*);
 void keyboard_handle_key(      wl_listener*, void*);
 void keyboard_handle_destroy(  wl_listener*, void*);
@@ -234,6 +233,7 @@ void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device *, dou
 
 void seat_request_set_cursor(      wl_listener*, void*);
 void seat_pointer_focus_change(    wl_listener*, void*);
+
 void server_cursor_motion(         wl_listener*, void*);
 void server_cursor_motion_absolute(wl_listener*, void*);
 void server_cursor_button(         wl_listener*, void*);
@@ -289,8 +289,9 @@ wlr_box surface_get_coord_system(Surface*);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
+Toplevel*    get_focused_toplevel(     Server*);
 void         toplevel_focus(           Toplevel*);
-void         toplevel_unfocus(         Toplevel*);
+void         toplevel_unfocus(         Toplevel*, bool force);
 void         toplevel_resize(          Toplevel*, int width, int height);
 void         toplevel_set_bounds(      Toplevel*, wlr_box);
 void         toplevel_set_activated(   Toplevel*, bool active);

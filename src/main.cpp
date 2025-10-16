@@ -118,6 +118,7 @@ void init(Server* server, const startup_options& /* options */)
 
     server->seat = wlr_seat_create(server->display, "seat0");
     server->listeners.listen(&              server->seat->events.request_set_cursor,    server, seat_request_set_cursor);
+    server->listeners.listen(&server->seat->keyboard_state.events.focus_change,         server, seat_keyboard_focus_change);
     server->listeners.listen(&server->seat->pointer_state.events.focus_change,          server, seat_pointer_focus_change);
     server->listeners.listen(&              server->seat->events.request_set_selection, server, seat_request_set_selection);
     server->listeners.listen(&              server->seat->events.request_start_drag,    server, seat_request_start_drag);

@@ -1,6 +1,15 @@
 #include "pch.hpp"
 #include "core.hpp"
 
+Toplevel* get_focused_toplevel(Server* server)
+{
+    struct wlr_surface* wlr_surface = server->seat->keyboard_state.focused_surface;
+    if (!wlr_surface) return nullptr;
+    Toplevel* toplevel = Toplevel::from(wlr_surface);
+    if (!toplevel) log_warn("Focused surface ({}) is not a Toplevel!", (void*)wlr_surface);
+    return toplevel;
+}
+
 void toplevel_update_border(Toplevel* toplevel)
 {
     static constexpr uint32_t left = 0;
@@ -25,7 +34,7 @@ void toplevel_update_border(Toplevel* toplevel)
             wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
             wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
             wlr_scene_rect_set_color(toplevel->border[i],
-                toplevel->server->focused_toplevel == toplevel
+                get_focused_toplevel(toplevel->server) == toplevel
                     ? border_color_focused.values
                     : border_color_unfocused.values);
         } else {
@@ -229,7 +238,7 @@ void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
 
     if (backwards) {
         for (Toplevel* toplevel : server->toplevels) {
-            if (toplevel == server->focused_toplevel) continue;
+            if (toplevel == get_focused_toplevel(toplevel->server)) continue;
             if (!in_cycle(toplevel)) continue;
 
             toplevel_focus(toplevel);
@@ -241,7 +250,7 @@ void cycle_focus_immediate(Server* server, wlr_cursor* cursor, bool backwards)
             Toplevel* toplevel = server->toplevels[i];
 
             if (!in_cycle(toplevel)) continue;
-            if ((cursor && !first) || toplevel == server->focused_toplevel) {
+            if ((cursor && !first) || toplevel == get_focused_toplevel(toplevel->server)) {
                 first = toplevel;
                 continue;
             }
@@ -266,8 +275,6 @@ void toplevel_focus(Toplevel* toplevel)
     wlr_surface* prev_surface = seat->keyboard_state.focused_surface;
     wlr_surface* surface = toplevel_get_surface(toplevel);
 
-    server->focused_toplevel = toplevel;
-
     // TODO: This causes issues when server.focused_toplevel and keyboard.focused_surface are desyncd
     if (prev_surface == surface) return;
 
@@ -285,29 +292,27 @@ void toplevel_focus(Toplevel* toplevel)
         wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
 
-    toplevel_update_border(toplevel);
-
     // TODO: Tidy up and consolidate API for handling (re)focus
     process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
 }
 
-void toplevel_unfocus(Toplevel* toplevel)
+void toplevel_unfocus(Toplevel* toplevel, bool force)
 {
     if (!toplevel) return;
-    if (toplevel->server->focused_toplevel != toplevel)
+    if (get_focused_toplevel(toplevel->server) != toplevel)
         return;
 
-    toplevel->server->focused_toplevel = nullptr;
-    wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
-    // TODO: If keyboard is grabbed this leaves server.focused_toplevel and keyboard.focused_surface desynced!
-
-    toplevel_update_border(toplevel);
+    if (force) {
+        wlr_seat_keyboard_clear_focus(toplevel->server->seat);
+    } else {
+        wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
+    }
 }
 
 Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
 {
     Toplevel* toplevel = nullptr;
-    walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, [&](wlr_scene_node* node, double node_x, double node_y) {
+    auto fn = [&](wlr_scene_node* node, double node_x, double node_y) {
         if (!node || node->type != WLR_SCENE_NODE_BUFFER) return true;
 
         wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
@@ -329,7 +334,8 @@ Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_
         }
 
         return !tree;
-    });
+    };
+    walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
 
     return toplevel;
 }
@@ -354,7 +360,7 @@ void toplevel_unmap(wl_listener* listener, void*)
 
     // TODO: Handle toplevel unmap during zone operation
 
-    toplevel_unfocus(toplevel);
+    toplevel_unfocus(toplevel, true);
     std::erase(toplevel->server->toplevels, toplevel);
     if (!toplevel->server->toplevels.empty()) {
         toplevel_focus(toplevel->server->toplevels.back());

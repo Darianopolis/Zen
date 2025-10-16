@@ -28,6 +28,10 @@ constexpr auto ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------
 
+#define FUNC_REF(func) [](void* d, auto... args) { return (*static_cast<decltype(func)*>(d))(std::forward<decltype(args)>(args)...); }, &func
+
+// -----------------------------------------------------------------------------
+
 struct Color
 {
     float values[4];
@@ -71,10 +75,10 @@ wlr_box box_round_to_wlr_box(Box in)
 constexpr
 Box box_outer(Box a, Box b)
 {
-    auto left   = std::min(a.x,            b.x);
-    auto top    = std::min(a.y,            b.y);
-    auto right  = std::max(a.x + a.width,  b.x + b.width);
-    auto bottom = std::max(a.y + a.height, b.y + b.height);
+    double left   = std::min(a.x,            b.x);
+    double top    = std::min(a.y,            b.y);
+    double right  = std::max(a.x + a.width,  b.x + b.width);
+    double bottom = std::max(a.y + a.height, b.y + b.height);
     return {
         .x = left,
         .y = top,
@@ -86,10 +90,10 @@ Box box_outer(Box a, Box b)
 constexpr
 bool box_contains_point(Box box, Point p)
 {
-    auto l = box.x;
-    auto t = box.y;
-    auto r = box.x + box.width;
-    auto b = box.y + box.height;
+    double l = box.x;
+    double t = box.y;
+    double r = box.x + box.width;
+    double b = box.y + box.height;
     return p.x >= l && p.x < r && p.y >= t && p.y < b;
 };
 
@@ -220,23 +224,4 @@ struct ListenerSet
 
 // -----------------------------------------------------------------------------
 
-template<typename Fn>
-bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double sy, Fn&& for_each)
-{
-    if (!node->enabled) return true;
-    if (node->type == WLR_SCENE_NODE_TREE) {
-        wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
-        wlr_scene_node* child;
-        wl_list_for_each_reverse(child, &tree->children, link) {
-            double nx = sx + child->x;
-            double ny = sy + child->y;
-            if (!walk_scene_tree_reverse_depth_first(child, nx, ny, std::forward<Fn>(for_each))) {
-                return false;
-            }
-        }
-    } else {
-        if (!for_each(node, sx, sy)) return false;
-    }
-
-    return true;
-}
+bool walk_scene_tree_reverse_depth_first(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data);
