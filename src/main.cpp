@@ -112,7 +112,7 @@ void init(Server* server, const startup_options& /* options */)
     server->pointer.debug_visual = wlr_scene_rect_create(&server->scene->tree, 12, 12, Color{1, 0, 0, 1}.values);
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
-    server->cursor_mode = CursorMode::passthrough;
+    server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, server_cursor_motion);
     server->listeners.listen(&server->cursor->events.motion_absolute, server, server_cursor_motion_absolute);
     server->listeners.listen(&server->cursor->events.button,          server, server_cursor_button);

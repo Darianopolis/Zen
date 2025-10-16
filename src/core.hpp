@@ -47,7 +47,7 @@ static constexpr double libinput_mouse_speed = -0.66;
 
 // -----------------------------------------------------------------------------
 
-enum class CursorMode
+enum class InteractionMode
 {
     passthrough,
     pressed,
@@ -84,6 +84,7 @@ struct Server
 
     wlr_xdg_shell* xdg_shell;
 
+    bool cursor_visible = true;
     wlr_cursor* cursor;
     wlr_xcursor_manager* cursor_manager;
 
@@ -97,7 +98,7 @@ struct Server
         wlr_scene_rect* debug_visual;
     } pointer;
 
-    CursorMode cursor_mode;
+    InteractionMode interaction_mode;
 
     struct {
         Toplevel* grabbed_toplevel;
@@ -212,6 +213,8 @@ struct Popup : Surface
 
 // ---- Policy -----------------------------------------------------------------
 
+void reset_interaction_state(Server*);
+
 void focus_cycle_begin(Server*, wlr_cursor*);
 void focus_cycle_step( Server*, wlr_cursor*, bool backwards);
 void focus_cycle_end(  Server*);
@@ -230,10 +233,10 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 
 // ---- Pointer ----------------------------------------------------------------
 
-void reset_cursor_mode(    Server*);
 void process_cursor_resize(Server*);
 void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device *, double dx, double dy, double dx_unaccel, double dy_unaccel);
 
+void seat_reset_cursor(Server*);
 void seat_request_set_cursor(      wl_listener*, void*);
 void seat_pointer_focus_change(    wl_listener*, void*);
 
@@ -308,7 +311,7 @@ Toplevel* get_toplevel_at(        Server*, double lx, double ly, wlr_surface**, 
 void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 
-void toplevel_begin_interactive(Toplevel*, CursorMode, uint32_t edges);
+void toplevel_begin_interactive(Toplevel*, InteractionMode, uint32_t edges);
 
 void toplevel_map(               wl_listener*, void*);
 void toplevel_unmap(             wl_listener*, void*);

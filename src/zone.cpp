@@ -30,20 +30,24 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
 
     if (event->button == BTN_LEFT) {
         if (pressed && is_main_mod_down(server) && !(get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
-            double sx, sy;
-            wlr_surface* surface = nullptr;
-            Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-            if (toplevel) {
-                toplevel_focus(toplevel);
+            if (server->cursor_visible) {
+                double sx, sy;
+                wlr_surface* surface = nullptr;
+                Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+                if (toplevel) {
+                    toplevel_focus(toplevel);
 
-                if (toplevel_is_interactable(toplevel)) {
-                    wlr_scene_rect_set_color(server->zone.selector, zone_color_inital.values);
-                    wlr_scene_node_set_enabled(&server->zone.selector->node, true);
-                    server->zone.selecting = false;
-                    server->zone.moving = true;
-                    server->cursor_mode = CursorMode::zone;
-                    zone_process_cursor_motion(server);
+                    if (toplevel_is_interactable(toplevel)) {
+                        wlr_scene_rect_set_color(server->zone.selector, zone_color_inital.values);
+                        wlr_scene_node_set_enabled(&server->zone.selector->node, true);
+                        server->zone.selecting = false;
+                        server->zone.moving = true;
+                        server->interaction_mode = InteractionMode::zone;
+                        zone_process_cursor_motion(server);
+                    }
                 }
+            } else {
+                log_warn("Tried to initiate zone interaction but cursor not visible");
             }
             return true;
         } else if (server->zone.moving) {
@@ -54,7 +58,7 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
-            server->cursor_mode = CursorMode::passthrough;
+            server->interaction_mode = InteractionMode::passthrough;
             server->zone.moving = false;
             return true;
         }
@@ -137,13 +141,13 @@ void zone_process_cursor_motion(Server* server)
 
 void zone_begin_selection(Server* server)
 {
-    server->cursor_mode = CursorMode::zone;
+    server->interaction_mode = InteractionMode::zone;
 
     zone_process_cursor_motion(server);
 }
 
 void zone_end_selection(Server* server)
 {
-    server->cursor_mode = CursorMode::passthrough;
+    server->interaction_mode = InteractionMode::passthrough;
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }

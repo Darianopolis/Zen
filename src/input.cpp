@@ -23,11 +23,11 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
         case XKB_KEY_Tab:
         case XKB_KEY_ISO_Left_Tab: {
             bool do_cycle = true;
-            if (server->cursor_mode ==  CursorMode::passthrough) {
+            if (server->interaction_mode ==  InteractionMode::passthrough) {
                 do_cycle = get_focused_toplevel(server);
                 focus_cycle_begin(server, nullptr);
             }
-            if (do_cycle && server->cursor_mode == CursorMode::focus_cycle) {
+            if (do_cycle && server->interaction_mode == InteractionMode::focus_cycle) {
                 focus_cycle_step(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
             }
             break;
@@ -99,7 +99,7 @@ void keyboard_handle_key(wl_listener* listener, void* data)
         }
 
         // TODO: Separate out into centralized input handle callback
-        if (event->state == WL_KEYBOARD_KEY_STATE_RELEASED && server->cursor_mode == CursorMode::focus_cycle) {
+        if (event->state == WL_KEYBOARD_KEY_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
             if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right) {
                 focus_cycle_end(server);
             }
@@ -193,6 +193,12 @@ void server_new_input(wl_listener* listener, void* data)
     wlr_seat_set_capabilities(server->seat, caps);
 }
 
+void seat_reset_cursor(Server* server)
+{
+    wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+    server->cursor_visible = true;
+}
+
 void seat_request_set_cursor(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
@@ -204,11 +210,12 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     // A client may only request an empty cursor if they have keyboard focus
     if (!event->surface && server->seat->keyboard_state.focused_client != event->seat_client) {
         log_warn("Client attempted to hide the cursor without keyboard focus, reset to default cursor");
-        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+        seat_reset_cursor(server);
         return;
     }
 
     wlr_cursor_set_surface(server->cursor, event->surface, event->hotspot_x, event->hotspot_y);
+    server->cursor_visible = bool(event->surface);
 }
 
 void seat_pointer_focus_change(wl_listener* listener, void* data)
@@ -217,7 +224,7 @@ void seat_pointer_focus_change(wl_listener* listener, void* data)
 
     wlr_seat_pointer_focus_change_event* event = static_cast<wlr_seat_pointer_focus_change_event*>(data);
     if (!event->new_surface) {
-        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+        seat_reset_cursor(server);
     }
 }
 
@@ -325,15 +332,15 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
 
 // -----------------------------------------------------------------------------
 
-void reset_cursor_mode(Server* server)
+void reset_interaction_state(Server* server)
 {
-    if (server->cursor_mode == CursorMode::focus_cycle) {
+    if (server->interaction_mode == InteractionMode::focus_cycle) {
         focus_cycle_end(server);
     }
-    if (server->cursor_mode == CursorMode::zone) {
+    if (server->interaction_mode == InteractionMode::zone) {
         zone_end_selection(server);
     }
-    server->cursor_mode = CursorMode::passthrough;
+    server->interaction_mode = InteractionMode::passthrough;
     server->movesize.grabbed_toplevel = nullptr;
 }
 
@@ -379,15 +386,15 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
     // Handle compositor interactions
 
-    if (server->cursor_mode == CursorMode::move) {
+    if (server->interaction_mode == InteractionMode::move) {
         wlr_cursor_move(server->cursor, device, dx, dy);
         process_cursor_move(server);
         return;
-    } else if (server->cursor_mode == CursorMode::resize) {
+    } else if (server->interaction_mode == InteractionMode::resize) {
         wlr_cursor_move(server->cursor, device, dx, dy);
         process_cursor_resize(server);
         return;
-    } else if (server->cursor_mode == CursorMode::zone) {
+    } else if (server->interaction_mode == InteractionMode::zone) {
         wlr_cursor_move(server->cursor, device, dx, dy);
         zone_process_cursor_motion(server);
         return;
@@ -398,7 +405,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     double sx = 0, sy = 0;
     wlr_seat* seat = server->seat;
     struct wlr_surface* wlr_surface = nullptr;
-    if (Surface* surface; server->cursor_mode == CursorMode::pressed && (surface = Surface::from(seat->pointer_state.focused_surface))) {
+    if (Surface* surface; server->interaction_mode == InteractionMode::pressed && (surface = Surface::from(seat->pointer_state.focused_surface))) {
         wlr_surface = surface->wlr_surface;
         wlr_box coord_system = surface_get_coord_system(surface);
         sx = server->cursor->x - coord_system.x;
@@ -442,7 +449,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     // Update xcursor
 
     if (!wlr_surface) {
-        wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+        seat_reset_cursor(server);
     }
 
     // Notify
@@ -504,7 +511,7 @@ void server_cursor_button(wl_listener* listener, void* data)
 
     // Handle interrupt focus cycle
 
-    bool focus_cycle_interrupted = event->state == WL_POINTER_BUTTON_STATE_PRESSED && server->cursor_mode == CursorMode::focus_cycle;
+    bool focus_cycle_interrupted = event->state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle;
     if (focus_cycle_interrupted) {
         focus_cycle_end(server);
         focus_cycle_interrupted = true;
@@ -523,7 +530,7 @@ void server_cursor_button(wl_listener* listener, void* data)
 
     // Zone interaction
 
-    if (server->cursor_mode == CursorMode::passthrough || server->cursor_mode == CursorMode::zone) {
+    if (server->interaction_mode == InteractionMode::passthrough || server->interaction_mode == InteractionMode::zone) {
         if (zone_process_cursor_button(server, event)) return;
     }
 
@@ -531,7 +538,7 @@ void server_cursor_button(wl_listener* listener, void* data)
 
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
         // TODO: Do we want this reset cursor_mode from `pressed` if *any* button is released?
-        reset_cursor_mode(server);
+        reset_interaction_state(server);
         wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
         return;
     }
@@ -545,20 +552,24 @@ void server_cursor_button(wl_listener* listener, void* data)
         toplevel_unfocus(get_focused_toplevel(server), false);
     }
 
-    server->cursor_mode = CursorMode::pressed;
+    server->interaction_mode = InteractionMode::pressed;
 
     // Check for move/size interaction begin
 
     if (toplevel_under_cursor && is_main_mod_down(server)) {
         if (event->button == BTN_LEFT && (get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
-            toplevel_begin_interactive(toplevel_under_cursor, CursorMode::move, 0);
+            if (server->cursor_visible) {
+                toplevel_begin_interactive(toplevel_under_cursor, InteractionMode::move, 0);
+            } else {
+                log_warn("Tried to initiate move but cursor not visible");
+            }
             return;
         } else if (event->button == BTN_RIGHT) {
             wlr_box bounds = surface_get_bounds(toplevel_under_cursor);
             int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
             int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
 
-            CursorMode type = CursorMode::resize;
+            InteractionMode type = InteractionMode::resize;
             uint32_t edges = 0;
 
             if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
@@ -568,12 +579,20 @@ void server_cursor_button(wl_listener* listener, void* data)
             else if (nine_slice_y > 1) edges |= WLR_EDGE_BOTTOM;
 
             // If no edges selected, must be center - switch to move
-            if (!edges) type = CursorMode::move;
+            if (!edges) type = InteractionMode::move;
 
-            toplevel_begin_interactive(toplevel_under_cursor, type, edges);
+            if (server->cursor_visible) {
+                toplevel_begin_interactive(toplevel_under_cursor, type, edges);
+            } else {
+                log_warn("Tried to initiate resize but cursor not visible");
+            }
             return;
         } else if (event->button == BTN_MIDDLE) {
-            wlr_xdg_toplevel_send_close(toplevel_under_cursor->xdg_toplevel());
+            if (server->cursor_visible) {
+                wlr_xdg_toplevel_send_close(toplevel_under_cursor->xdg_toplevel());
+            } else {
+                log_warn("Tried to close-under-cursor but cursor not visible");
+            }
             return;
         }
     }
@@ -589,11 +608,15 @@ void server_cursor_axis(wl_listener* listener, void* data)
     wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
 
     if (is_main_mod_down(server) && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        if (server->cursor_mode ==  CursorMode::passthrough) {
-            focus_cycle_begin(server, server->cursor);
-        }
-        if (server->cursor_mode == CursorMode::focus_cycle) {
-            focus_cycle_step(server, server->cursor, event->delta > 0);
+        if (server->cursor_visible) {
+            if (server->interaction_mode ==  InteractionMode::passthrough) {
+                focus_cycle_begin(server, server->cursor);
+            }
+            if (server->interaction_mode == InteractionMode::focus_cycle) {
+                focus_cycle_step(server, server->cursor, event->delta > 0);
+            }
+        } else {
+            log_warn("Tried to focus scroll but cursor not visible");
         }
 
         return;

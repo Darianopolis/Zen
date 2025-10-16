@@ -258,7 +258,7 @@ void focus_cycle_toplevel_set_enabled(Toplevel* toplevel, bool enabled)
 
 void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
-    server->cursor_mode = CursorMode::focus_cycle;
+    server->interaction_mode = InteractionMode::focus_cycle;
 
     toplevel_unfocus(get_focused_toplevel(server), true);
 
@@ -274,7 +274,7 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 
 void focus_cycle_end(Server* server)
 {
-    server->cursor_mode = CursorMode::passthrough;
+    server->interaction_mode = InteractionMode::passthrough;
 
     Toplevel* focused = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
@@ -415,9 +415,9 @@ void toplevel_unmap(wl_listener* listener, void*)
 {
     Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
 
-    // Reset cursor mode if grabbed toplevel was unmapped
+    // Reset interaction mode if grabbed toplevel was unmapped
     if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
-        reset_cursor_mode(unmapped_toplevel->server);
+        reset_interaction_state(unmapped_toplevel->server);
     }
 
     // TODO: Handle toplevel unmap during zone operation
@@ -488,16 +488,16 @@ bool toplevel_is_interactable(Toplevel* toplevel)
     return true;
 }
 
-void toplevel_begin_interactive(Toplevel* toplevel, CursorMode mode, uint32_t edges)
+void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode, uint32_t edges)
 {
     if (!toplevel_is_interactable(toplevel)) return;
 
     Server* server = toplevel->server;
 
     server->movesize.grabbed_toplevel = toplevel;
-    server->cursor_mode = mode;
+    server->interaction_mode = mode;
 
-    if (mode == CursorMode::move) {
+    if (mode == InteractionMode::move) {
         server->movesize.grab_x = server->cursor->x - toplevel->scene_tree->node.x;
         server->movesize.grab_y = server->cursor->y - toplevel->scene_tree->node.y;
     } else {
