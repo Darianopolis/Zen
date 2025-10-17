@@ -221,14 +221,11 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     server->cursor_visible = bool(event->surface);
 }
 
-void seat_pointer_focus_change(wl_listener* listener, void* data)
+void seat_pointer_focus_change(wl_listener* listener, void*)
 {
     Server* server = listener_userdata<Server*>(listener);
 
-    wlr_seat_pointer_focus_change_event* event = static_cast<wlr_seat_pointer_focus_change_event*>(data);
-    if (!event->new_surface) {
-        seat_reset_cursor(server);
-    }
+    seat_reset_cursor(server);
 }
 
 void seat_request_set_selection(wl_listener* listener, void* data)
@@ -347,30 +344,34 @@ void reset_interaction_state(Server* server)
 void process_cursor_move(Server* server)
 {
     Toplevel* toplevel = server->movesize.grabbed_toplevel;
-    wlr_scene_node_set_position(&toplevel->scene_tree->node, server->cursor->x - server->movesize.grab_x, server->cursor->y - server->movesize.grab_y);
+
+    wlr_box bounds = surface_get_bounds(toplevel);
+    bounds.x = server->movesize.grab_bounds.x + int(server->cursor->x - server->movesize.grab.x);
+    bounds.y = server->movesize.grab_bounds.y + int(server->cursor->y - server->movesize.grab.y);
+    toplevel_set_bounds(toplevel, bounds);
 }
 
 void process_cursor_resize(Server* server)
 {
     auto& movesize = server->movesize;
 
-    int border_x = int(server->cursor->x - movesize.grab_x);
-    int border_y = int(server->cursor->y - movesize.grab_y);
+    int dx = int(server->cursor->x - movesize.grab.x);
+    int dy = int(server->cursor->y - movesize.grab.y);
 
-    int left   = movesize.grab_geobox.x;
-    int top    = movesize.grab_geobox.y;
-    int right  = movesize.grab_geobox.x + movesize.grab_geobox.width;
-    int bottom = movesize.grab_geobox.y + movesize.grab_geobox.height;
+    int left   = movesize.grab_bounds.x;
+    int top    = movesize.grab_bounds.y;
+    int right  = movesize.grab_bounds.x + movesize.grab_bounds.width;
+    int bottom = movesize.grab_bounds.y + movesize.grab_bounds.height;
 
-    if      (movesize.resize_edges & WLR_EDGE_TOP)    top    = std::min(border_y, bottom - 1);
-    else if (movesize.resize_edges & WLR_EDGE_BOTTOM) bottom = std::max(border_y, top    + 1);
+    if      (movesize.resize_edges & WLR_EDGE_TOP)    top    = std::min(top    + dy, bottom - 1);
+    else if (movesize.resize_edges & WLR_EDGE_BOTTOM) bottom = std::max(bottom + dy, top    + 1);
 
-    if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(border_x, right - 1);
-    else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(border_x, left  + 1);
+    if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(left  + dx, right - 1);
+    else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(right + dx, left  + 1);
 
     toplevel_set_bounds(movesize.grabbed_toplevel, {
-        .x = left - movesize.grabbed_toplevel->xdg_toplevel()->base->geometry.x,
-        .y = top  - movesize.grabbed_toplevel->xdg_toplevel()->base->geometry.y,
+        .x = left,
+        .y = top,
         .width  = right  - left,
         .height = bottom - top,
     });
@@ -378,25 +379,27 @@ void process_cursor_resize(Server* server)
 
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, double dx, double dy, double dx_unaccel, double dy_unaccel)
 {
-    // defer {
+    // Defer _ {
     //     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, true);
     //     wlr_scene_node_set_position(&server->pointer.debug_visual->node, server->cursor->x - 6, server->cursor->y - 6);
     // };
 
     // Handle compositor interactions
 
-    if (server->interaction_mode == InteractionMode::move) {
-        wlr_cursor_move(server->cursor, device, dx, dy);
-        process_cursor_move(server);
-        return;
-    } else if (server->interaction_mode == InteractionMode::resize) {
-        wlr_cursor_move(server->cursor, device, dx, dy);
-        process_cursor_resize(server);
-        return;
-    } else if (server->interaction_mode == InteractionMode::zone) {
-        wlr_cursor_move(server->cursor, device, dx, dy);
-        zone_process_cursor_motion(server);
-        return;
+    if (time_msecs) {
+        if (server->interaction_mode == InteractionMode::move) {
+            wlr_cursor_move(server->cursor, device, dx, dy);
+            process_cursor_move(server);
+            return;
+        } else if (server->interaction_mode == InteractionMode::resize) {
+            wlr_cursor_move(server->cursor, device, dx, dy);
+            process_cursor_resize(server);
+            return;
+        } else if (server->interaction_mode == InteractionMode::zone) {
+            wlr_cursor_move(server->cursor, device, dx, dy);
+            zone_process_cursor_motion(server);
+            return;
+        }
     }
 
     // Get focused surface

@@ -36,6 +36,19 @@ Output* get_nearest_output_to_box(Server* server, wlr_box box)
 
 Output* get_output_for_surface(Surface* surface)
 {
+    if (surface->role == SurfaceRole::layer_surface) {
+        wlr_output_layout_output* layout_output;
+        wl_list_for_each(layout_output, &surface->server->output_layout->outputs, link) {
+            Output* output = Output::from(layout_output->output);
+            for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
+                for (LayerSurface* ls : output->layers[layer]) {
+                    if (ls == surface) return output;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     return get_nearest_output_to_box(surface->server, surface_get_bounds(surface));
 }
 
@@ -78,6 +91,12 @@ void output_destroy(wl_listener* listener, void*)
     Output* output = listener_userdata<Output*>(listener);
 
     wlr_scene_node_destroy(&output->background->node);
+
+    for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
+        for (LayerSurface* layer_surface : output->layers[layer]) {
+            wlr_layer_surface_v1_destroy(layer_surface->wlr_layer_surface());
+        }
+    }
 
     delete output;
 }
@@ -141,8 +160,6 @@ void server_output_layout_change(wl_listener* listener, void*)
 
     // TODO: Handled output removal, addition
 
-    // TODO: On output removal, reparent or close orphaned LayerSurfece elements
-
     wlr_output_layout_output* layout_output;
     wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
         output_reconfigure(Output::from(layout_output->output));
@@ -153,6 +170,8 @@ void server_output_layout_change(wl_listener* listener, void*)
 
 void output_reconfigure(Output* output)
 {
+    if (!output) return;
+
     output->workarea = output_get_bounds(output);
 
     wlr_scene_node_set_position(&output->background->node, output->workarea.x, output->workarea.y);

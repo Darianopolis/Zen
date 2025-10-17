@@ -28,11 +28,10 @@ static constexpr struct {
     int left   = 7 + border_width;
     int top    = 7 + border_width;
     int right  = 7 + border_width;
-    int bottom = 7 + border_width;
+    int bottom = 4 + border_width;
 } zone_external_padding_ltrb;
 static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 
-static constexpr uint32_t additional_outputs = 0;
 struct OutputRule { const char* name; int x, y; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0 },
@@ -125,8 +124,8 @@ struct Server
 
     struct {
         Toplevel* grabbed_toplevel;
-        double grab_x, grab_y;
-        wlr_box grab_geobox;
+        Point grab;
+        wlr_box grab_bounds;
         uint32_t resize_edges;
     } movesize;
 
@@ -254,7 +253,6 @@ struct LayerSurface : Surface
     wlr_layer_surface_v1* wlr_layer_surface() const { return wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface); }
 
     wlr_scene_layer_surface_v1* scene_layer_surface;
-    Output* output;
 };
 
 // ---- Policy -----------------------------------------------------------------
@@ -355,7 +353,6 @@ void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 void toplevel_resize(          Toplevel*, int width, int height);
 void toplevel_set_bounds(      Toplevel*, wlr_box);
 void toplevel_set_activated(   Toplevel*, bool active);
-bool toplevel_wants_fullscreen(Toplevel*);
 void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
 void toplevel_update_border(   Toplevel*);
 bool toplevel_is_interactable( Toplevel*);
@@ -369,6 +366,7 @@ void toplevel_map(               wl_listener*, void*);
 void toplevel_unmap(             wl_listener*, void*);
 void toplevel_commit(            wl_listener*, void*);
 void toplevel_destroy(           wl_listener*, void*);
+void toplevel_request_minimize(  wl_listener*, void*);
 void toplevel_request_maximize(  wl_listener*, void*);
 void toplevel_request_fullscreen(wl_listener*, void*);
 void server_new_toplevel(        wl_listener*, void*);

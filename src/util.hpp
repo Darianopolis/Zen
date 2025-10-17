@@ -5,12 +5,6 @@
 
 // -----------------------------------------------------------------------------
 
-#define CONCAT_(a, b) a##b
-#define CONCAT(a, b) CONCAT_(a, b)
-#define UNIQUE_IDENT() CONCAT(_unique_, __COUNTER__)
-
-// -----------------------------------------------------------------------------
-
 template<typename Fn>
 struct Defer
 {
@@ -19,8 +13,6 @@ struct Defer
     Defer(Fn&& fn): fn(std::move(fn)) {}
     ~Defer() { fn(); };
 };
-
-#define defer Defer UNIQUE_IDENT() = [&]
 
 // -----------------------------------------------------------------------------
 
@@ -55,6 +47,8 @@ struct Color
         : values { r * a, g * a, b * a, a }
     {}
 };
+
+// -----------------------------------------------------------------------------
 
 struct Point
 {

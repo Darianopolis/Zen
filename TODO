@@ -68,6 +68,8 @@
 
 ### Additional
 
+- Support wlr-foreign-toplevel-management for rofi window mode
+- Surface positions should remain fixed relative to output position when resizing other outputs
 - ✅ Prevent clients from hiding the cursor unless they have keyboard focus
 - Compositor interaction state management
    - Newly spawned windows should not take focus when in the middle of an interaction (e.g. zone/move/size)

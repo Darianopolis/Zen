@@ -129,6 +129,9 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
     if (toplevel->resize.last_commited_serial < toplevel->resize.last_resize_serial) return;
     toplevel->resize.last_resize_serial = toplevel->resize.last_commited_serial;
 
+    // Update cursor focus if window under cursor has changed
+    process_cursor_motion(toplevel->server, 0, nullptr, 0, 0, 0, 0);
+
 #if NOISY_RESIZE
     {
         wlr_box box = surface_get_geometry(toplevel);
@@ -170,6 +173,10 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
 
 void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
 {
+    if (toplevel->xdg_toplevel()->current.maximized) {
+        wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), false);
+    }
+
     // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
     //       Thus you must be careful when setting/getting bounds with positioned parents
     // TODO: Tidy up this API and make it clear what is relative to what.
@@ -181,11 +188,6 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
     wlr_scene_node_set_position(&toplevel->popup_tree->node, x, y);
 
     toplevel_resize(toplevel, box.width, box.height);
-}
-
-bool toplevel_wants_fullscreen(Toplevel* toplevel)
-{
-    return toplevel->xdg_toplevel()->requested.fullscreen;
 }
 
 void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
@@ -487,6 +489,8 @@ void toplevel_destroy(wl_listener* listener, void*)
 
     wlr_scene_node_destroy(&toplevel->popup_tree->node);
 
+    toplevel->wlr_surface->data = nullptr;
+
     delete toplevel;
 }
 
@@ -507,22 +511,22 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode, uint32
     server->interaction_mode = mode;
 
     if (mode == InteractionMode::move) {
-        server->movesize.grab_x = server->cursor->x - toplevel->scene_tree->node.x;
-        server->movesize.grab_y = server->cursor->y - toplevel->scene_tree->node.y;
+        server->movesize.grab = Point{server->cursor->x, server->cursor->y};
+        server->movesize.grab_bounds = surface_get_bounds(toplevel);
     } else {
-        wlr_box geom = toplevel->xdg_toplevel()->base->geometry;
-
-        double border_x = (toplevel->scene_tree->node.x + geom.x) + ((edges & WLR_EDGE_RIGHT ) ? geom.width  : 0);
-        double border_y = (toplevel->scene_tree->node.y + geom.y) + ((edges & WLR_EDGE_BOTTOM) ? geom.height : 0);
-
-        server->movesize.grab_x = server->cursor->x - border_x;
-        server->movesize.grab_y = server->cursor->y - border_y;
-
-        server->movesize.grab_geobox = geom;
-        server->movesize.grab_geobox.x += toplevel->scene_tree->node.x;
-        server->movesize.grab_geobox.y += toplevel->scene_tree->node.y;
-
+        server->movesize.grab = Point{server->cursor->x, server->cursor->y};
+        server->movesize.grab_bounds = surface_get_bounds(toplevel);
         server->movesize.resize_edges = edges;
+    }
+}
+
+void toplevel_request_minimize(wl_listener* listener, void*)
+{
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+
+    if (toplevel->xdg_toplevel()->base->initialized) {
+        // We don't support minimize, send empty configure
+        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel()->base);
     }
 }
 
@@ -530,10 +534,19 @@ void toplevel_request_maximize(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    // NOTE: We won't support maximization, but we have to send a configure event anyway
-
     if (toplevel->xdg_toplevel()->base->initialized) {
-        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel()->base);
+        if (toplevel->xdg_toplevel()->requested.maximized) {
+            toplevel->prev_bounds = surface_get_bounds(toplevel);
+            if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
+                toplevel_set_bounds(toplevel, zone_apply_external_padding(output->workarea));
+                wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), true);
+            }
+        } else {
+            if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
+                toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, zone_apply_external_padding(output->workarea));
+            }
+            toplevel_set_bounds(toplevel, toplevel->prev_bounds);
+        }
     }
 }
 
@@ -542,7 +555,7 @@ void toplevel_request_fullscreen(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel()->base->initialized) {
-        toplevel_set_fullscreen(toplevel, toplevel_wants_fullscreen(toplevel));
+        toplevel_set_fullscreen(toplevel, toplevel->xdg_toplevel()->requested.fullscreen);
     }
 }
 
@@ -569,6 +582,7 @@ void server_new_toplevel(wl_listener* listener, void* data)
     toplevel->listeners.listen(&xdg_toplevel->events.destroy, toplevel, toplevel_destroy);
 
     toplevel->listeners.listen(&xdg_toplevel->events.request_maximize,   toplevel, toplevel_request_maximize);
+    toplevel->listeners.listen(&xdg_toplevel->events.request_minimize,   toplevel, toplevel_request_minimize);
     toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, toplevel_request_fullscreen);
 
     for (int i = 0; i < 4; ++i) {
@@ -636,8 +650,6 @@ void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
 static
 void layer_surface_commit(wl_listener* listener, void*)
 {
-    log_warn("layer surface committed");
-
     LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
 
     // TODO: Handle layer changes
@@ -648,13 +660,13 @@ void layer_surface_commit(wl_listener* listener, void*)
 
     // TODO: Handle layer keyboard focus preferences
 
-    output_reconfigure(layer_surface->output);
+    output_reconfigure(get_output_for_surface(layer_surface));
 }
 
 static
 void layer_surface_unmap(wl_listener*, void*)
 {
-    log_warn("layer surface unmapped");
+    // TODO
 }
 
 static
@@ -662,15 +674,18 @@ void layer_surface_destroy(wl_listener* listener, void*)
 {
     LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
 
-    log_warn("layer surface destroyed");
-
-    for (zwlr_layer_shell_v1_layer layer : layer_surface->output->layers.enum_values) {
-        std::erase(layer_surface->output->layers[layer], layer_surface);
+    Output* output = get_output_for_surface(layer_surface);
+    if (output) {
+        for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
+            std::erase(output->layers[layer], layer_surface);
+        }
     }
 
     wlr_scene_node_destroy(&layer_surface->popup_tree->node);
 
-    output_reconfigure(layer_surface->output);
+    output_reconfigure(output);
+
+    layer_surface->wlr_surface->data = nullptr;
 
     delete layer_surface;
 }
@@ -680,14 +695,7 @@ void server_new_layer_surface(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
 
     wlr_layer_surface_v1* wlr_layer_surface = static_cast<wlr_layer_surface_v1*>(data);
-
-    log_warn("New layer surface created: {}", wlr_layer_surface->namespace_ ? wlr_layer_surface->namespace_ : "?");
-    log_warn("  Output: {}", wlr_layer_surface->output ? wlr_layer_surface->output->name : "none");
-
-
     wlr_scene_tree* scene_layer = server->layers[strata_from_wlr(wlr_layer_surface->pending.layer)];
-
-    log_warn("  WLR_LAYER {} -> Strata {}", uint32_t(wlr_layer_surface->pending.layer), uint32_t(strata_from_wlr(wlr_layer_surface->pending.layer)));
 
     Output* output = Output::from(wlr_layer_surface->output);
     if (!output) output = get_nearest_output_to_point(server, Point{server->cursor->x, server->cursor->y});
@@ -701,8 +709,6 @@ void server_new_layer_surface(wl_listener* listener, void* data)
     layer_surface->server = server;
     layer_surface->wlr_surface = wlr_layer_surface->surface;
     layer_surface->wlr_surface->data = layer_surface;
-
-    layer_surface->output = output;
 
     layer_surface->listeners.listen(&wlr_layer_surface->surface->events.commit,  layer_surface, layer_surface_commit);
     layer_surface->listeners.listen(&wlr_layer_surface->surface->events.unmap,   layer_surface, layer_surface_unmap);
@@ -761,6 +767,8 @@ void popup_commit(wl_listener* listener, void*)
 void popup_destroy(wl_listener* listener, void*)
 {
     Popup* popup = listener_userdata<Popup*>(listener);
+
+    popup->wlr_surface->data = nullptr;
 
     delete popup;
 }

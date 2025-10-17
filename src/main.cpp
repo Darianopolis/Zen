@@ -9,10 +9,11 @@ struct startup_options
     const char* xwayland_socket;
     const char* startup_cmd;
     const char* log_file;
+    uint32_t additional_outputs;
 };
 
 static
-void init(Server* server, const startup_options& /* options */)
+void init(Server* server, const startup_options& options)
 {
     server->display = wl_display_create();
     server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), nullptr);
@@ -25,21 +26,21 @@ void init(Server* server, const startup_options& /* options */)
     server->main_modifier_keysym_left = XKB_KEY_Super_L;
     server->main_modifier_keysym_right = XKB_KEY_Super_R;
 
-    wlr_multi_for_each_backend(server->backend, [](wlr_backend* backend, void* data) {
-        if (wlr_backend_is_wl(backend) || wlr_backend_is_x11(backend)) {
-            Server* server = static_cast<Server*>(data);
-            server->main_modifier = WLR_MODIFIER_ALT;
-            server->main_modifier_keysym_left = XKB_KEY_Alt_L;
-            server->main_modifier_keysym_right = XKB_KEY_Alt_R;
+    auto for_each_backend = [&](wlr_backend* backend) {
+        if (!wlr_backend_is_wl(backend) && !wlr_backend_is_x11(backend)) return;
 
-            log_warn("Running compositor nested, mouse constraints will be silently ignored!");
-            server->debug.ignore_mouse_constraints = true;
+        server->main_modifier = WLR_MODIFIER_ALT;
+        server->main_modifier_keysym_left = XKB_KEY_Alt_L;
+        server->main_modifier_keysym_right = XKB_KEY_Alt_R;
 
-            for (uint32_t i = 0; i < additional_outputs; ++i) {
-                wlr_wl_output_create(backend);
-            }
+        log_warn("Running compositor nested, mouse constraints will be silently ignored!");
+        server->debug.ignore_mouse_constraints = true;
+
+        for (uint32_t i = 0; i < options.additional_outputs; ++i) {
+            wlr_wl_output_create(backend);
         }
-    }, server);
+    };
+    wlr_multi_for_each_backend(server->backend, [](wlr_backend* b, void* d) { (*static_cast<decltype(for_each_backend)*>(d))(b); }, &for_each_backend);
 
     server->renderer = wlr_renderer_autocreate(server->backend);
     if (!server->renderer) {
@@ -191,6 +192,7 @@ constexpr const char* help_prompt = R"(Usage: %s [options]
   --xwayland [socket]   specify X11 socket
   --log-file [path]     log to file
   --startup  [cmd]      startup command
+  --outputs  [count]    number of outputs to spawn (in nested mode)
 )";
 
 int main(int argc, char* argv[])
@@ -215,6 +217,12 @@ int main(int argc, char* argv[])
             options.startup_cmd = param();
         } else if ("--xwayland"sv == arg) {
             options.xwayland_socket = param();
+        } else if ("--outputs"sv == arg) {
+            const char* p = param();
+            int v = 1;
+            std::from_chars_result res = std::from_chars(p, p + strlen(p), v);
+            if (!res) print_usage();
+            options.additional_outputs = std::max(1, v) - 1;
         } else if ("--help"sv == arg) {
             print_usage();
         }
