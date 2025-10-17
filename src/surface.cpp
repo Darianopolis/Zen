@@ -1,13 +1,9 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-Toplevel* get_focused_toplevel(Server* server)
+Surface* get_focused_surface(Server* server)
 {
-    struct wlr_surface* wlr_surface = server->seat->keyboard_state.focused_surface;
-    if (!wlr_surface) return nullptr;
-    Toplevel* toplevel = Toplevel::from(wlr_surface);
-    if (!toplevel) log_warn("Focused surface ({}) is not a Toplevel!", (void*)wlr_surface);
-    return toplevel;
+    return Surface::from(server->seat->keyboard_state.focused_surface);
 }
 
 void toplevel_update_border(Toplevel* toplevel)
@@ -34,22 +30,13 @@ void toplevel_update_border(Toplevel* toplevel)
             wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
             wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
             wlr_scene_rect_set_color(toplevel->border[i],
-                get_focused_toplevel(toplevel->server) == toplevel
+                get_focused_surface(toplevel->server) == toplevel
                     ? border_color_focused.values
                     : border_color_unfocused.values);
         } else {
             wlr_scene_node_set_enabled(&toplevel->border[i]->node, false);
         }
     }
-}
-
-wlr_surface* toplevel_get_surface(Toplevel* toplevel)
-{
-    if (toplevel->xdg_toplevel() && toplevel->xdg_toplevel()->base) {
-        return toplevel->xdg_toplevel()->base->surface;
-    }
-
-    return nullptr;
 }
 
 wlr_box surface_get_geometry(Surface* surface)
@@ -61,6 +48,9 @@ wlr_box surface_get_geometry(Surface* surface)
         // Some clients (E.g. SDL3 + Vulkan) fail to report valid geometry. Fall back to surface dimensions.
         if (geom.width == 0)  geom.width  = xdg_surface->surface->current.width  - geom.x;
         if (geom.height == 0) geom.height = xdg_surface->surface->current.height - geom.y;
+    } else  if (wlr_layer_surface_v1* wlr_layer_surface = wlr_layer_surface_v1_try_from_wlr_surface(surface->wlr_surface)) {
+        geom.width = wlr_layer_surface->current.actual_width;
+        geom.height = wlr_layer_surface->current.actual_height;
     } else {
         log_error("failed to get surface geometry");
     }
@@ -71,8 +61,11 @@ wlr_box surface_get_geometry(Surface* surface)
 wlr_box surface_get_coord_system(Surface* surface)
 {
     wlr_box box = {};
-    if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface->wlr_surface)) {
+    if (surface->scene_tree) {
         wlr_scene_node_coords(&surface->scene_tree->node, &box.x, &box.y);
+    }
+
+    if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface->wlr_surface)) {
 
         // Scene node coordinates position the geometry origin, adjust to surface origin
         box.x -= xdg_surface->current.geometry.x;
@@ -80,6 +73,11 @@ wlr_box surface_get_coord_system(Surface* surface)
 
         box.width = xdg_surface->surface->current.width;
         box.height = xdg_surface->surface->current.height;
+    }
+
+    if (wlr_layer_surface_v1* wlr_layer_surface = wlr_layer_surface_v1_try_from_wlr_surface(surface->wlr_surface)) {
+        box.width = wlr_layer_surface->current.actual_width;
+        box.height = wlr_layer_surface->current.actual_height;
     }
 
     return box;
@@ -177,6 +175,11 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
     // TODO: Tidy up this API and make it clear what is relative to what.
     wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
 
+    // Match popup tree location
+    int x, y;
+    wlr_scene_node_coords(&toplevel->scene_tree->node, &x, &y);
+    wlr_scene_node_set_position(&toplevel->popup_tree->node, x, y);
+
     toplevel_resize(toplevel, box.width, box.height);
 }
 
@@ -209,7 +212,7 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
         // Constrain prev bounds to output when exiting fullscreen to avoid the case
         // where the window is still full size and the borders are now hidden.
         if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-            wlr_box output_bounds = zone_apply_external_padding(output_get_bounds(output));
+            wlr_box output_bounds = zone_apply_external_padding(output->workarea);
             toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, output_bounds);
         }
         toplevel_set_bounds(toplevel, toplevel->prev_bounds);
@@ -260,7 +263,7 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
     server->interaction_mode = InteractionMode::focus_cycle;
 
-    toplevel_unfocus(get_focused_toplevel(server), true);
+    surface_unfocus(get_focused_surface(server), true);
 
     Toplevel* current = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
@@ -286,7 +289,7 @@ void focus_cycle_end(Server* server)
     };
     walk_toplevels_front_to_back(server, FUNC_REF(fn));
 
-    toplevel_focus(focused);
+    surface_focus(focused);
 }
 
 void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
@@ -332,50 +335,54 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
 
 // -----------------------------------------------------------------------------
 
-void toplevel_focus(Toplevel* toplevel)
+void surface_focus(Surface* surface)
 {
-    if (!toplevel) return;
+    if (!surface) return;
 
-    Server* server = toplevel->server;
+    Server* server = surface->server;
     wlr_seat* seat = server->seat;
-    wlr_surface* prev_surface = seat->keyboard_state.focused_surface;
-    wlr_surface* surface = toplevel_get_surface(toplevel);
+    wlr_surface* prev_wlr_surface = seat->keyboard_state.focused_surface;
+    struct wlr_surface* wlr_surface = surface->wlr_surface;
 
     // TODO: This causes issues when server.focused_toplevel and keyboard.focused_surface are desyncd
-    if (prev_surface == surface) return;
+    if (prev_wlr_surface == wlr_surface) return;
 
-    if (prev_surface) {
-        toplevel_set_activated(Toplevel::from(prev_surface), false);
+    if (Toplevel* prev_toplevel = Toplevel::from(prev_wlr_surface)) {
+        toplevel_set_activated(prev_toplevel, false);
     }
 
+    Toplevel* toplevel = Toplevel::from(surface);
+
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
-    wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
-    toplevel_set_activated(toplevel, true);
+    if (toplevel) {
+        wlr_scene_node_raise_to_top(&surface->scene_tree->node);
+        toplevel_set_activated(Toplevel::from(surface), true);
+    }
 
     if (keyboard) {
-        wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+        wlr_seat_keyboard_notify_enter(seat, wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
 
     // TODO: Tidy up and consolidate API for handling (re)focus
     process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
 }
 
-void toplevel_unfocus(Toplevel* toplevel, bool force)
+void surface_unfocus(Surface* surface, bool force)
 {
-    if (!toplevel) return;
-    if (get_focused_toplevel(toplevel->server) != toplevel)
+    if (!surface) return;
+    if (get_focused_surface(surface->server) != surface)
         return;
 
     if (force) {
-        wlr_seat_keyboard_clear_focus(toplevel->server->seat);
+        wlr_seat_keyboard_clear_focus(surface->server->seat);
     } else {
-        wlr_seat_keyboard_notify_clear_focus(toplevel->server->seat);
+        wlr_seat_keyboard_notify_clear_focus(surface->server->seat);
     }
 }
 
-Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
+Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
 {
-    Toplevel* toplevel = nullptr;
+    Surface* surface = nullptr;
     auto fn = [&](wlr_scene_node* node, double node_x, double node_y) {
         if (!node->enabled || node->type != WLR_SCENE_NODE_BUFFER) return true;
 
@@ -393,7 +400,7 @@ Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_
         }
 
         wlr_scene_tree* tree = node->parent;
-        while (tree && !(toplevel = Toplevel::from(&tree->node))) {
+        while (tree && !(surface = Surface::from(&tree->node))) {
             tree = tree->node.parent;
         }
 
@@ -401,14 +408,14 @@ Toplevel* get_toplevel_at(Server* server, double lx, double ly, wlr_surface** p_
     };
     walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
 
-    return toplevel;
+    return surface;
 }
 
 void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    toplevel_focus(toplevel);
+    surface_focus(toplevel);
 }
 
 void toplevel_unmap(wl_listener* listener, void*)
@@ -422,11 +429,11 @@ void toplevel_unmap(wl_listener* listener, void*)
 
     // TODO: Handle toplevel unmap during zone operation
 
-    toplevel_unfocus(unmapped_toplevel, true);
+    surface_unfocus(unmapped_toplevel, true);
 
     auto fn = [&](Toplevel* toplevel) {
         if (toplevel != unmapped_toplevel) {
-            toplevel_focus(toplevel);
+            surface_focus(toplevel);
             return false;
         }
         return true;
@@ -462,7 +469,7 @@ void toplevel_commit(wl_listener* listener, void*)
             // Constrain to output (respecting external padding)
             Output* output = get_nearest_output_to_box(toplevel->server, bounds);
             if (output) {
-                bounds = constrain_box(bounds, zone_apply_external_padding(output_get_bounds(output)));
+                bounds = constrain_box(bounds, zone_apply_external_padding(output->workarea));
             }
 
             // Update toplevel bounds
@@ -477,6 +484,8 @@ void toplevel_commit(wl_listener* listener, void*)
 void toplevel_destroy(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+
+    wlr_scene_node_destroy(&toplevel->popup_tree->node);
 
     delete toplevel;
 }
@@ -548,8 +557,10 @@ void server_new_toplevel(wl_listener* listener, void* data)
     toplevel->wlr_surface = xdg_toplevel->base->surface;
     toplevel->wlr_surface->data = toplevel;
 
-    toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
+    toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers(Strata::floating), xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
+
+    toplevel->popup_tree = wlr_scene_tree_create(server->layers(Strata::top));
 
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, toplevel_map);
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, toplevel_unmap);
@@ -610,6 +621,107 @@ void decoration_destroy(wl_listener* listener, void*)
 
 // -----------------------------------------------------------------------------
 
+void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
+{
+    wlr_box full_area = output_get_bounds(output);
+
+    for (LayerSurface* layer_surface : output->layers(layer)) {
+        if (!layer_surface->wlr_layer_surface()->initialized) continue;
+
+        wlr_scene_layer_surface_v1_configure(layer_surface->scene_layer_surface, &full_area, &output->workarea);
+        wlr_scene_node_set_position(&layer_surface->popup_tree->node, layer_surface->scene_tree->node.x, layer_surface->scene_tree->node.y);
+    }
+}
+
+static
+void layer_surface_commit(wl_listener* listener, void*)
+{
+    log_warn("layer surface committed");
+
+    LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
+
+    // TODO: Handle layer changes
+
+    // TODO: This causes certain applications (e.g. Fuzzel) to continuously commit even if there are no changes
+    //       We could check and lazily reconfigure only if change, or just ignore the problem. Waybar and rofi both don't exhibit this issue
+    //       and even Fuzzel is only visible on screen for a short period of time while selecting
+
+    // TODO: Handle layer keyboard focus preferences
+
+    output_reconfigure(layer_surface->output);
+}
+
+static
+void layer_surface_unmap(wl_listener*, void*)
+{
+    log_warn("layer surface unmapped");
+}
+
+static
+void layer_surface_destroy(wl_listener* listener, void*)
+{
+    LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
+
+    log_warn("layer surface destroyed");
+
+    for (uint32_t i = 0; i < uint32_t(Output::zwlr_layer_shell_v1_layer_count); ++i) {
+        std::erase(layer_surface->output->layers(zwlr_layer_shell_v1_layer(i)), layer_surface);
+    }
+
+    wlr_scene_node_destroy(&layer_surface->popup_tree->node);
+
+    output_reconfigure(layer_surface->output);
+
+    delete layer_surface;
+}
+
+void server_new_layer_surface(wl_listener* listener, void* data)
+{
+    Server* server = listener_userdata<Server*>(listener);
+
+    wlr_layer_surface_v1* wlr_layer_surface = static_cast<wlr_layer_surface_v1*>(data);
+
+    log_warn("New layer surface created: {}", wlr_layer_surface->namespace_ ? wlr_layer_surface->namespace_ : "?");
+    log_warn("  Output: {}", wlr_layer_surface->output ? wlr_layer_surface->output->name : "none");
+
+
+    wlr_scene_tree* scene_layer = server->layers(strata_from_wlr(wlr_layer_surface->pending.layer));
+
+    log_warn("  WLR_LAYER {} -> Strata {}", uint32_t(wlr_layer_surface->pending.layer), uint32_t(strata_from_wlr(wlr_layer_surface->pending.layer)));
+
+    Output* output = Output::from(wlr_layer_surface->output);
+    if (!output) output = get_nearest_output_to_point(server, Point{server->cursor->x, server->cursor->y});
+    if (!output) {
+        wlr_layer_surface_v1_destroy(wlr_layer_surface);
+        return;
+    }
+
+    LayerSurface* layer_surface = new LayerSurface{};
+    layer_surface->role = SurfaceRole::layer_surface;
+    layer_surface->server = server;
+    layer_surface->wlr_surface = wlr_layer_surface->surface;
+    layer_surface->wlr_surface->data = layer_surface;
+
+    layer_surface->output = output;
+
+    layer_surface->listeners.listen(&wlr_layer_surface->surface->events.commit,  layer_surface, layer_surface_commit);
+    layer_surface->listeners.listen(&wlr_layer_surface->surface->events.unmap,   layer_surface, layer_surface_unmap);
+    layer_surface->listeners.listen(&         wlr_layer_surface->events.destroy, layer_surface, layer_surface_destroy);
+
+    layer_surface->scene_layer_surface = wlr_scene_layer_surface_v1_create(scene_layer, wlr_layer_surface);
+    layer_surface->scene_tree = layer_surface->scene_layer_surface->tree;
+    layer_surface->scene_tree->node.data = layer_surface;
+
+    layer_surface->popup_tree = wlr_scene_tree_create(server->layers(Strata::top));
+
+    output->layers(wlr_layer_surface->pending.layer).emplace_back(layer_surface);
+
+    wlr_surface_send_enter(layer_surface->wlr_surface, output->wlr_output);
+    surface_focus(layer_surface);
+}
+
+// -----------------------------------------------------------------------------
+
 void popup_commit(wl_listener* listener, void*)
 {
     Popup* popup = listener_userdata<Popup*>(listener);
@@ -621,7 +733,8 @@ void popup_commit(wl_listener* listener, void*)
     }
 
     Surface* parent = Surface::from(xdg_popup->parent);
-    popup->scene_tree = wlr_scene_xdg_surface_create(parent->scene_tree, xdg_popup->base);
+    popup->scene_tree = wlr_scene_xdg_surface_create(parent->popup_tree, xdg_popup->base);
+    popup->popup_tree = popup->scene_tree;
     popup->scene_tree->node.data = parent;
 
     Output* output = get_nearest_output_to_point(popup->server, {popup->server->cursor->x, popup->server->cursor->y});
@@ -629,13 +742,11 @@ void popup_commit(wl_listener* listener, void*)
         wlr_box output_bounds = output_get_bounds(output);
 
         {
-            // TODO: Move this into a helper for getting a toplevel from an wlr_surface
             Surface* cur = parent;
             while (cur->role == SurfaceRole::popup) {
                 cur = Surface::from(Popup::from(cur)->xdg_popup()->parent);
             }
 
-            // Adjust output bounds to be in the root surface's coordinate system.
             wlr_box coord_system = surface_get_coord_system(cur);
             output_bounds.x -= coord_system.x;
             output_bounds.y -= coord_system.y;
@@ -643,7 +754,7 @@ void popup_commit(wl_listener* listener, void*)
 
         wlr_xdg_popup_unconstrain_from_box(xdg_popup, &output_bounds);
     } else {
-        log_error("No output for toplevel while opening popup!");
+        log_error("No output while opening popup!");
     }
 }
 

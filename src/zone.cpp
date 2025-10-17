@@ -18,7 +18,7 @@ wlr_box zone_apply_external_padding(wlr_box box)
 
 void zone_init(Server* server)
 {
-    server->zone.selector = wlr_scene_rect_create(server->layers[uint32_t(Strata::overlay)], 0, 0, zone_color_inital.values);
+    server->zone.selector = wlr_scene_rect_create(server->layers(Strata::overlay), 0, 0, zone_color_inital.values);
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 
@@ -33,9 +33,8 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
             if (server->cursor_visible) {
                 double sx, sy;
                 wlr_surface* surface = nullptr;
-                Toplevel* toplevel = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-                if (toplevel) {
-                    toplevel_focus(toplevel);
+                if (Toplevel* toplevel = Toplevel::from(get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy))) {
+                    surface_focus(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
                         wlr_scene_rect_set_color(server->zone.selector, zone_color_inital.values);
@@ -52,9 +51,9 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
             return true;
         } else if (server->zone.moving) {
             if (server->zone.selecting) {
-                if (get_focused_toplevel(server)) {
+                if (Toplevel* focused_toplevel = Toplevel::from(get_focused_surface(server))) {
                     wlr_box box = box_round_to_wlr_box(server->zone.final_zone);
-                    toplevel_set_bounds(get_focused_toplevel(server), box);
+                    toplevel_set_bounds(focused_toplevel, box);
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
@@ -79,19 +78,19 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
 void zone_process_cursor_motion(Server* server)
 {
     Output* output = get_output_at(server, {server->cursor->x, server->cursor->y});
-    wlr_box bounds = output_get_bounds(output);
+    wlr_box workarea = output->workarea;
 
     Point point { server->cursor->x, server->cursor->y };
 
     Box pointer_zone = {};
     bool any_zones = false;
 
-    Point extent { double(bounds.width) / zone_horizontal_zones, double(bounds.height) / zone_vertical_zones };
+    Point extent { double(workarea.width) / zone_horizontal_zones, double(workarea.height) / zone_vertical_zones };
     for (uint32_t zone_x = 0; zone_x < zone_horizontal_zones; ++zone_x) {
         for (uint32_t zone_y = 0; zone_y < zone_vertical_zones; ++zone_y) {
             Box rect {
-                .x = bounds.x + extent.x * zone_x,
-                .y = bounds.y + extent.y * zone_y,
+                .x = workarea.x + extent.x * zone_x,
+                .y = workarea.y + extent.y * zone_y,
                 .width = extent.x,
                 .height = extent.y,
             };

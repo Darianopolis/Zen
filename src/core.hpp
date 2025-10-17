@@ -47,23 +47,28 @@ static constexpr double libinput_mouse_speed = -0.66;
 
 // -----------------------------------------------------------------------------
 
-namespace Strata
+enum class Strata
 {
-    static constexpr uint32_t background = 0;
-    static constexpr uint32_t bottom     = 1;
-    static constexpr uint32_t floating   = 2;
-    static constexpr uint32_t top        = 3;
-    static constexpr uint32_t overlay    = 4;
-    static constexpr uint32_t debug      = 5;
-    static constexpr uint32_t count      = 6;
+    background,
+    bottom,
+    floating,
+    top,
+    overlay,
+    debug,
+    count,
+
+    _count_,
 };
 
-constexpr uint32_t strata_from_wlr[] = {
-    [ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND] = Strata::background,
-    [ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]     = Strata::bottom,
-    [ZWLR_LAYER_SHELL_V1_LAYER_TOP]        = Strata::top,
-    [ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY]    = Strata::overlay,
-};
+constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
+{
+    switch (layer) {
+        case ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND: return Strata::background;
+        case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:     return Strata::bottom;
+        case ZWLR_LAYER_SHELL_V1_LAYER_TOP:        return Strata::top;
+        case ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY:    return Strata::overlay;
+    }
+}
 
 enum class InteractionMode
 {
@@ -76,6 +81,7 @@ enum class InteractionMode
 };
 
 struct Toplevel;
+struct LayerSurface;
 struct Output;
 struct Keyboard;
 
@@ -93,7 +99,8 @@ struct Server
     } debug;
 
     wlr_scene* scene;
-    wlr_scene_tree* layers[Strata::count];
+    wlr_scene_tree* _layers_[uint32_t(Strata::_count_)];
+    wlr_scene_tree*& layers(Strata strata) { return _layers_[uint32_t(strata)]; }
     wlr_output_layout* output_layout;
     wlr_scene_output_layout* scene_output_layout;
 
@@ -102,6 +109,7 @@ struct Server
     wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
 
     wlr_xdg_shell* xdg_shell;
+    wlr_layer_shell_v1* layer_shell;
 
     bool cursor_visible = true;
     wlr_cursor* cursor;
@@ -152,6 +160,8 @@ struct Keyboard
 
 struct Output
 {
+    static Output* from(struct wlr_output* output) { return output ? static_cast<Output*>(output->data) : nullptr; }
+
     ListenerSet listeners;
 
     Server* server;
@@ -160,7 +170,11 @@ struct Output
 
     wlr_scene_rect* background;
 
-    static Output* from(struct wlr_output* output) { return output ? static_cast<Output*>(output->data) : nullptr; }
+    wlr_box workarea;
+
+    static constexpr uint32_t zwlr_layer_shell_v1_layer_count = 4;
+    std::vector<LayerSurface*> _layers_[zwlr_layer_shell_v1_layer_count];
+    auto& layers(zwlr_layer_shell_v1_layer layer) { return _layers_[uint32_t(layer)]; }
 };
 
 // -----------------------------------------------------------------------------
@@ -169,6 +183,7 @@ enum class SurfaceRole
 {
     toplevel,
     popup,
+    layer_surface,
 };
 
 struct Surface
@@ -177,6 +192,7 @@ struct Surface
 
     Server* server;
     wlr_scene_tree* scene_tree;
+    wlr_scene_tree* popup_tree;
     struct wlr_surface* wlr_surface;
 
     static Surface* from(struct wlr_surface* surface) { return surface ? static_cast<Surface*>(surface->data) : nullptr; }
@@ -228,6 +244,23 @@ struct Popup : Surface
     ListenerSet listeners;
 
     wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
+};
+
+struct LayerSurface : Surface
+{
+    static LayerSurface* from(Surface* surface)
+    {
+        return (surface && surface->role == SurfaceRole::layer_surface) ? static_cast<LayerSurface*>(surface) : nullptr;
+    }
+    static LayerSurface* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
+    static LayerSurface* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
+
+    ListenerSet listeners;
+
+    wlr_layer_surface_v1* wlr_layer_surface() const { return wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface); }
+
+    wlr_scene_layer_surface_v1* scene_layer_surface;
+    Output* output;
 };
 
 // ---- Policy -----------------------------------------------------------------
@@ -308,25 +341,31 @@ void server_output_layout_change(wl_listener*, void*);
 
 // ---- Surface ----------------------------------------------------------------
 
+Surface* get_surface_at(     Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy);
+Surface* get_focused_surface(Server*);
+
+void surface_focus(  Surface*);
+void surface_unfocus(Surface*, bool force);
+
 wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);
 wlr_box surface_get_coord_system(Surface*);
 
+// ---- Surface.LayerSurface ---------------------------------------------------
+
+void server_new_layer_surface(wl_listener*, void*);
+void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
+
 // ---- Surface.Toplevel -------------------------------------------------------
 
-Toplevel*    get_focused_toplevel(     Server*);
-void         toplevel_focus(           Toplevel*);
-void         toplevel_unfocus(         Toplevel*, bool force);
-void         toplevel_resize(          Toplevel*, int width, int height);
-void         toplevel_set_bounds(      Toplevel*, wlr_box);
-void         toplevel_set_activated(   Toplevel*, bool active);
-bool         toplevel_wants_fullscreen(Toplevel*);
-void         toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
-void         toplevel_update_border(   Toplevel*);
-wlr_surface* toplevel_get_surface(     Toplevel*);
-bool         toplevel_is_interactable( Toplevel*);
+void toplevel_resize(          Toplevel*, int width, int height);
+void toplevel_set_bounds(      Toplevel*, wlr_box);
+void toplevel_set_activated(   Toplevel*, bool active);
+bool toplevel_wants_fullscreen(Toplevel*);
+void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
+void toplevel_update_border(   Toplevel*);
+bool toplevel_is_interactable( Toplevel*);
 
-Toplevel* get_toplevel_at(        Server*, double lx, double ly, wlr_surface**, double *sx, double *sy);
 void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 

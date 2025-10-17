@@ -80,17 +80,22 @@ void init(Server* server, const startup_options& /* options */)
 
     server->listeners.listen(&server->backend->events.new_output, server, server_new_output);
 
+    wlr_xdg_output_manager_v1_create(server->display, server->output_layout);
+
     server->scene = wlr_scene_create();
-    for (uint32_t i = 0; i < Strata::count; ++i) {
-        server->layers[i] = wlr_scene_tree_create(&server->scene->tree);
+    for (uint32_t i = 0; i < uint32_t(Strata::count); ++i) {
+        server->layers(Strata(i)) = wlr_scene_tree_create(&server->scene->tree);
     }
 
     server->scene_output_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
-    server->drag_icon_parent = wlr_scene_tree_create(server->layers[Strata::overlay]);
+    server->drag_icon_parent = wlr_scene_tree_create(server->layers(Strata::overlay));
 
     server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
     server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, server_new_toplevel);
     server->listeners.listen(&server->xdg_shell->events.new_popup,    server, server_new_popup);
+
+    server->layer_shell = wlr_layer_shell_v1_create(server->display, 3);
+    server->listeners.listen(&server->layer_shell->events.new_surface, server, server_new_layer_surface);
 
     // Decorations:
     //  We enable enough decoration functionality to tell clients *not* to render their
@@ -112,7 +117,7 @@ void init(Server* server, const startup_options& /* options */)
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
 	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
 
-    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], 12, 12, Color{1, 0, 0, 1}.values);
+    server->pointer.debug_visual = wlr_scene_rect_create(server->layers(Strata::debug), 12, 12, Color{1, 0, 0, 1}.values);
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
     server->interaction_mode = InteractionMode::passthrough;

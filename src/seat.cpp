@@ -24,7 +24,7 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
         case XKB_KEY_ISO_Left_Tab: {
             bool do_cycle = true;
             if (server->interaction_mode ==  InteractionMode::passthrough) {
-                do_cycle = get_focused_toplevel(server);
+                do_cycle = Toplevel::from(get_focused_surface(server));
                 focus_cycle_begin(server, nullptr);
             }
             if (do_cycle && server->interaction_mode == InteractionMode::focus_cycle) {
@@ -36,25 +36,28 @@ bool handle_keybinding(Server* server, xkb_keysym_t sym)
             spawn("konsole", {"konsole"});
             break;
         case XKB_KEY_d:
-            spawn("wofi", {"wofi", "--show", "drun"});
+            spawn("rofi", {"rofi", "-show", "drun"});
+            break;
+        case XKB_KEY_v:
+            spawn("pavucontrol", {"pavucontrol"});
+            break;
+        case XKB_KEY_n:
+            spawn("systemctl", {"systemctl", "suspend"});
             break;
         case XKB_KEY_i:
             spawn("xeyes", {"xeyes"});
             break;
-        case XKB_KEY_g:
-            spawn("steam", {"steam"});
-            break;
         case XKB_KEY_s:
-            toplevel_unfocus(get_focused_toplevel(server), false);
+            surface_unfocus(get_focused_surface(server), false);
             wlr_seat_pointer_clear_focus(server->seat);
             break;
         case XKB_KEY_q:
-            if (Toplevel* focused = get_focused_toplevel(server)) {
+            if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
                 wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
             }
             break;
         case XKB_KEY_f:
-            if (Toplevel* focused = get_focused_toplevel(server)) {
+            if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
                 toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
             }
             break;
@@ -409,8 +412,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     }
 
     if (!wlr_surface) {
-        // TODO: Create get_surface_at to handle toplevels, popups, layer shells (when implemented)
-        get_toplevel_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy);
+        get_surface_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy);
     }
 
     // Handle constraints and update mouse
@@ -421,7 +423,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint; constraint && !server->debug.ignore_mouse_constraints) {
 
             Surface* surface = Surface::from(constraint->surface);
-            if (surface == get_focused_toplevel(server)) {
+            if (surface == get_focused_surface(server)) {
 
                 wlr_box bounds = surface_get_bounds(surface);
                 sx = server->cursor->x - bounds.x;
@@ -515,12 +517,17 @@ void server_cursor_button(wl_listener* listener, void* data)
 
     double sx, sy;
     wlr_surface* surface = nullptr;
-    Toplevel* toplevel_under_cursor = get_toplevel_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    Surface* surface_under_cursor = get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
 
-    if (focus_cycle_interrupted && toplevel_under_cursor != get_focused_toplevel(server)) {
-        // If we interrupted a focus cycle by clicking outside of the now focused window, drop focus
-        // as it wouldn't have been visible to the user before the press
-        toplevel_unfocus(get_focused_toplevel(server), false);
+    if (focus_cycle_interrupted && surface_under_cursor != get_focused_surface(server)) {
+        // If we interrupted a focus cycle by clicking a previously hidden toplevel,
+        // don't transfer focus as it would have been visisble as it wouldn't have
+        // been visible to the user before the press
+        if (Toplevel::from(surface_under_cursor)) {
+            surface_unfocus(get_focused_surface(server), false);
+        } else {
+            surface_focus(surface_under_cursor);
+        }
         return;
     }
 
@@ -541,27 +548,27 @@ void server_cursor_button(wl_listener* listener, void* data)
 
     // Focus window on any button press
 
-    if (toplevel_under_cursor) {
-        toplevel_focus(toplevel_under_cursor);
-    } else {
-        log_warn("Unfocusing window");
-        toplevel_unfocus(get_focused_toplevel(server), false);
+    if (surface_under_cursor) {
+        surface_focus(surface_under_cursor);
+    } else if (get_focused_surface(server)) {
+        log_warn("Unfocusing focused toplevel");
+        surface_unfocus(get_focused_surface(server), false);
     }
 
     server->interaction_mode = InteractionMode::pressed;
 
     // Check for move/size interaction begin
 
-    if (toplevel_under_cursor && is_main_mod_down(server)) {
+    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && is_main_mod_down(server)) {
         if (event->button == BTN_LEFT && (get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
             if (server->cursor_visible) {
-                toplevel_begin_interactive(toplevel_under_cursor, InteractionMode::move, 0);
+                toplevel_begin_interactive(toplevel, InteractionMode::move, 0);
             } else {
                 log_warn("Tried to initiate move but cursor not visible");
             }
             return;
         } else if (event->button == BTN_RIGHT) {
-            wlr_box bounds = surface_get_bounds(toplevel_under_cursor);
+            wlr_box bounds = surface_get_bounds(surface_under_cursor);
             int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
             int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
 
@@ -578,14 +585,14 @@ void server_cursor_button(wl_listener* listener, void* data)
             if (!edges) type = InteractionMode::move;
 
             if (server->cursor_visible) {
-                toplevel_begin_interactive(toplevel_under_cursor, type, edges);
+                toplevel_begin_interactive(toplevel, type, edges);
             } else {
                 log_warn("Tried to initiate resize but cursor not visible");
             }
             return;
         } else if (event->button == BTN_MIDDLE) {
             if (server->cursor_visible) {
-                wlr_xdg_toplevel_send_close(toplevel_under_cursor->xdg_toplevel());
+                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
             } else {
                 log_warn("Tried to close-under-cursor but cursor not visible");
             }

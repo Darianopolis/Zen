@@ -32,9 +32,10 @@
    - ✅ Cursor hiding
 - ✅ Add XWayland integration
    - ✅ Cursor size difference over X11 windows
-- Shell layers
-   - Add multiple strata levels
-   - Add layer shell protocol
+- ✅ Shell layers
+   - ✅ Add multiple strata levels
+   - ✅ Add layer shell protocol
+   - Ensure layer surface popups open on top/overlay surface
 
 ### Bugs
 
@@ -90,9 +91,9 @@
 - ✅ Compositor initiated fullscreen toggle
 - ✅ Throttle resize requests
 - Consolidate interaction logic
-   - Rename `input.cpp` -> `seat.cpp`
+   - ✅ Rename `input.cpp` -> `seat.cpp`
+   - ✅ Replace `cursor_mode` with `interaction_state`
    - Move input binding logic to `interaction.cpp`
-   - Replace `cursor_mode` with `interaction_state`
    - Separate zoning logic from zone interaction binds
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
@@ -121,4 +122,4 @@
 - ✅ Use dynamic wl_listener warpper
 - ✅ Rename structures and drop `struct` prefix?
 - ✅ Replace wl_list/wl_array with standard containers
-- Unified C++ format based logging
+- ✅ Unified C++ format based logging
