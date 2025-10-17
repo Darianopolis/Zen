@@ -557,10 +557,10 @@ void server_new_toplevel(wl_listener* listener, void* data)
     toplevel->wlr_surface = xdg_toplevel->base->surface;
     toplevel->wlr_surface->data = toplevel;
 
-    toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers(Strata::floating), xdg_toplevel->base);
+    toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
 
-    toplevel->popup_tree = wlr_scene_tree_create(server->layers(Strata::top));
+    toplevel->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
 
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, toplevel_map);
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, toplevel_unmap);
@@ -625,7 +625,7 @@ void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
 {
     wlr_box full_area = output_get_bounds(output);
 
-    for (LayerSurface* layer_surface : output->layers(layer)) {
+    for (LayerSurface* layer_surface : output->layers[layer]) {
         if (!layer_surface->wlr_layer_surface()->initialized) continue;
 
         wlr_scene_layer_surface_v1_configure(layer_surface->scene_layer_surface, &full_area, &output->workarea);
@@ -664,8 +664,8 @@ void layer_surface_destroy(wl_listener* listener, void*)
 
     log_warn("layer surface destroyed");
 
-    for (uint32_t i = 0; i < uint32_t(Output::zwlr_layer_shell_v1_layer_count); ++i) {
-        std::erase(layer_surface->output->layers(zwlr_layer_shell_v1_layer(i)), layer_surface);
+    for (zwlr_layer_shell_v1_layer layer : layer_surface->output->layers.enum_values) {
+        std::erase(layer_surface->output->layers[layer], layer_surface);
     }
 
     wlr_scene_node_destroy(&layer_surface->popup_tree->node);
@@ -685,7 +685,7 @@ void server_new_layer_surface(wl_listener* listener, void* data)
     log_warn("  Output: {}", wlr_layer_surface->output ? wlr_layer_surface->output->name : "none");
 
 
-    wlr_scene_tree* scene_layer = server->layers(strata_from_wlr(wlr_layer_surface->pending.layer));
+    wlr_scene_tree* scene_layer = server->layers[strata_from_wlr(wlr_layer_surface->pending.layer)];
 
     log_warn("  WLR_LAYER {} -> Strata {}", uint32_t(wlr_layer_surface->pending.layer), uint32_t(strata_from_wlr(wlr_layer_surface->pending.layer)));
 
@@ -712,9 +712,9 @@ void server_new_layer_surface(wl_listener* listener, void* data)
     layer_surface->scene_tree = layer_surface->scene_layer_surface->tree;
     layer_surface->scene_tree->node.data = layer_surface;
 
-    layer_surface->popup_tree = wlr_scene_tree_create(server->layers(Strata::top));
+    layer_surface->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
 
-    output->layers(wlr_layer_surface->pending.layer).emplace_back(layer_surface);
+    output->layers[wlr_layer_surface->pending.layer].emplace_back(layer_surface);
 
     wlr_surface_send_enter(layer_surface->wlr_surface, output->wlr_output);
     surface_focus(layer_surface);

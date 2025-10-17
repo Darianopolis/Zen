@@ -18,3 +18,5 @@
 
 #include <unistd.h>
 #include <stdarg.h>
+
+#include <magic_enum/magic_enum.hpp>

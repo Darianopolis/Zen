@@ -63,10 +63,12 @@ def git_fetch(dir, repo, branch):
 
 backward_cpp_src_dir = vendor_dir / "backward-cpp"
 wlroots_src_dir      = vendor_dir / "wlroots"
+magic_enum_src_dir   = vendor_dir / "magic-enum"
 
 def update_git_deps():
     git_fetch(backward_cpp_src_dir, "https://github.com/bombela/backward-cpp.git",        "master")
     git_fetch(wlroots_src_dir,      "https://gitlab.freedesktop.org/wlroots/wlroots.git", "master")
+    git_fetch(magic_enum_src_dir,   "https://github.com/Neargye/magic_enum.git",          "master")
 
 update_git_deps()
 

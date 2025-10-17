@@ -18,7 +18,7 @@ wlr_box zone_apply_external_padding(wlr_box box)
 
 void zone_init(Server* server)
 {
-    server->zone.selector = wlr_scene_rect_create(server->layers(Strata::overlay), 0, 0, zone_color_inital.values);
+    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, zone_color_inital.values);
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 

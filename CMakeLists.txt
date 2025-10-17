@@ -35,6 +35,10 @@ add_subdirectory(3rdparty/backward-cpp)
 
 # ------------------------------------------------------------------------------
 
+add_subdirectory(3rdparty/magic-enum)
+
+# ------------------------------------------------------------------------------
+
 add_executable(            ${PROJECT_NAME})
 target_precompile_headers( ${PROJECT_NAME} PUBLIC src/pch.hpp)
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PROGRAM_NAME=\"${PROJECT_NAME}\"")
@@ -69,4 +73,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     input
     stdc++exp
     Backward::Object
+    magic_enum::magic_enum
     )

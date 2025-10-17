@@ -55,9 +55,6 @@ enum class Strata
     top,
     overlay,
     debug,
-    count,
-
-    _count_,
 };
 
 constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
@@ -99,8 +96,7 @@ struct Server
     } debug;
 
     wlr_scene* scene;
-    wlr_scene_tree* _layers_[uint32_t(Strata::_count_)];
-    wlr_scene_tree*& layers(Strata strata) { return _layers_[uint32_t(strata)]; }
+    EnumMap<wlr_scene_tree*, Strata> layers;
     wlr_output_layout* output_layout;
     wlr_scene_output_layout* scene_output_layout;
 
@@ -172,9 +168,7 @@ struct Output
 
     wlr_box workarea;
 
-    static constexpr uint32_t zwlr_layer_shell_v1_layer_count = 4;
-    std::vector<LayerSurface*> _layers_[zwlr_layer_shell_v1_layer_count];
-    auto& layers(zwlr_layer_shell_v1_layer layer) { return _layers_[uint32_t(layer)]; }
+    EnumMap<std::vector<LayerSurface*>, zwlr_layer_shell_v1_layer> layers;
 };
 
 // -----------------------------------------------------------------------------

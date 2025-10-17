@@ -125,7 +125,7 @@ void server_new_output(wl_listener* listener, void* data)
         log_info("Output [{}] matches no rules, using auto layout", wlr_output->name);
     }
 
-    output->background = wlr_scene_rect_create(server->layers(Strata::background), wlr_output->width, wlr_output->height, background_color.values);
+    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, background_color.values);
 
     wlr_output_layout_output* l_output = matched_rule
         ? wlr_output_layout_add(server->output_layout, wlr_output, matched_rule->x, matched_rule->y)
@@ -158,7 +158,7 @@ void output_reconfigure(Output* output)
     wlr_scene_node_set_position(&output->background->node, output->workarea.x, output->workarea.y);
     wlr_scene_rect_set_size(output->background, output->workarea.width, output->workarea.height);
 
-    for (uint32_t i = uint32_t(Output::zwlr_layer_shell_v1_layer_count); i-- > 0;) {
-        output_layout_layer(output, zwlr_layer_shell_v1_layer(i));
+    for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
+        output_layout_layer(output, layer);
     }
 }

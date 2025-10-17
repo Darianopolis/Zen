@@ -32,6 +32,19 @@ constexpr auto ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------
 
+template<typename T, typename E>
+struct EnumMap
+{
+    T _data[magic_enum::enum_count<E>()];
+
+    static constexpr auto enum_values = magic_enum::enum_values<E>();
+
+    constexpr       T& operator[](E value)       { return _data[magic_enum::enum_index(value).value()]; }
+    constexpr const T& operator[](E value) const { return _data[magic_enum::enum_index(value).value()]; }
+};
+
+// -----------------------------------------------------------------------------
+
 struct Color
 {
     float values[4];
