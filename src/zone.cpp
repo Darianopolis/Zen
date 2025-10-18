@@ -22,15 +22,15 @@ void zone_init(Server* server)
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 
-bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
+bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& event)
 {
-    bool pressed = event->state == WL_POINTER_BUTTON_STATE_PRESSED;
+    bool pressed = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
 
     // Consolidate all interaction state
 
-    if (event->button == BTN_LEFT) {
+    if (event.button == BTN_LEFT) {
         if (pressed && is_main_mod_down(server) && !(get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
-            if (server->cursor_visible) {
+            if (is_cursor_visible(server)) {
                 double sx, sy;
                 wlr_surface* surface = nullptr;
                 if (Toplevel* toplevel = Toplevel::from(get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy))) {
@@ -41,7 +41,7 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
                         wlr_scene_node_set_enabled(&server->zone.selector->node, true);
                         server->zone.selecting = false;
                         server->zone.moving = true;
-                        server->interaction_mode = InteractionMode::zone;
+                        set_interaction_mode(server, InteractionMode::zone);
                         zone_process_cursor_motion(server);
                     }
                 }
@@ -57,12 +57,12 @@ bool zone_process_cursor_button(Server* server, wlr_pointer_button_event* event)
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
-            server->interaction_mode = InteractionMode::passthrough;
+            set_interaction_mode(server, InteractionMode::passthrough);
             server->zone.moving = false;
             return true;
         }
     }
-    else if (event->button == BTN_RIGHT && server->zone.moving) {
+    else if (event.button == BTN_RIGHT && server->zone.moving) {
         if (pressed) {
             server->zone.selecting = !server->zone.selecting;
             wlr_scene_rect_set_color(server->zone.selector, server->zone.selecting
@@ -138,13 +138,13 @@ void zone_process_cursor_motion(Server* server)
 
 void zone_begin_selection(Server* server)
 {
-    server->interaction_mode = InteractionMode::zone;
+    set_interaction_mode(server, InteractionMode::zone);
 
     zone_process_cursor_motion(server);
 }
 
 void zone_end_selection(Server* server)
 {
-    server->interaction_mode = InteractionMode::passthrough;
+    set_interaction_mode(server, InteractionMode::passthrough);
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }

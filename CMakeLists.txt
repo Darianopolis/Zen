@@ -71,6 +71,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     pixman
     libevdev
     input
+    evdev
     stdc++exp
     Backward::Object
     magic_enum::magic_enum

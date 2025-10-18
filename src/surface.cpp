@@ -263,7 +263,7 @@ void focus_cycle_toplevel_set_enabled(Toplevel* toplevel, bool enabled)
 
 void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
-    server->interaction_mode = InteractionMode::focus_cycle;
+    set_interaction_mode(server, InteractionMode::focus_cycle);
 
     surface_unfocus(get_focused_surface(server), true);
 
@@ -279,7 +279,7 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 
 void focus_cycle_end(Server* server)
 {
-    server->interaction_mode = InteractionMode::passthrough;
+    set_interaction_mode(server, InteractionMode::passthrough);
 
     Toplevel* focused = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
@@ -361,6 +361,11 @@ void surface_focus(Surface* surface)
         toplevel_set_activated(Toplevel::from(surface), true);
     }
 
+    if (surface->wlr_surface != server->seat->keyboard_state.focused_surface) {
+        // Focusing surface that didn't previously have keyboard focus, clear pointer to force a cursor surface update
+        wlr_seat_pointer_clear_focus(server->seat);
+    }
+
     if (keyboard) {
         wlr_seat_keyboard_notify_enter(seat, wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
@@ -426,7 +431,7 @@ void toplevel_unmap(wl_listener* listener, void*)
 
     // Reset interaction mode if grabbed toplevel was unmapped
     if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
-        reset_interaction_state(unmapped_toplevel->server);
+        set_interaction_mode(unmapped_toplevel->server, InteractionMode::passthrough);
     }
 
     // TODO: Handle toplevel unmap during zone operation
@@ -501,14 +506,30 @@ bool toplevel_is_interactable(Toplevel* toplevel)
     return true;
 }
 
-void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode, uint32_t edges)
+void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
 {
     if (!toplevel_is_interactable(toplevel)) return;
 
     Server* server = toplevel->server;
 
+    uint32_t edges = 0;
+    if (mode == InteractionMode::resize) {
+        wlr_box bounds = surface_get_bounds(toplevel);
+        int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
+        int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
+
+        if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
+        else if (nine_slice_x > 1) edges |= WLR_EDGE_RIGHT;
+
+        if      (nine_slice_y < 1) edges |= WLR_EDGE_TOP;
+        else if (nine_slice_y > 1) edges |= WLR_EDGE_BOTTOM;
+
+        // If no edges selected, must be center - switch to move
+        if (!edges) mode = InteractionMode::move;
+    }
+
     server->movesize.grabbed_toplevel = toplevel;
-    server->interaction_mode = mode;
+    set_interaction_mode(server, mode);
 
     if (mode == InteractionMode::move) {
         server->movesize.grab = Point{server->cursor->x, server->cursor->y};

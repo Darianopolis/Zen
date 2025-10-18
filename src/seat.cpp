@@ -13,58 +13,9 @@ bool is_main_mod_down(Server* server)
     return get_modifiers(server) & server->main_modifier;
 }
 
-bool handle_keybinding(Server* server, xkb_keysym_t sym)
+bool is_cursor_visible(Server* server)
 {
-    switch (sym)
-    {
-        case XKB_KEY_Escape:
-            wl_display_terminate(server->display);
-            break;
-        case XKB_KEY_Tab:
-        case XKB_KEY_ISO_Left_Tab: {
-            bool do_cycle = true;
-            if (server->interaction_mode ==  InteractionMode::passthrough) {
-                do_cycle = Toplevel::from(get_focused_surface(server));
-                focus_cycle_begin(server, nullptr);
-            }
-            if (do_cycle && server->interaction_mode == InteractionMode::focus_cycle) {
-                focus_cycle_step(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
-            }
-            break;
-        }
-        case XKB_KEY_t:
-            spawn("konsole", {"konsole"});
-            break;
-        case XKB_KEY_d:
-            spawn("rofi", {"rofi", "-show", "drun"});
-            break;
-        case XKB_KEY_v:
-            spawn("pavucontrol", {"pavucontrol"});
-            break;
-        case XKB_KEY_n:
-            spawn("systemctl", {"systemctl", "suspend"});
-            break;
-        case XKB_KEY_i:
-            spawn("xeyes", {"xeyes"});
-            break;
-        case XKB_KEY_s:
-            surface_unfocus(get_focused_surface(server), false);
-            wlr_seat_pointer_clear_focus(server->seat);
-            break;
-        case XKB_KEY_q:
-            if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
-            }
-            break;
-        case XKB_KEY_f:
-            if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
-            }
-            break;
-        default:
-            return false;
-    }
-    return true;
+    return server->cursor_is_default || (server->cursor_surface && server->cursor_surface->current.width && server->cursor_surface->current.height);
 }
 
 void keyboard_handle_modifiers(wl_listener* listener, void*)
@@ -94,25 +45,15 @@ void keyboard_handle_key(wl_listener* listener, void* data)
     bool handled = false;
     for (int i = 0; i < nsyms; ++i) {
         xkb_keysym_t sym = syms[i];
-
-        if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
-            if ((handled = handle_keybinding(server, sym))) {
-                break;
-            }
-        }
-
-        // TODO: Separate out into centralized input handle callback
-        if (event->state == WL_KEYBOARD_KEY_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
-            if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right) {
-                focus_cycle_end(server);
-            }
+        if ((handled = input_handle_key(server, *event, sym))) {
+            break;
         }
     }
 
-    if (!handled) {
-        wlr_seat_set_keyboard(seat, keyboard->wlr_keyboard);
-        wlr_seat_keyboard_notify_key(seat, event->time_msec, event->keycode, event->state);
-    }
+    if (handled) return;
+
+    wlr_seat_set_keyboard(seat, keyboard->wlr_keyboard);
+    wlr_seat_keyboard_notify_key(seat, event->time_msec, event->keycode, event->state);
 }
 
 void keyboard_handle_destroy(wl_listener* listener, void*)
@@ -196,10 +137,14 @@ void server_new_input(wl_listener* listener, void* data)
     wlr_seat_set_capabilities(server->seat, caps);
 }
 
+// -----------------------------------------------------------------------------
+
 void seat_reset_cursor(Server* server)
 {
     wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-    server->cursor_visible = true;
+    server->cursor_is_default = true;
+    server->cursor_surface = nullptr;
+    pointer_update_debug_visual(server);
 }
 
 void seat_request_set_cursor(wl_listener* listener, void* data)
@@ -208,17 +153,71 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     wlr_seat_pointer_request_set_cursor_event* event = static_cast<wlr_seat_pointer_request_set_cursor_event*>(data);
     wlr_seat_client* focused_client = server->seat->pointer_state.focused_client;
 
+    bool visible = event->surface && event->surface->current.width && event->surface->current.height;
+
     if (focused_client != event->seat_client) return;
 
-    // A client may only request an empty cursor if they have keyboard focus
-    if (!event->surface && server->seat->keyboard_state.focused_client != event->seat_client) {
+    // A client may only request to hide the cursor if they have keyboard focus
+    // This only handles immediately invisible cursor surfaces. See CursorListener for handling of deferred invisible cursors
+    // In cases where clients match we don't have a way of detecting the difference. E.g. When Steam is focused, a game running under Proton in Steam
+    // will also be able to hide the cursor, as they share the same client. This is acceptable as you can still unfocus to get the desired effect.
+    if (!visible && server->seat->keyboard_state.focused_client != event->seat_client) {
         log_warn("Client attempted to hide the cursor without keyboard focus, reset to default cursor");
         seat_reset_cursor(server);
         return;
     }
 
     wlr_cursor_set_surface(server->cursor, event->surface, event->hotspot_x, event->hotspot_y);
-    server->cursor_visible = bool(event->surface);
+    server->cursor_is_default = false;
+    server->cursor_surface = event->surface;
+    pointer_update_debug_visual(server);
+
+    if (event->surface && !event->surface->data) {
+        log_debug("Attaching listener to cursor surface");
+
+        // Since a client may request a cursor with a currently visible surface and then commit an invisible state
+        // we register a listener to track this and reset the cursor as necessary, while also updating the debug cursor visual state
+
+        struct CursorListener : Surface
+        {
+            // This listener inherits from Surface with an `invalid` role so that
+            // Surface::from(struct wlr_surface*) calls are still always safe to make
+
+            Server* server;
+            wlr_seat_client* client;
+            ListenerSet listeners;
+
+            static void commit(wl_listener* listener, void*)
+            {
+                CursorListener* cursor_listener = listener_userdata<CursorListener*>(listener);
+                if (!is_cursor_visible(cursor_listener->server) && cursor_listener->client != cursor_listener->server->seat->keyboard_state.focused_client) {
+                    log_warn("Cursor was committed to an invisible state by a client that does not have keyboard focus, resetting cursor!");
+                    seat_reset_cursor(cursor_listener->server);
+                }
+                pointer_update_debug_visual(cursor_listener->server);
+            }
+
+            static void destroy(wl_listener* listener, void* data)
+            {
+                CursorListener* cursor_listener = listener_userdata<CursorListener*>(listener);
+                log_debug("CursorListener({}) destroyed", (void*)cursor_listener);
+                struct wlr_surface* surface = static_cast<struct wlr_surface*>(data);
+                if (surface == cursor_listener->server->cursor_surface) {
+                    log_warn("Active cursor surface destroyed, reset cursor");
+                    seat_reset_cursor(cursor_listener->server);
+                }
+                delete cursor_listener;
+            }
+        };
+
+        CursorListener* cursor_listener = new CursorListener {};
+        cursor_listener->server = server;
+        cursor_listener->client = event->seat_client;
+        cursor_listener->listeners.listen(&event->surface->events.commit, cursor_listener, CursorListener::commit);
+        cursor_listener->listeners.listen(&event->surface->events.destroy, cursor_listener, CursorListener::destroy);
+
+        event->surface->data = cursor_listener->server;
+    }
 }
 
 void seat_pointer_focus_change(wl_listener* listener, void*)
@@ -329,16 +328,30 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
 
 // -----------------------------------------------------------------------------
 
-void reset_interaction_state(Server* server)
+void set_interaction_mode(Server* server, InteractionMode mode)
 {
-    if (server->interaction_mode == InteractionMode::focus_cycle) {
+    // if (server->interaction_mode == mode) return;
+
+    log_warn("Interaction mode transition {} -> {}", magic_enum::enum_name(server->interaction_mode), magic_enum::enum_name(mode));
+
+    // TODO: Interlocks
+
+    // Update mode before ending other states to avoid infinite recursion
+    InteractionMode prev_mode = server->interaction_mode;
+    server->interaction_mode = mode;
+
+    if (prev_mode == InteractionMode::focus_cycle) {
         focus_cycle_end(server);
     }
-    if (server->interaction_mode == InteractionMode::zone) {
+
+    if (prev_mode == InteractionMode::zone) {
         zone_end_selection(server);
     }
-    server->interaction_mode = InteractionMode::passthrough;
-    server->movesize.grabbed_toplevel = nullptr;
+
+    if (prev_mode == InteractionMode::move || prev_mode == InteractionMode::resize) {
+        server->movesize.grabbed_toplevel = nullptr;
+    }
+
 }
 
 void process_cursor_move(Server* server)
@@ -377,12 +390,21 @@ void process_cursor_resize(Server* server)
     });
 }
 
+void pointer_update_debug_visual(Server* server)
+{
+    if (!server->pointer.debug_visual) return;
+
+    wlr_scene_node_set_position(&server->pointer.debug_visual->node,
+        server->cursor->x - server->pointer.debug_visual_half_extent,
+        server->cursor->y - server->pointer.debug_visual_half_extent);
+    wlr_scene_rect_set_color(server->pointer.debug_visual, (is_cursor_visible(server) ? Color{0, 1, 0, 0.5} : Color{1, 0, 0, 0.5}).values);
+}
+
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, double dx, double dy, double dx_unaccel, double dy_unaccel)
 {
-    // Defer _ {
-    //     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, true);
-    //     wlr_scene_node_set_position(&server->pointer.debug_visual->node, server->cursor->x - 6, server->cursor->y - 6);
-    // };
+    Defer _ = [&] {
+        pointer_update_debug_visual(server);
+    };
 
     // Handle compositor interactions
 
@@ -407,7 +429,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     double sx = 0, sy = 0;
     wlr_seat* seat = server->seat;
     struct wlr_surface* wlr_surface = nullptr;
-    if (Surface* surface; server->interaction_mode == InteractionMode::pressed && (surface = Surface::from(seat->pointer_state.focused_surface))) {
+    if (Surface* surface; server->button_pressed_count > 0 && (surface = Surface::from(seat->pointer_state.focused_surface))) {
         wlr_surface = surface->wlr_surface;
         wlr_box coord_system = surface_get_coord_system(surface);
         sx = server->cursor->x - coord_system.x;
@@ -507,12 +529,152 @@ void server_cursor_button(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_button_event* event = static_cast<wlr_pointer_button_event*>(data);
 
-    // TODO: Focus follows mouse?
-    // TODO: Move interaction logic to separate source
+    if (input_handle_button(server, *event)) {
+        if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
+            log_warn("  button release event suppressed!");
+        }
+        return;
+    }
+
+    // Toplevel* toplevel = Toplevel::from(server->seat->pointer_state.focused_surface);
+    // log_info("Button event going to [{}]", toplevel ? toplevel->xdg_toplevel()->title : "NOTHING");
+
+    wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
+}
+
+void server_cursor_axis(wl_listener* listener, void* data)
+{
+    Server* server = listener_userdata<Server*>(listener);
+    wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
+
+    if (input_handle_axis(server, *event)) return;
+
+    wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
+}
+
+void server_cursor_frame(wl_listener* listener, void*)
+{
+    Server* server = listener_userdata<Server*>(listener);
+
+    wlr_seat_pointer_notify_frame(server->seat);
+}
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_keysym_t sym)
+{
+    wl_keyboard_key_state state = event.state;
+
+    // log_trace("Key {:#6x} -> {}", sym, magic_enum::enum_name(state));
+
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
+        switch (sym)
+        {
+            case XKB_KEY_Escape:
+                wl_display_terminate(server->display);
+                break;
+            case XKB_KEY_Tab:
+            case XKB_KEY_ISO_Left_Tab: {
+                bool do_cycle = true;
+                if (server->interaction_mode ==  InteractionMode::passthrough) {
+                    do_cycle = Toplevel::from(get_focused_surface(server));
+                    focus_cycle_begin(server, nullptr);
+                }
+                if (do_cycle && server->interaction_mode == InteractionMode::focus_cycle) {
+                    focus_cycle_step(server, nullptr, sym == XKB_KEY_ISO_Left_Tab);
+                }
+                return true;
+            }
+            case XKB_KEY_t:
+                spawn("konsole", {"konsole"});
+                return true;
+            case XKB_KEY_d:
+                spawn("rofi", {"rofi", "-show", "drun"});
+                return true;
+            case XKB_KEY_v:
+                spawn("pavucontrol", {"pavucontrol"});
+                return true;
+            case XKB_KEY_n:
+                spawn("systemctl", {"systemctl", "suspend"});
+                return true;
+            case XKB_KEY_i:
+                spawn("xeyes", {"xeyes"});
+                return true;
+            case XKB_KEY_s:
+                surface_unfocus(get_focused_surface(server), false);
+                wlr_seat_pointer_clear_focus(server->seat);
+                return true;
+            case XKB_KEY_q:
+                if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
+                    wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
+                }
+                return true;
+            case XKB_KEY_f:
+                if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
+                    toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
+                }
+                return true;
+            default:
+                ;
+        }
+    }
+
+    if (state == WL_KEYBOARD_KEY_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
+        if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right) {
+            focus_cycle_end(server);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
+{
+    // log_trace("Axis {} -> {}", magic_enum::enum_name(event.orientation), event.delta);
+
+    if (is_main_mod_down(server) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        if (is_cursor_visible(server)) {
+            if (server->interaction_mode ==  InteractionMode::passthrough) {
+                focus_cycle_begin(server, server->cursor);
+            }
+            if (server->interaction_mode == InteractionMode::focus_cycle) {
+                focus_cycle_step(server, server->cursor, event.delta > 0);
+            }
+        } else {
+            log_warn("Tried to focus scroll but cursor not visible");
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
+{
+    // log_trace("Button {} -> {}", libevdev_event_code_get_name(EV_KEY, event.button), magic_enum::enum_name(event.state));
+
+    // Update cursor button pressed count
+
+    uint32_t prev_button_count = server->button_pressed_count;
+    server->button_pressed_count += event.state == WL_POINTER_BUTTON_STATE_PRESSED ? 1 : -1;
+    if (server->button_pressed_count < 0) {
+        // TODO: Handle button pressed count using per-button state map for each pointer to avoid duplicate press events causing issues
+        //       Preferably we could just use wlr_pointer::buttons, but that is only updated on `wlr_seat_pointer_notify_button` which
+        //       also passes events on to clients
+        log_warn("Mouse button pressed count < 0, did we miss a press event?");
+        server->button_pressed_count = 0;
+    }
 
     // Handle interrupt focus cycle
 
-    bool focus_cycle_interrupted = event->state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle;
+    bool focus_cycle_interrupted = event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle;
     if (focus_cycle_interrupted) {
         focus_cycle_end(server);
         focus_cycle_interrupted = true;
@@ -524,117 +686,64 @@ void server_cursor_button(wl_listener* listener, void* data)
 
     if (focus_cycle_interrupted && surface_under_cursor != get_focused_surface(server)) {
         // If we interrupted a focus cycle by clicking a previously hidden toplevel,
-        // don't transfer focus as it would have been visisble as it wouldn't have
-        // been visible to the user before the press
+        // don't transfer focus as it wouldn't have been visible to the user before the press
         if (Toplevel::from(surface_under_cursor)) {
             surface_unfocus(get_focused_surface(server), false);
         } else {
             surface_focus(surface_under_cursor);
         }
-        return;
+        return true;
     }
 
     // Zone interaction
 
     if (server->interaction_mode == InteractionMode::passthrough || server->interaction_mode == InteractionMode::zone) {
-        if (zone_process_cursor_button(server, event)) return;
-    }
-
-    // Leave move/size/pressed modes on release
-
-    if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-        // TODO: Do we want this reset cursor_mode from `pressed` if *any* button is released?
-        reset_interaction_state(server);
-        wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
-        return;
-    }
-
-    // Focus window on any button press
-
-    if (surface_under_cursor) {
-        surface_focus(surface_under_cursor);
-    } else if (get_focused_surface(server)) {
-        log_warn("Unfocusing focused toplevel");
-        surface_unfocus(get_focused_surface(server), false);
-    }
-
-    server->interaction_mode = InteractionMode::pressed;
-
-    // Check for move/size interaction begin
-
-    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && is_main_mod_down(server)) {
-        if (event->button == BTN_LEFT && (get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
-            if (server->cursor_visible) {
-                toplevel_begin_interactive(toplevel, InteractionMode::move, 0);
-            } else {
-                log_warn("Tried to initiate move but cursor not visible");
-            }
-            return;
-        } else if (event->button == BTN_RIGHT) {
-            wlr_box bounds = surface_get_bounds(surface_under_cursor);
-            int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
-            int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
-
-            InteractionMode type = InteractionMode::resize;
-            uint32_t edges = 0;
-
-            if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
-            else if (nine_slice_x > 1) edges |= WLR_EDGE_RIGHT;
-
-            if      (nine_slice_y < 1) edges |= WLR_EDGE_TOP;
-            else if (nine_slice_y > 1) edges |= WLR_EDGE_BOTTOM;
-
-            // If no edges selected, must be center - switch to move
-            if (!edges) type = InteractionMode::move;
-
-            if (server->cursor_visible) {
-                toplevel_begin_interactive(toplevel, type, edges);
-            } else {
-                log_warn("Tried to initiate resize but cursor not visible");
-            }
-            return;
-        } else if (event->button == BTN_MIDDLE) {
-            if (server->cursor_visible) {
-                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
-            } else {
-                log_warn("Tried to close-under-cursor but cursor not visible");
-            }
-            return;
+        if (zone_process_cursor_button(server, event) || server->interaction_mode == InteractionMode::zone) {
+            return true;
         }
     }
 
-    // ... else passthrough to client
+    // Leave move/size modes on all mouse buttons released
 
-    wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
-}
+    if (server->interaction_mode == InteractionMode::move || server->interaction_mode == InteractionMode::resize) {
+        if (event.state == WL_POINTER_BUTTON_STATE_RELEASED && server->button_pressed_count == 0) {
+            set_interaction_mode(server, InteractionMode::passthrough);
+        }
+        return true;
+    }
 
-void server_cursor_axis(wl_listener* listener, void* data)
-{
-    Server* server = listener_userdata<Server*>(listener);
-    wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
+    // No further actions for button releases
 
-    if (is_main_mod_down(server) && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        if (server->cursor_visible) {
-            if (server->interaction_mode ==  InteractionMode::passthrough) {
-                focus_cycle_begin(server, server->cursor);
-            }
-            if (server->interaction_mode == InteractionMode::focus_cycle) {
-                focus_cycle_step(server, server->cursor, event->delta > 0);
+    if (event.state == WL_POINTER_BUTTON_STATE_RELEASED) {
+        return false;
+    }
+
+    // Focus window on any button press (only switch focus if no previous focus)
+
+    if (prev_button_count == 0 || !get_focused_surface(server)) {
+        if (surface_under_cursor) {
+            surface_focus(surface_under_cursor);
+        } else if (get_focused_surface(server)) {
+            surface_unfocus(get_focused_surface(server), false);
+        }
+    }
+
+    // Check for move/size interaction begin, or close-under-cursor
+
+    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && is_main_mod_down(server) && server->interaction_mode == InteractionMode::passthrough) {
+        if (is_cursor_visible(server)) {
+            if (event.button == BTN_LEFT && (get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
+                toplevel_begin_interactive(toplevel, InteractionMode::move);
+            } else if (event.button == BTN_RIGHT) {
+                toplevel_begin_interactive(toplevel, InteractionMode::resize);
+            } else if (event.button == BTN_MIDDLE) {
+                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
             }
         } else {
-            log_warn("Tried to focus scroll but cursor not visible");
+            log_warn("Compositor button pressed while cursor is hidden");
         }
-
-        return;
+        return true;
     }
 
-
-    wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
-}
-
-void server_cursor_frame(wl_listener* listener, void*)
-{
-    Server* server = listener_userdata<Server*>(listener);
-
-    wlr_seat_pointer_notify_frame(server->seat);
+    return false;
 }

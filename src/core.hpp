@@ -69,7 +69,6 @@ constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
 enum class InteractionMode
 {
     passthrough,
-    pressed,
     move,
     resize,
     zone,
@@ -106,9 +105,12 @@ struct Server
     wlr_xdg_shell* xdg_shell;
     wlr_layer_shell_v1* layer_shell;
 
-    bool cursor_visible = true;
-    wlr_cursor* cursor;
+    bool                 cursor_is_default = true;
+    wlr_surface*         cursor_surface;
+    wlr_cursor*          cursor;
     wlr_xcursor_manager* cursor_manager;
+
+    int32_t button_pressed_count = 0;
 
     wlr_seat* seat;
     std::vector<Keyboard*> keyboards;
@@ -118,6 +120,7 @@ struct Server
         wlr_pointer_constraint_v1* active_constraint;
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
         wlr_scene_rect* debug_visual;
+        uint32_t        debug_visual_half_extent;
     } pointer;
 
     InteractionMode interaction_mode;
@@ -174,6 +177,7 @@ struct Output
 
 enum class SurfaceRole
 {
+    invalid,
     toplevel,
     popup,
     layer_surface,
@@ -181,15 +185,19 @@ enum class SurfaceRole
 
 struct Surface
 {
-    SurfaceRole role;
+    SurfaceRole role = SurfaceRole::invalid;
 
     Server* server;
     wlr_scene_tree* scene_tree;
     wlr_scene_tree* popup_tree;
     struct wlr_surface* wlr_surface;
 
-    static Surface* from(struct wlr_surface* surface) { return surface ? static_cast<Surface*>(surface->data) : nullptr; }
-    static Surface* from(    wlr_scene_node* node)    { return node    ? static_cast<Surface*>(node->data)    : nullptr; }
+    static Surface* from(void* data) {
+        Surface* surface = static_cast<Surface*>(data);
+        return (surface && surface->role != SurfaceRole::invalid) ? surface : nullptr;
+    }
+    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from(surface->data) : nullptr; }
+    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from(node->data)    : nullptr; }
 };
 
 struct Toplevel : Surface
@@ -257,15 +265,18 @@ struct LayerSurface : Surface
 
 // ---- Policy -----------------------------------------------------------------
 
-void reset_interaction_state(Server*);
+void set_interaction_mode(Server*, InteractionMode);
 
 void focus_cycle_begin(Server*, wlr_cursor*);
 void focus_cycle_step( Server*, wlr_cursor*, bool backwards);
 void focus_cycle_end(  Server*);
 
-bool     handle_keybinding(Server*, xkb_keysym_t);
-uint32_t get_modifiers(    Server*);
-bool     is_main_mod_down( Server*);
+bool input_handle_key(   Server* server, const wlr_keyboard_key_event&   event, xkb_keysym_t sym);
+bool input_handle_button(Server* server, const wlr_pointer_button_event& event);
+bool input_handle_axis(  Server* server, const wlr_pointer_axis_event&   event);
+
+uint32_t get_modifiers(   Server*);
+bool     is_main_mod_down(Server*);
 
 // ---- Keyboard ---------------------------------------------------------------
 
@@ -276,6 +287,10 @@ void keyboard_handle_key(      wl_listener*, void*);
 void keyboard_handle_destroy(  wl_listener*, void*);
 
 // ---- Pointer ----------------------------------------------------------------
+
+bool is_cursor_visible(Server*);
+
+void pointer_update_debug_visual(Server*);
 
 void process_cursor_resize(Server*);
 void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device *, double dx, double dy, double dx_unaccel, double dy_unaccel);
@@ -309,7 +324,7 @@ void seat_start_drag(           wl_listener*, void*);
 
 void zone_init(                 Server*);
 void zone_process_cursor_motion(Server*);
-bool zone_process_cursor_button(Server*, wlr_pointer_button_event*);
+bool zone_process_cursor_button(Server*, const wlr_pointer_button_event&);
 void zone_begin_selection(      Server*);
 void zone_end_selection(        Server*);
 
@@ -360,7 +375,7 @@ bool toplevel_is_interactable( Toplevel*);
 void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 
-void toplevel_begin_interactive(Toplevel*, InteractionMode, uint32_t edges);
+void toplevel_begin_interactive(Toplevel*, InteractionMode);
 
 void toplevel_map(               wl_listener*, void*);
 void toplevel_unmap(             wl_listener*, void*);

@@ -10,6 +10,7 @@ struct startup_options
     const char* startup_cmd;
     const char* log_file;
     uint32_t additional_outputs;
+    bool ctrl_mod;
 };
 
 static
@@ -26,12 +27,22 @@ void init(Server* server, const startup_options& options)
     server->main_modifier_keysym_left = XKB_KEY_Super_L;
     server->main_modifier_keysym_right = XKB_KEY_Super_R;
 
+    bool nested = false;
+
     auto for_each_backend = [&](wlr_backend* backend) {
         if (!wlr_backend_is_wl(backend) && !wlr_backend_is_x11(backend)) return;
 
-        server->main_modifier = WLR_MODIFIER_ALT;
-        server->main_modifier_keysym_left = XKB_KEY_Alt_L;
-        server->main_modifier_keysym_right = XKB_KEY_Alt_R;
+        nested = true;
+
+        if (options.ctrl_mod) {
+            server->main_modifier = WLR_MODIFIER_CTRL;
+            server->main_modifier_keysym_left = XKB_KEY_Control_L;
+            server->main_modifier_keysym_right = XKB_KEY_Control_R;
+        } else {
+            server->main_modifier = WLR_MODIFIER_ALT;
+            server->main_modifier_keysym_left = XKB_KEY_Alt_L;
+            server->main_modifier_keysym_right = XKB_KEY_Alt_R;
+        }
 
         log_warn("Running compositor nested, mouse constraints will be silently ignored!");
         server->debug.ignore_mouse_constraints = true;
@@ -118,8 +129,11 @@ void init(Server* server, const startup_options& options)
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
 	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
 
-    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], 12, 12, Color{1, 0, 0, 1}.values);
-    wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
+    if (nested) {
+        server->pointer.debug_visual_half_extent = 4;
+        server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
+        pointer_update_debug_visual(server);
+    }
 
     server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, server_cursor_motion);
@@ -156,6 +170,8 @@ void run(Server* server, const startup_options& options)
     }
 
     setenv("WAYLAND_DISPLAY", socket, true);
+
+    setenv("XDG_CURRENT_DESKTOP", PROGRAM_NAME, true);
 
     if (options.xwayland_socket) {
         setenv("DISPLAY", options.xwayland_socket, true);
@@ -217,6 +233,8 @@ int main(int argc, char* argv[])
             options.startup_cmd = param();
         } else if ("--xwayland"sv == arg) {
             options.xwayland_socket = param();
+        } else if ("--ctrl-mod"sv == arg) {
+            options.ctrl_mod = true;
         } else if ("--outputs"sv == arg) {
             const char* p = param();
             int v = 1;
@@ -228,7 +246,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    init_log(LogLevel::trace, WLR_INFO, options.log_file);
+    init_log(LogLevel::trace, WLR_SILENT, options.log_file);
 
     // Init
 
