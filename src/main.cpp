@@ -76,7 +76,6 @@ void init(Server* server, const startup_options& options)
     wlr_export_dmabuf_manager_v1_create(server->display);
     wlr_screencopy_manager_v1_create(server->display);
     wlr_data_control_manager_v1_create(server->display);
-    wlr_primary_selection_v1_device_manager_create(server->display);
     wlr_viewporter_create(server->display);
     wlr_single_pixel_buffer_manager_v1_create(server->display);
     wlr_fractional_scale_manager_v1_create(server->display, 1);
@@ -169,8 +168,9 @@ void run(Server* server, const startup_options& options)
         return;
     }
 
+    server->debug.original_cwd = std::filesystem::current_path();
+    chdir(getenv("HOME"));
     setenv("WAYLAND_DISPLAY", socket, true);
-
     setenv("XDG_CURRENT_DESKTOP", PROGRAM_NAME, true);
 
     if (options.xwayland_socket) {

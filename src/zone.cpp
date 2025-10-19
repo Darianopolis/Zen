@@ -29,7 +29,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     // Consolidate all interaction state
 
     if (event.button == BTN_LEFT) {
-        if (pressed && is_main_mod_down(server) && !(get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
+        if (pressed && is_main_mod_down(server) && !is_mod_down(server, WLR_MODIFIER_SHIFT)) {
             if (is_cursor_visible(server)) {
                 double sx, sy;
                 wlr_surface* surface = nullptr;
@@ -145,6 +145,7 @@ void zone_begin_selection(Server* server)
 
 void zone_end_selection(Server* server)
 {
-    set_interaction_mode(server, InteractionMode::passthrough);
+    if (server->interaction_mode != InteractionMode::zone) return;
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
+    server->interaction_mode = InteractionMode::passthrough;
 }

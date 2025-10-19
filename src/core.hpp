@@ -32,10 +32,13 @@ static constexpr struct {
 } zone_external_padding_ltrb;
 static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 
-struct OutputRule { const char* name; int x, y; };
+struct OutputRule { const char* name; int x, y; bool primary; };
 static constexpr OutputRule output_rules[] = {
-    { .name = "DP-1", .x =     0, .y = 0 },
-    { .name = "DP-2", .x = -3840, .y = 0 },
+    { .name = "DP-1", .x =     0, .y = 0, .primary = true },
+    { .name = "DP-2", .x = -3840, .y = 0                  },
+
+    { .name = "DP-4", .x =     0, .y = 0, .primary = true },
+    { .name = "DP-3", .x = -3840, .y = 0                  },
 };
 
 static constexpr const char* keyboard_layout       = "gb";
@@ -90,6 +93,7 @@ struct Server
     wlr_allocator* allocator;
 
     struct {
+        std::filesystem::path original_cwd;
         bool ignore_mouse_constraints = false;
     } debug;
 
@@ -126,6 +130,7 @@ struct Server
     InteractionMode interaction_mode;
 
     struct {
+        // TODO: This needs to be cleaned up on Toplevel destroy to avoid dangling
         Toplevel* grabbed_toplevel;
         Point grab;
         wlr_box grab_bounds;
@@ -275,8 +280,8 @@ bool input_handle_key(   Server* server, const wlr_keyboard_key_event&   event, 
 bool input_handle_button(Server* server, const wlr_pointer_button_event& event);
 bool input_handle_axis(  Server* server, const wlr_pointer_axis_event&   event);
 
-uint32_t get_modifiers(   Server*);
-bool     is_main_mod_down(Server*);
+bool is_mod_down(     Server* server, wlr_keyboard_modifier modifiers);
+bool is_main_mod_down(Server*);
 
 // ---- Keyboard ---------------------------------------------------------------
 
@@ -371,9 +376,6 @@ void toplevel_set_activated(   Toplevel*, bool active);
 void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
 void toplevel_update_border(   Toplevel*);
 bool toplevel_is_interactable( Toplevel*);
-
-void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
-void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data);
 
 void toplevel_begin_interactive(Toplevel*, InteractionMode);
 

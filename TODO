@@ -35,7 +35,7 @@
 - ✅ Shell layers
    - ✅ Add multiple strata levels
    - ✅ Add layer shell protocol
-   - Ensure layer surface popups open on top/overlay surface
+   - ✅ Ensure layer surface popups open on top/overlay surface
 
 ### Bugs
 
@@ -47,12 +47,13 @@
 - SDL3/GLFW + Vulkan (AMD) + syncobj
    - Occasional OUT-OF-DATE when resizing at extremely high frame rate (14k+fps). Appears to be a Vulkan WSI bug
       - Currently tested only with separate render thread. Need to test with syncronous rendering and other drivers
-- BeamNG + VSync-disabled + wlroots DRM Backend
+- BeamNG + VSync-disabled + wlroots DRM Backend + AMD RADV (testing on 9070 XT)
    - Stuttery presentation but high framerate
    - Stutters go away if
       - Ran in nested compositor (TESTED: nested xwayland-satellite AND gamescope)
-      - Ran in standalone Niri with same xwayland-satellite binary
+      - Ran in standalone Niri with same xwayland-satellite binary (using Smithay isntead of wlroots)
       - Ran with VSync enabled
+      - Ran with NVidia GPU (VSync enabled or disabled)
    - Stutters also present in
       - Native Vulkan binary, Proton Vulkan mode, Proton DirectX11 mode
       - DWL with direct XWayland integration
@@ -65,9 +66,31 @@
    - Closing and reopening the Steam window does not fix it, the entire processh as to be completely restarted
 - Steam client popups appearing in other XWayland windows
    - When steam and xeyes are open, can observe Steam top menu popups showing in xeyes (even when xeyes is in a completely different part of the screen)
+- First key input after `kalk` is opened is ignored
+- Occasionally a unexpected scene_tree_node with data pointing back to an existing Toplevel is created
 
 ### Additional
 
+- Pseudo-fullscreen mode
+   - Per-window mode to spoof permenant fullscreen state/size
+      - Particularly useful for games that misbehave when resized
+- Tidy up border handling
+   - Pixel-perfect position/size calculations for zones (would be able to use `wlr_box` for zone calculations and drop custom `Box` type)
+- Track mouse button press state individually instead of using single global counter (which will become desynced on skipped input events)
+- Improved input and modfifier handling
+   - Set default numlock state
+   - Mask main modifier(s) from clients?
+   - Mask all key/button inputs from clients when main modifier is down?
+   - Support non-modifier keys as modifiers (E.g. mouse side buttons)
+   - Custom mouse acceleration curves
+   - Additional capabilities
+      - Key/button remapping?
+      - Joystick remapping?
+- Improve logging
+   - Manage spawned process standard output
+      - Spawn option to either ignore, log, or pipe to separate file
+   - Track log message origins
+   - Use standard logging format with available log view/analysis tooling?
 - Support wlr-foreign-toplevel-management for rofi window mode
 - Surface positions should remain fixed relative to output position when resizing other outputs
 - ✅ Prevent clients from hiding the cursor unless they have keyboard focus
@@ -82,11 +105,8 @@
    - xdg_shell -> version 7
 - Debug options
    - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
-- Remove wlr_primary_selection_v1_device_manager_create?
 - Add IPC with messaging client
    - Spawn message
-- Scaling
-   - xdg_output_manager_v1
 - ✅ Spawn child clients in center of parent
 - xdg_foreign support
 - Idle protocol

@@ -152,6 +152,14 @@ void server_new_output(wl_listener* listener, void* data)
     wlr_scene_output* scene_output = wlr_scene_output_create(server->scene, wlr_output);
     wlr_scene_output_layout_add_output(server->scene_output_layout, l_output, scene_output);
     output->scene_output = scene_output;
+
+    if (matched_rule && matched_rule->primary && !server->debug.ignore_mouse_constraints) {
+        wlr_box bounds = output_get_bounds(output);
+        double x = bounds.x + bounds.width / 2.0;
+        double y = bounds.y + bounds.height / 2.0;
+        log_info("Output is primary, warping cursor to center ({}, {})", x, y);
+        wlr_cursor_warp(server->cursor, nullptr, x, y);
+    }
 }
 
 void server_output_layout_change(wl_listener* listener, void*)

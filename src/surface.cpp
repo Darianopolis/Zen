@@ -229,22 +229,52 @@ void toplevel_set_activated(Toplevel* toplevel, bool active)
 
 // -----------------------------------------------------------------------------
 
-void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
+static
+std::string toplevel_debug_get_name(Toplevel* toplevel)
 {
-    auto fn = [&](wlr_scene_node* node, double, double) -> bool {
-        if (Toplevel* toplevel = Toplevel::from(node)) return for_each(for_each_data, toplevel);
-        return true;
-    };
-    walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+    return toplevel
+        ? std::format("Toplevel<{}>({}, {})",
+            (void*)toplevel,
+            toplevel->xdg_toplevel()->app_id ? toplevel->xdg_toplevel()->app_id : "?",
+            toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?")
+        : "";
 }
 
-void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
+static
+void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data, bool backward)
 {
     auto fn = [&](wlr_scene_node* node, double, double) -> bool {
-        if (Toplevel* toplevel = Toplevel::from(node)) return for_each(for_each_data, toplevel);
+        if (Toplevel* toplevel = Toplevel::from(node)) {
+            if (&toplevel->scene_tree->node != node) {
+                // TODO: Root cause this issue in wlroots
+                log_error("BUG - Unexpected wlr_scene_node referencing {} (expected {}, got {}), unlinking!",
+                    toplevel_debug_get_name(toplevel),
+                    (void*)&toplevel->scene_tree->node,
+                    (void*)node);
+                node->data = nullptr;
+                return true;
+            }
+            return for_each(for_each_data, toplevel);
+        }
         return true;
     };
-    walk_scene_tree_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+    if (backward) {
+        walk_scene_tree_back_to_front(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+    } else {
+        walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+    }
+}
+
+static
+void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
+{
+    walk_toplevels(server, for_each, for_each_data, false);
+}
+
+static
+void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
+{
+    walk_toplevels(server, for_each, for_each_data, true);
 }
 
 // -----------------------------------------------------------------------------
@@ -279,13 +309,17 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 
 void focus_cycle_end(Server* server)
 {
-    set_interaction_mode(server, InteractionMode::passthrough);
+    if (server->interaction_mode != InteractionMode::focus_cycle) return;
+    server->interaction_mode = InteractionMode::passthrough;
 
     Toplevel* focused = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
         if (focus_cycle_toplevel_is_enabled(toplevel)) {
-            if (!focused) focused = toplevel;
+            if (!focused) {
+                focused = toplevel;
+            }
         }
+
         focus_cycle_toplevel_set_enabled(toplevel, true);
         return true;
     };
@@ -326,7 +360,9 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
     };
     iter_fn(server, FUNC_REF(pick));
 
-    if (!new_active && first) new_active = first;
+    if (!new_active && first) {
+        new_active = first;
+    }
 
     auto update = [&](Toplevel* toplevel) -> bool {
         focus_cycle_toplevel_set_enabled(toplevel, toplevel == new_active);
@@ -364,6 +400,7 @@ void surface_focus(Surface* surface)
     if (surface->wlr_surface != server->seat->keyboard_state.focused_surface) {
         // Focusing surface that didn't previously have keyboard focus, clear pointer to force a cursor surface update
         wlr_seat_pointer_clear_focus(server->seat);
+        seat_reset_cursor(surface->server);
     }
 
     if (keyboard) {
@@ -380,11 +417,14 @@ void surface_unfocus(Surface* surface, bool force)
     if (get_focused_surface(surface->server) != surface)
         return;
 
+
     if (force) {
         wlr_seat_keyboard_clear_focus(surface->server->seat);
     } else {
         wlr_seat_keyboard_notify_clear_focus(surface->server->seat);
     }
+
+    seat_reset_cursor(surface->server);
 }
 
 Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
@@ -413,7 +453,7 @@ Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_su
 
         return !tree;
     };
-    walk_scene_tree_reverse_depth_first(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+    walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
 
     return surface;
 }
@@ -422,12 +462,16 @@ void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
+    log_debug("Toplevel mapped:    {}", toplevel_debug_get_name(toplevel));
+
     surface_focus(toplevel);
 }
 
 void toplevel_unmap(wl_listener* listener, void*)
 {
     Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
+
+    log_debug("Toplevel unmapped:  {}", toplevel_debug_get_name(unmapped_toplevel));
 
     // Reset interaction mode if grabbed toplevel was unmapped
     if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
@@ -436,16 +480,18 @@ void toplevel_unmap(wl_listener* listener, void*)
 
     // TODO: Handle toplevel unmap during zone operation
 
-    surface_unfocus(unmapped_toplevel, true);
+    if (get_focused_surface(unmapped_toplevel->server) == unmapped_toplevel) {
+        surface_unfocus(unmapped_toplevel, true);
 
-    auto fn = [&](Toplevel* toplevel) {
-        if (toplevel != unmapped_toplevel) {
-            surface_focus(toplevel);
-            return false;
-        }
-        return true;
-    };
-    walk_toplevels_front_to_back(unmapped_toplevel->server, FUNC_REF(fn));
+        auto fn = [&](Toplevel* toplevel) {
+            if (toplevel != unmapped_toplevel) {
+                surface_focus(toplevel);
+                return false;
+            }
+            return true;
+        };
+        walk_toplevels_front_to_back(unmapped_toplevel->server, FUNC_REF(fn));
+    }
 }
 
 void toplevel_commit(wl_listener* listener, void*)
@@ -453,6 +499,9 @@ void toplevel_commit(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel()->base->initial_commit) {
+
+        log_info("Toplevel committed: {}", toplevel_debug_get_name(toplevel));
+
         decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), 0, 0);
     } else {
@@ -491,6 +540,12 @@ void toplevel_commit(wl_listener* listener, void*)
 void toplevel_destroy(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+
+    log_debug("Toplevel destroyed: {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
+        toplevel_debug_get_name(toplevel),
+        (void*)toplevel->xdg_toplevel()->base->surface,
+        (void*)toplevel->xdg_toplevel(),
+        (void*)&toplevel->scene_tree->node);
 
     wlr_scene_node_destroy(&toplevel->popup_tree->node);
 
@@ -593,6 +648,12 @@ void server_new_toplevel(wl_listener* listener, void* data)
 
     toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
+
+    log_debug("Toplevel created:   {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
+        toplevel_debug_get_name(toplevel),
+        (void*)xdg_toplevel->base->surface,
+        (void*)xdg_toplevel,
+        (void*)&toplevel->scene_tree->node);
 
     toplevel->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
 

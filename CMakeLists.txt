@@ -8,7 +8,7 @@ add_subdirectory(3rdparty/wayland)
 
 # ------------------------------------------------------------------------------
 
-set(USE_GIT_WLROOTS ON)
+set(USE_GIT_WLROOTS OFF)
 if (USE_GIT_WLROOTS)
     add_subdirectory(3rdparty/wlroots-install)
 else()
@@ -52,6 +52,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-missing-designated-field-initializers
     -Wno-missing-field-initializers
     -Wno-unknown-pragmas
+    -Wimplicit-fallthrough
     )
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_sources(            ${PROJECT_NAME} PUBLIC

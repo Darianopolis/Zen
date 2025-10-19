@@ -1,11 +1,17 @@
 #include "pch.hpp"
 #include "core.hpp"
 
+static
 uint32_t get_modifiers(Server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
-    if (!keyboard) return false;
+    if (!keyboard) return 0;
     return wlr_keyboard_get_modifiers(keyboard);
+}
+
+bool is_mod_down(Server* server, wlr_keyboard_modifier modifiers)
+{
+    return (get_modifiers(server) & modifiers) == modifiers;
 }
 
 bool is_main_mod_down(Server* server)
@@ -162,7 +168,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     // In cases where clients match we don't have a way of detecting the difference. E.g. When Steam is focused, a game running under Proton in Steam
     // will also be able to hide the cursor, as they share the same client. This is acceptable as you can still unfocus to get the desired effect.
     if (!visible && server->seat->keyboard_state.focused_client != event->seat_client) {
-        log_warn("Client attempted to hide the cursor without keyboard focus, reset to default cursor");
+        // log_warn("Client attempted to hide the cursor without keyboard focus, reset to default cursor");
         seat_reset_cursor(server);
         return;
     }
@@ -173,7 +179,6 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     pointer_update_debug_visual(server);
 
     if (event->surface && !event->surface->data) {
-        log_debug("Attaching listener to cursor surface");
 
         // Since a client may request a cursor with a currently visible surface and then commit an invisible state
         // we register a listener to track this and reset the cursor as necessary, while also updating the debug cursor visual state
@@ -191,7 +196,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
             {
                 CursorListener* cursor_listener = listener_userdata<CursorListener*>(listener);
                 if (!is_cursor_visible(cursor_listener->server) && cursor_listener->client != cursor_listener->server->seat->keyboard_state.focused_client) {
-                    log_warn("Cursor was committed to an invisible state by a client that does not have keyboard focus, resetting cursor!");
+                    // log_warn("Cursor was committed to an invisible state by a client that does not have keyboard focus, resetting cursor!");
                     seat_reset_cursor(cursor_listener->server);
                 }
                 pointer_update_debug_visual(cursor_listener->server);
@@ -200,10 +205,8 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
             static void destroy(wl_listener* listener, void* data)
             {
                 CursorListener* cursor_listener = listener_userdata<CursorListener*>(listener);
-                log_debug("CursorListener({}) destroyed", (void*)cursor_listener);
                 struct wlr_surface* surface = static_cast<struct wlr_surface*>(data);
                 if (surface == cursor_listener->server->cursor_surface) {
-                    log_warn("Active cursor surface destroyed, reset cursor");
                     seat_reset_cursor(cursor_listener->server);
                 }
                 delete cursor_listener;
@@ -284,11 +287,10 @@ void seat_drag_update_position(Server* server)
 void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 {
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
-    log_info("destroying pointer constraint: {}", (void*)constraint);
+    // log_info("destroying pointer constraint: {}", (void*)constraint);
 
     Server* server = listener_userdata<Server*>(listener);
     if (server->pointer.active_constraint == constraint) {
-        log_info("  was active!");
         server->pointer.active_constraint = nullptr;
     }
 
@@ -300,8 +302,6 @@ void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 
         // TODO: Select constraint based on focused window at cursor move time
 
-        log_info("  replacing with next constriant: {}", (void*)new_constraint);
-
         server->pointer.active_constraint = new_constraint;
         wlr_pointer_constraint_v1_send_activated(new_constraint);
     }
@@ -312,12 +312,11 @@ void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 void server_pointer_constraint_new(wl_listener* listener, void* data)
 {
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
-    log_info("creating pointer constraint: {}", (void*)constraint);
+    // log_info("creating pointer constraint: {}", (void*)constraint);
 
     Server* server = listener_userdata<Server*>(listener);
 
     if (server->pointer.active_constraint) {
-        log_info("  replacing previous constraint: {}", (void*)server->pointer.active_constraint);
         wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
     }
     server->pointer.active_constraint = constraint;
@@ -330,15 +329,11 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
 
 void set_interaction_mode(Server* server, InteractionMode mode)
 {
-    // if (server->interaction_mode == mode) return;
-
-    log_warn("Interaction mode transition {} -> {}", magic_enum::enum_name(server->interaction_mode), magic_enum::enum_name(mode));
+    // log_warn("Interaction mode transition {} -> {}", magic_enum::enum_name(server->interaction_mode), magic_enum::enum_name(mode));
 
     // TODO: Interlocks
 
-    // Update mode before ending other states to avoid infinite recursion
     InteractionMode prev_mode = server->interaction_mode;
-    server->interaction_mode = mode;
 
     if (prev_mode == InteractionMode::focus_cycle) {
         focus_cycle_end(server);
@@ -348,10 +343,11 @@ void set_interaction_mode(Server* server, InteractionMode mode)
         zone_end_selection(server);
     }
 
+    server->interaction_mode = mode;
+
     if (prev_mode == InteractionMode::move || prev_mode == InteractionMode::resize) {
         server->movesize.grabbed_toplevel = nullptr;
     }
-
 }
 
 void process_cursor_move(Server* server)
@@ -530,14 +526,8 @@ void server_cursor_button(wl_listener* listener, void* data)
     wlr_pointer_button_event* event = static_cast<wlr_pointer_button_event*>(data);
 
     if (input_handle_button(server, *event)) {
-        if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
-            log_warn("  button release event suppressed!");
-        }
         return;
     }
-
-    // Toplevel* toplevel = Toplevel::from(server->seat->pointer_state.focused_surface);
-    // log_info("Button event going to [{}]", toplevel ? toplevel->xdg_toplevel()->title : "NOTHING");
 
     wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 }
@@ -593,8 +583,20 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
             case XKB_KEY_t:
                 spawn("konsole", {"konsole"});
                 return true;
+            case XKB_KEY_T:
+                spawn("konsole", {"konsole", "--workdir", server->debug.original_cwd.c_str()});
+                return true;
+            case XKB_KEY_g:
+                spawn("dolphin", {"dolphin"});
+                return true;
+            case XKB_KEY_h:
+                spawn("kalk", {"kalk"});
+                return true;
             case XKB_KEY_d:
                 spawn("rofi", {"rofi", "-show", "drun"});
+                return true;
+            case XKB_KEY_D:
+                spawn("rofi", {"rofi", "-show", "run"});
                 return true;
             case XKB_KEY_v:
                 spawn("pavucontrol", {"pavucontrol"});
@@ -607,7 +609,6 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 return true;
             case XKB_KEY_s:
                 surface_unfocus(get_focused_surface(server), false);
-                wlr_seat_pointer_clear_focus(server->seat);
                 return true;
             case XKB_KEY_q:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
@@ -639,15 +640,11 @@ bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
     // log_trace("Axis {} -> {}", magic_enum::enum_name(event.orientation), event.delta);
 
     if (is_main_mod_down(server) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        if (is_cursor_visible(server)) {
-            if (server->interaction_mode ==  InteractionMode::passthrough) {
-                focus_cycle_begin(server, server->cursor);
-            }
-            if (server->interaction_mode == InteractionMode::focus_cycle) {
-                focus_cycle_step(server, server->cursor, event.delta > 0);
-            }
-        } else {
-            log_warn("Tried to focus scroll but cursor not visible");
+        if (server->interaction_mode ==  InteractionMode::passthrough) {
+            focus_cycle_begin(server, server->cursor);
+        }
+        if (server->interaction_mode == InteractionMode::focus_cycle) {
+            focus_cycle_step(server, server->cursor, event.delta > 0);
         }
 
         return true;
@@ -718,21 +715,11 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
         return false;
     }
 
-    // Focus window on any button press (only switch focus if no previous focus)
-
-    if (prev_button_count == 0 || !get_focused_surface(server)) {
-        if (surface_under_cursor) {
-            surface_focus(surface_under_cursor);
-        } else if (get_focused_surface(server)) {
-            surface_unfocus(get_focused_surface(server), false);
-        }
-    }
-
     // Check for move/size interaction begin, or close-under-cursor
 
     if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && is_main_mod_down(server) && server->interaction_mode == InteractionMode::passthrough) {
         if (is_cursor_visible(server)) {
-            if (event.button == BTN_LEFT && (get_modifiers(server) & WLR_MODIFIER_SHIFT)) {
+            if (event.button == BTN_LEFT && is_mod_down(server, WLR_MODIFIER_SHIFT)) {
                 toplevel_begin_interactive(toplevel, InteractionMode::move);
             } else if (event.button == BTN_RIGHT) {
                 toplevel_begin_interactive(toplevel, InteractionMode::resize);
@@ -743,6 +730,16 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
             log_warn("Compositor button pressed while cursor is hidden");
         }
         return true;
+    }
+
+    // Focus window on any button press (only switch focus if no previous focus)
+
+    if (prev_button_count == 0 || !get_focused_surface(server)) {
+        if (surface_under_cursor) {
+            surface_focus(surface_under_cursor);
+        } else if (get_focused_surface(server)) {
+            surface_unfocus(get_focused_surface(server), false);
+        }
     }
 
     return false;

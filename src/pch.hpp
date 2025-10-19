@@ -10,6 +10,7 @@
 #include <span>
 #include <string_view>
 #include <optional>
+#include <filesystem>
 
 #include <wayland-server-core.h>
 #include <xkbcommon/xkbcommon.h>
