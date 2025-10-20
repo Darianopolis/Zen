@@ -455,6 +455,19 @@ Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_su
     return surface;
 }
 
+void surface_cleanup(Surface* surface)
+{
+    if (surface->cursor.surface) {
+        // Unlink any cursor surface that might still be referencing this surface
+        log_trace("Surface cleanup: unlinking cursor {}", cursor_surface_to_string(surface->cursor.surface));
+        surface->cursor.surface->requestee_surface = nullptr;
+    }
+
+    surface->wlr_surface->data = nullptr;
+}
+
+// -----------------------------------------------------------------------------
+
 void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
@@ -545,8 +558,7 @@ void toplevel_destroy(wl_listener* listener, void*)
         (void*)&toplevel->scene_tree->node);
 
     wlr_scene_node_destroy(&toplevel->popup_tree->node);
-
-    toplevel->wlr_surface->data = nullptr;
+    surface_cleanup(toplevel);
 
     delete toplevel;
 }
@@ -762,10 +774,9 @@ void layer_surface_destroy(wl_listener* listener, void*)
     }
 
     wlr_scene_node_destroy(&layer_surface->popup_tree->node);
+    surface_cleanup(layer_surface);
 
     output_reconfigure(output);
-
-    layer_surface->wlr_surface->data = nullptr;
 
     delete layer_surface;
 }
@@ -848,7 +859,7 @@ void popup_destroy(wl_listener* listener, void*)
 {
     Popup* popup = listener_userdata<Popup*>(listener);
 
-    popup->wlr_surface->data = nullptr;
+    surface_cleanup(popup);
 
     delete popup;
 }

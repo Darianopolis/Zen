@@ -182,6 +182,34 @@ void server_new_input(wl_listener* listener, void* data)
 
 // -----------------------------------------------------------------------------
 
+bool cursor_surface_is_visible(CursorSurface* cursor_surface)
+{
+    return cursor_surface->wlr_surface->current.width && cursor_surface->wlr_surface->current.height;
+}
+
+void cursor_surface_commit(wl_listener* listener, void*)
+{
+    CursorSurface* cursor_listener = listener_userdata<CursorSurface*>(listener);
+    update_cursor_state(cursor_listener->server);
+}
+
+void cursor_surface_destroy(wl_listener* listener, void*)
+{
+    CursorSurface* cursor_surface = listener_userdata<CursorSurface*>(listener);
+
+    log_info("Cursor destroyed: {}", cursor_surface_to_string(cursor_surface));
+
+    Surface* requestee_surface = Surface::from(cursor_surface->requestee_surface);
+    if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
+        log_trace("  Unlinking requestee surface: {}", surface_to_string(requestee_surface));
+        requestee_surface->cursor.surface = nullptr;
+        requestee_surface->cursor.surface_set = false;
+        update_cursor_state(cursor_surface->server);
+    }
+
+    delete cursor_surface;
+}
+
 static
 void update_cursor_debug_visual_position(Server* server)
 {
@@ -199,12 +227,13 @@ void update_cursor_state(Server* server)
 
     server->pointer.cursor_is_visible = true;
     if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
-        wlr_surface* cursor_surface = focused_surface->cursor.surface;
-        bool visible = cursor_surface && cursor_surface->current.width && cursor_surface->current.height;
+        CursorSurface* cursor_surface = focused_surface->cursor.surface;
+        bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
         if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
-            log_debug("Cursor state: Restoring cursor surface (surface = {}, visible = {}", (void*)cursor_surface, visible);
+            log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
             server->pointer.cursor_is_visible = visible;
-            wlr_cursor_set_surface(server->cursor, cursor_surface, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
+
+            wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
             debug_visual_color = visible ? Color{0, 1, 0, 0.5} : Color{1, 0, 0, 0.5};
         } else {
             log_debug("Cursor state: Client not allowed to hide cursor, using default");
@@ -214,7 +243,7 @@ void update_cursor_state(Server* server)
     } else {
         log_debug("Cursor state: No surface focus or surface cursor unset, using default");
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-                debug_visual_color = Color{1, 0, 1, 0.5};
+        debug_visual_color = Color{1, 0, 1, 0.5};
     }
 
     // Update debug visual
@@ -230,73 +259,39 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_seat_pointer_request_set_cursor_event* event = static_cast<wlr_seat_pointer_request_set_cursor_event*>(data);
 
-    if (server->seat->pointer_state.focused_client != event->seat_client) {
-        log_error("Cursor request from unfocused client {}", client_to_string(event->seat_client->client));
+    Surface* requestee_surface = Surface::from(server->seat->pointer_state.focused_surface);
+
+    if (server->seat->pointer_state.focused_client != event->seat_client || !requestee_surface) {
+        log_warn("Cursor request from unfocused client {}, ignoring...", client_to_string(event->seat_client->client));
         return;
     }
 
-    Surface* requestee_surface = Surface::from(server->seat->pointer_state.focused_surface);
+    CursorSurface* cursor_surface = nullptr;
+    if (event->surface) {
+        if (event->surface->data) {
+            cursor_surface = static_cast<CursorSurface*>(event->surface->data);
+        } else {
 
-    if (!requestee_surface) {
-        log_warn("Cursor request (surface = {:14}) for {}", (void*)event->surface, client_to_string(event->seat_client->client));
-        log_warn("  focused client does not have currently focused surface, ignoring...");
-        return;
+            cursor_surface = new CursorSurface {};
+            cursor_surface->server = server;
+            cursor_surface->requestee_surface = requestee_surface->wlr_surface;
+            cursor_surface->wlr_surface = event->surface;
+            cursor_surface->listeners.listen(&event->surface->events.commit, cursor_surface, cursor_surface_commit);
+            cursor_surface->listeners.listen(&event->surface->events.destroy, cursor_surface, cursor_surface_destroy);
+
+            event->surface->data = cursor_surface;
+
+            log_info("Cursor created:   {}", cursor_surface_to_string(cursor_surface));
+        }
     }
 
     log_info("Cursor request (surface = {:14}) for {}", (void*)event->surface, surface_to_string(requestee_surface));
-    requestee_surface->cursor.surface = event->surface;
+    requestee_surface->cursor.surface = cursor_surface;
     requestee_surface->cursor.hotspot_x = event->hotspot_x;
     requestee_surface->cursor.hotspot_y = event->hotspot_y;
     requestee_surface->cursor.surface_set = true;
 
     update_cursor_state(server);
-
-    if (event->surface && !event->surface->data) {
-
-        // Since a client may request a cursor with a currently visible surface and then commit an invisible state
-        // we register a listener to track this and reset the cursor as necessary, while also updating the debug cursor visual state
-
-        struct CursorListener : Surface
-        {
-            // This listener inherits from Surface with an `invalid` role so that
-            // Surface::from(struct wlr_surface*) calls are still always safe to make
-
-            Server* server;
-            wlr_seat_client* client;
-            ListenerSet listeners;
-
-            // TODO: Store Surface* and have Surface store CursorListener* to ensure lifetime safety
-            struct wlr_surface* requestee_surface;
-
-            static void commit(wl_listener* listener, void*)
-            {
-                CursorListener* cursor_listener = listener_userdata<CursorListener*>(listener);
-                update_cursor_state(cursor_listener->server);
-            }
-
-            static void destroy(wl_listener* listener, void* data)
-            {
-                CursorListener* cursor_listener = listener_userdata<CursorListener*>(listener);
-                struct wlr_surface* surface = static_cast<struct wlr_surface*>(data);
-                Surface* requestee_surface = Surface::from(cursor_listener->requestee_surface);
-                if (requestee_surface && surface == requestee_surface->cursor.surface) {
-                    requestee_surface->cursor.surface = nullptr;
-                    requestee_surface->cursor.surface_set = false;
-                    update_cursor_state(cursor_listener->server);
-                }
-                delete cursor_listener;
-            }
-        };
-
-        CursorListener* cursor_listener = new CursorListener {};
-        cursor_listener->server = server;
-        cursor_listener->client = event->seat_client;
-        cursor_listener->requestee_surface = requestee_surface->wlr_surface;
-        cursor_listener->listeners.listen(&event->surface->events.commit, cursor_listener, CursorListener::commit);
-        cursor_listener->listeners.listen(&event->surface->events.destroy, cursor_listener, CursorListener::destroy);
-
-        event->surface->data = cursor_listener;
-    }
 }
 
 void seat_pointer_focus_change(wl_listener* listener, void*)

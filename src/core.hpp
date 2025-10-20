@@ -81,6 +81,7 @@ enum class InteractionMode
 
 struct Toplevel;
 struct LayerSurface;
+struct CursorSurface;
 struct Output;
 struct Keyboard;
 struct Pointer;
@@ -213,7 +214,7 @@ struct Surface
 
     struct {
         bool surface_set;
-        struct wlr_surface* surface;
+        CursorSurface* surface;
         int32_t hotspot_x;
         int32_t hotspot_y;
     } cursor;
@@ -289,6 +290,17 @@ struct LayerSurface : Surface
     wlr_scene_layer_surface_v1* scene_layer_surface;
 };
 
+struct CursorSurface : Surface
+{
+    // This listener inherits from Surface with an `invalid` role so that
+    // Surface::from(struct wlr_surface*) calls are still always safe to make
+
+    ListenerSet listeners;
+
+    // TODO: Store Surface* and have Surface store CursorListener* to ensure lifetime safety
+    struct wlr_surface* requestee_surface;
+};
+
 // ---- Policy -----------------------------------------------------------------
 
 void set_interaction_mode(Server*, InteractionMode);
@@ -316,6 +328,9 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 
 bool is_cursor_visible(  Server*);
 void update_cursor_state(Server*);
+void cursor_surface_commit(wl_listener*, void*);
+void cursor_surface_destroy(wl_listener*, void*);
+bool cursor_surface_is_visible(CursorSurface*);
 
 uint32_t get_num_pointer_buttons_down(Server*);
 
@@ -386,6 +401,8 @@ wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);
 wlr_box surface_get_coord_system(Surface*);
 
+void surface_cleanup(Surface*);
+
 // ---- Surface.LayerSurface ---------------------------------------------------
 
 void server_new_layer_surface(wl_listener*, void*);
@@ -431,3 +448,4 @@ std::string toplevel_to_string(Toplevel* toplevel);
 std::string surface_to_string(Surface* surface);
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
 std::string client_to_string(wl_client* client);
+std::string cursor_surface_to_string(CursorSurface*);

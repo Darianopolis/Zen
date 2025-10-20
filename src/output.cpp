@@ -188,4 +188,9 @@ void output_reconfigure(Output* output)
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         output_layout_layer(output, layer);
     }
+
+    wlr_output_state state;
+    wlr_output_state_init(&state);
+    wlr_output_commit_state(output->wlr_output, &state);
+    wlr_output_state_finish(&state);
 }

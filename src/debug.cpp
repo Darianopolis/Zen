@@ -47,3 +47,10 @@ std::string client_to_string(wl_client* client)
 
     return std::format("Client<{}>(pid = {}, name = {})", (void*)client, pid, name);
 }
+
+std::string cursor_surface_to_string(CursorSurface* cursor_surface)
+{
+    if (!cursor_surface) return "nullptr";
+
+    return std::format("CursorSurface<{}>(wlr_surface = {}, visisble = {})", (void*)cursor_surface, (void*)cursor_surface->wlr_surface, cursor_surface_is_visible(cursor_surface));
+}
