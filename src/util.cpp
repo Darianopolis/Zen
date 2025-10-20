@@ -26,8 +26,9 @@ void spawn(const char* file, std::span<const std::string_view> argv, std::span<c
 
 // -----------------------------------------------------------------------------
 
-bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data)
+bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data, bool filter_disabled)
 {
+    if (filter_disabled && !node->enabled) return true;
     if (!for_each(for_each_data, node, sx, sy)) return false;
 
     if (node->type == WLR_SCENE_NODE_TREE) {
@@ -36,7 +37,7 @@ bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, b
         wl_list_for_each(child, &tree->children, link) {
             double nx = sx + child->x;
             double ny = sy + child->y;
-            if (!walk_scene_tree_back_to_front(child, nx, ny, for_each, for_each_data)) {
+            if (!walk_scene_tree_back_to_front(child, nx, ny, for_each, for_each_data, filter_disabled)) {
                 return false;
             }
         }
@@ -45,15 +46,17 @@ bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, b
     return true;
 }
 
-bool walk_scene_tree_front_to_back(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data)
+bool walk_scene_tree_front_to_back(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data, bool filter_disabled)
 {
+    if (filter_disabled && !node->enabled) return true;
+
     if (node->type == WLR_SCENE_NODE_TREE) {
         wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
         wlr_scene_node* child;
         wl_list_for_each_reverse(child, &tree->children, link) {
             double nx = sx + child->x;
             double ny = sy + child->y;
-            if (!walk_scene_tree_front_to_back(child, nx, ny, for_each, for_each_data)) {
+            if (!walk_scene_tree_front_to_back(child, nx, ny, for_each, for_each_data, filter_disabled)) {
                 return false;
             }
         }

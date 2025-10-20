@@ -223,22 +223,16 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
 
 void toplevel_set_activated(Toplevel* toplevel, bool active)
 {
+    if (active) {
+        log_info("Activating toplevel:  {}", surface_to_string(toplevel));
+    } else {
+        log_info("Dectivating toplevel: {}", surface_to_string(toplevel));
+    }
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel(), active);
     toplevel_update_border(toplevel);
 }
 
 // -----------------------------------------------------------------------------
-
-static
-std::string toplevel_to_string(Toplevel* toplevel)
-{
-    return toplevel
-        ? std::format("Toplevel<{}>({}, {})",
-            (void*)toplevel,
-            toplevel->xdg_toplevel()->app_id ? toplevel->xdg_toplevel()->app_id : "?",
-            toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?")
-        : "nullptr";
-}
 
 static
 void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data, bool backward)
@@ -259,9 +253,9 @@ void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for
         return true;
     };
     if (backward) {
-        walk_scene_tree_back_to_front(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+        walk_scene_tree_back_to_front(&server->scene->tree.node, 0, 0, FUNC_REF(fn), false);
     } else {
-        walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+        walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn), false);
     }
 }
 
@@ -389,6 +383,8 @@ void surface_focus(Surface* surface)
         toplevel_set_activated(prev_toplevel, false);
     }
 
+    log_info("Focusing surface:   {}", surface_to_string(surface));
+
     Toplevel* toplevel = Toplevel::from(surface);
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
@@ -397,18 +393,13 @@ void surface_focus(Surface* surface)
         toplevel_set_activated(Toplevel::from(surface), true);
     }
 
-    // if (surface->wlr_surface != server->seat->keyboard_state.focused_surface) {
-    //     // Focusing surface that didn't previously have keyboard focus, clear pointer to force a cursor surface update
-    //     wlr_seat_pointer_clear_focus(server->seat);
-    //     seat_reset_cursor(surface->server);
-    // }
-
     if (keyboard) {
         wlr_seat_keyboard_notify_enter(seat, wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
 
     // TODO: Tidy up and consolidate API for handling (re)focus
     process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    update_cursor_state(server);
 }
 
 void surface_unfocus(Surface* surface, bool force)
@@ -417,6 +408,11 @@ void surface_unfocus(Surface* surface, bool force)
     if (get_focused_surface(surface->server) != surface)
         return;
 
+    log_info("Unfocusing surface: {}", surface_to_string(surface));
+
+    if (Toplevel* toplevel = Toplevel::from(surface)) {
+        toplevel_set_activated(toplevel, false);
+    }
 
     if (force) {
         wlr_seat_keyboard_clear_focus(surface->server->seat);
@@ -424,14 +420,15 @@ void surface_unfocus(Surface* surface, bool force)
         wlr_seat_keyboard_notify_clear_focus(surface->server->seat);
     }
 
-    seat_reset_cursor(surface->server);
+    process_cursor_motion(surface->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    update_cursor_state(surface->server);
 }
 
 Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
 {
     Surface* surface = nullptr;
     auto fn = [&](wlr_scene_node* node, double node_x, double node_y) {
-        if (!node->enabled || node->type != WLR_SCENE_NODE_BUFFER) return true;
+        if (node->type != WLR_SCENE_NODE_BUFFER) return true;
 
         wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
         wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
@@ -453,7 +450,7 @@ Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_su
 
         return !tree;
     };
-    walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn));
+    walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn), true);
 
     return surface;
 }
@@ -649,11 +646,12 @@ void server_new_toplevel(wl_listener* listener, void* data)
     toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
 
-    log_debug("Toplevel created:   {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
+    log_debug("Toplevel created:   {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})\n{}  for {}",
         toplevel_to_string(toplevel),
         (void*)xdg_toplevel->base->surface,
         (void*)xdg_toplevel,
-        (void*)&toplevel->scene_tree->node);
+        (void*)&toplevel->scene_tree->node,
+        log_indent, client_to_string(xdg_toplevel->base->client->client));
 
     toplevel->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
 

@@ -111,8 +111,6 @@ struct Server
     wlr_xdg_shell* xdg_shell;
     wlr_layer_shell_v1* layer_shell;
 
-    bool                  cursor_is_default = true;
-    wlr_surface*          cursor_surface;
     wlr_cursor*           cursor;
     wlr_xcursor_manager*  cursor_manager;
     std::vector<Pointer*> pointers;
@@ -126,6 +124,7 @@ struct Server
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
         wlr_scene_rect* debug_visual;
         uint32_t        debug_visual_half_extent;
+        bool            cursor_is_visible;
     } pointer;
 
     InteractionMode interaction_mode;
@@ -211,6 +210,13 @@ struct Surface
     wlr_scene_tree* scene_tree;
     wlr_scene_tree* popup_tree;
     struct wlr_surface* wlr_surface;
+
+    struct {
+        bool surface_set;
+        struct wlr_surface* surface;
+        int32_t hotspot_x;
+        int32_t hotspot_y;
+    } cursor;
 
     static Surface* from(void* data) {
         Surface* surface = static_cast<Surface*>(data);
@@ -308,16 +314,14 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 
 // ---- Pointer ----------------------------------------------------------------
 
+bool is_cursor_visible(  Server*);
+void update_cursor_state(Server*);
+
 uint32_t get_num_pointer_buttons_down(Server*);
-
-bool is_cursor_visible(Server*);
-
-void pointer_update_debug_visual(Server*);
 
 void process_cursor_resize(Server*);
 void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, double dx, double dy, double rel_dx, double rel_dy, double dx_unaccel, double dy_unaccel);
 
-void seat_reset_cursor(Server*);
 void seat_request_set_cursor(      wl_listener*, void*);
 void seat_pointer_focus_change(    wl_listener*, void*);
 
@@ -420,3 +424,10 @@ void decoration_destroy(     wl_listener*, void*);
 void popup_commit(    wl_listener*, void*);
 void popup_destroy(   wl_listener*, void*);
 void server_new_popup(wl_listener*, void*);
+
+// ---- Debug ------------------------------------------------------------------
+
+std::string toplevel_to_string(Toplevel* toplevel);
+std::string surface_to_string(Surface* surface);
+std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
+std::string client_to_string(wl_client* client);

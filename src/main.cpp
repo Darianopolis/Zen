@@ -124,12 +124,6 @@ void init(Server* server, const startup_options& options)
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
 	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
 
-    if (options.show_debug_cursor_visual) {
-        server->pointer.debug_visual_half_extent = 4;
-        server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
-        pointer_update_debug_visual(server);
-    }
-
     server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, server_cursor_motion);
     server->listeners.listen(&server->cursor->events.motion_absolute, server, server_cursor_motion_absolute);
@@ -146,6 +140,13 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&              server->seat->events.request_set_selection, server, seat_request_set_selection);
     server->listeners.listen(&              server->seat->events.request_start_drag,    server, seat_request_start_drag);
     server->listeners.listen(&              server->seat->events.start_drag,            server, seat_start_drag);
+
+    if (options.show_debug_cursor_visual) {
+        server->pointer.debug_visual_half_extent = 4;
+        server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
+    }
+
+    update_cursor_state(server);
 
     zone_init(server);
 }
@@ -201,10 +202,12 @@ void cleanup(Server* server)
 }
 
 constexpr const char* help_prompt = R"(Usage: %s [options]
-  --xwayland [socket]   specify X11 socket
-  --log-file [path]     log to file
-  --startup  [cmd]      startup command
-  --outputs  [count]    number of outputs to spawn (in nested mode)
+  --xwayland [socket]   Specify X11 socket
+  --log-file [path]     Log to file
+  --startup  [cmd]      Startup command
+  --outputs  [count]    Number of outputs to spawn (in nested mode)
+  --ctrl-mod            Use CTRL instead of ALT in nested mode
+  --debug-cursor        Show cursor debug visual
 )";
 
 int main(int argc, char* argv[])
@@ -239,7 +242,7 @@ int main(int argc, char* argv[])
             std::from_chars_result res = std::from_chars(p, p + strlen(p), v);
             if (!res) print_usage();
             options.additional_outputs = std::max(1, v) - 1;
-        } else if ("--help"sv == arg) {
+        } else {
             print_usage();
         }
     }

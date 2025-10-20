@@ -23,6 +23,8 @@ void log(LogLevel level, std::format_string<Args...> fmt, Args&&... args)
     log(level, std::vformat(fmt.get(), std::make_format_args(args...)));
 }
 
+static constexpr std::string_view log_indent = "        ";
+
 #define log_trace(fmt, ...) if (get_log_level() <= LogLevel::trace) log(LogLevel::trace, std::format(fmt __VA_OPT__(,) __VA_ARGS__))
 #define log_debug(fmt, ...) if (get_log_level() <= LogLevel::debug) log(LogLevel::debug, std::format(fmt __VA_OPT__(,) __VA_ARGS__))
 #define log_info( fmt, ...) if (get_log_level() <= LogLevel::info ) log(LogLevel::info,  std::format(fmt __VA_OPT__(,) __VA_ARGS__))
