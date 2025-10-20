@@ -11,6 +11,7 @@ struct startup_options
     const char* log_file;
     uint32_t additional_outputs;
     bool ctrl_mod;
+    bool show_debug_cursor_visual;
 };
 
 static
@@ -27,12 +28,10 @@ void init(Server* server, const startup_options& options)
     server->main_modifier_keysym_left = XKB_KEY_Super_L;
     server->main_modifier_keysym_right = XKB_KEY_Super_R;
 
-    bool nested = false;
-
     auto for_each_backend = [&](wlr_backend* backend) {
         if (!wlr_backend_is_wl(backend) && !wlr_backend_is_x11(backend)) return;
 
-        nested = true;
+        server->debug.is_nested = true;
 
         if (options.ctrl_mod) {
             server->main_modifier = WLR_MODIFIER_CTRL;
@@ -43,9 +42,6 @@ void init(Server* server, const startup_options& options)
             server->main_modifier_keysym_left = XKB_KEY_Alt_L;
             server->main_modifier_keysym_right = XKB_KEY_Alt_R;
         }
-
-        log_warn("Running compositor nested, mouse constraints will be silently ignored!");
-        server->debug.ignore_mouse_constraints = true;
 
         for (uint32_t i = 0; i < options.additional_outputs; ++i) {
             wlr_wl_output_create(backend);
@@ -128,7 +124,7 @@ void init(Server* server, const startup_options& options)
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
 	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
 
-    if (nested) {
+    if (options.show_debug_cursor_visual) {
         server->pointer.debug_visual_half_extent = 4;
         server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
         pointer_update_debug_visual(server);
@@ -235,6 +231,8 @@ int main(int argc, char* argv[])
             options.xwayland_socket = param();
         } else if ("--ctrl-mod"sv == arg) {
             options.ctrl_mod = true;
+        } else if ("--debug-cursor"sv == arg) {
+            options.show_debug_cursor_visual = true;
         } else if ("--outputs"sv == arg) {
             const char* p = param();
             int v = 1;

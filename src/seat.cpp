@@ -107,8 +107,43 @@ void server_new_keyboard(Server* server, wlr_input_device* device)
     server->keyboards.emplace_back(keyboard);
 }
 
+static
+std::string pointer_to_string(Pointer* pointer)
+{
+    return pointer ? std::format("Pointer<{}>", (void*)pointer) : "nullptr";
+}
+
+void pointer_destroy(wl_listener* listener, void*)
+{
+    Pointer* pointer = listener_userdata<Pointer*>(listener);
+
+    log_info("Pointer destroyed: {}", pointer_to_string(pointer));
+
+    std::erase(pointer->server->pointers, pointer);
+
+    delete pointer;
+}
+
+uint32_t get_num_pointer_buttons_down(Server* server)
+{
+    uint32_t count = 0;
+    for (Pointer* pointer : server->pointers) {
+        count += pointer->wlr_pointer->button_count;
+    }
+    return count;
+}
+
 void server_new_pointer(Server* server, wlr_input_device* device)
 {
+    Pointer* pointer = new Pointer{};
+    pointer->server = server;
+    pointer->wlr_pointer = wlr_pointer_from_input_device(device);
+    pointer->wlr_pointer->data = pointer;
+
+    log_info("Pointer created:   {}", pointer_to_string(pointer));
+
+    server->pointers.emplace_back(pointer);
+
     libinput_device* libinput_device;
     if (wlr_input_device_is_libinput(device) && (libinput_device = wlr_libinput_get_device_handle(device))) {
         if (libinput_device_config_accel_is_available(libinput_device)) {
@@ -116,6 +151,8 @@ void server_new_pointer(Server* server, wlr_input_device* device)
             libinput_device_config_accel_set_speed(  libinput_device, libinput_mouse_speed);
         }
     }
+
+    pointer->listeners.listen(&device->events.destroy, pointer, pointer_destroy);
 
     wlr_cursor_attach_input_device(server->cursor, device);
 }
@@ -261,7 +298,7 @@ void seat_drag_icon_destroy(wl_listener* listener, void*)
 
     // TODO: Refocus last focused toplevel
 
-    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
+    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0, 0, 0);
 
     unlisten(listener_from(listener));
 }
@@ -284,26 +321,23 @@ void seat_drag_update_position(Server* server)
 
 // -----------------------------------------------------------------------------
 
+static
+std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint)
+{
+    return constraint
+        ? std::format("PointerConstraint<{}>(type = {})", (void*)constraint, magic_enum::enum_name(constraint->type))
+        : "nullptr";
+}
+
 void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 {
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
-    // log_info("destroying pointer constraint: {}", (void*)constraint);
+
+    log_info("Pointer constraint destroyed: {}", pointer_constraint_to_string(constraint));
 
     Server* server = listener_userdata<Server*>(listener);
     if (server->pointer.active_constraint == constraint) {
         server->pointer.active_constraint = nullptr;
-    }
-
-    wlr_pointer_constraint_v1* new_constraint;
-    wl_list_for_each(new_constraint, &server->pointer.pointer_constraints->constraints, link) {
-        if (constraint == new_constraint) {
-            continue;
-        }
-
-        // TODO: Select constraint based on focused window at cursor move time
-
-        server->pointer.active_constraint = new_constraint;
-        wlr_pointer_constraint_v1_send_activated(new_constraint);
     }
 
     unlisten(listener_from(listener));
@@ -312,15 +346,9 @@ void server_pointer_constraint_destroy(wl_listener* listener, void* data)
 void server_pointer_constraint_new(wl_listener* listener, void* data)
 {
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
-    // log_info("creating pointer constraint: {}", (void*)constraint);
+    log_info("Pointer constraint created: {}", pointer_constraint_to_string(constraint));
 
     Server* server = listener_userdata<Server*>(listener);
-
-    if (server->pointer.active_constraint) {
-        wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
-    }
-    server->pointer.active_constraint = constraint;
-    wlr_pointer_constraint_v1_send_activated(constraint);
 
     listen(&constraint->events.destroy, server, server_pointer_constraint_destroy);
 }
@@ -393,10 +421,13 @@ void pointer_update_debug_visual(Server* server)
     wlr_scene_node_set_position(&server->pointer.debug_visual->node,
         server->cursor->x - server->pointer.debug_visual_half_extent,
         server->cursor->y - server->pointer.debug_visual_half_extent);
-    wlr_scene_rect_set_color(server->pointer.debug_visual, (is_cursor_visible(server) ? Color{0, 1, 0, 0.5} : Color{1, 0, 0, 0.5}).values);
+
+    wlr_scene_rect_set_color(server->pointer.debug_visual, (is_cursor_visible(server)
+        ? Color{0, 1, 0, 0.5}
+        : Color{1, 0, 0, 0.5}).values);
 }
 
-void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, double dx, double dy, double dx_unaccel, double dy_unaccel)
+void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, double dx, double dy, double rel_dx, double rel_dy, double dx_unaccel, double dy_unaccel)
 {
     Defer _ = [&] {
         pointer_update_debug_visual(server);
@@ -424,8 +455,9 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
     double sx = 0, sy = 0;
     wlr_seat* seat = server->seat;
+    Surface* surface = nullptr;
     struct wlr_surface* wlr_surface = nullptr;
-    if (Surface* surface; server->button_pressed_count > 0 && (surface = Surface::from(seat->pointer_state.focused_surface))) {
+    if (get_num_pointer_buttons_down(server) > 0 && (surface = Surface::from(seat->pointer_state.focused_surface))) {
         wlr_surface = surface->wlr_surface;
         wlr_box coord_system = surface_get_coord_system(surface);
         sx = server->cursor->x - coord_system.x;
@@ -433,31 +465,61 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     }
 
     if (!wlr_surface) {
-        get_surface_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy);
+        surface = get_surface_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy);
     }
 
     // Handle constraints and update mouse
 
-    if (time_msecs && device) {
-        wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, dx, dy, dx_unaccel, dy_unaccel);
+    {
+        // log_info("Pointer motion ({:7.2f}, {:7.2f}) rel ({:7.2f}, {:7.2f})", dx, dy, rel_dx, rel_dy);
 
-        if (wlr_pointer_constraint_v1* constraint = server->pointer.active_constraint; constraint && !server->debug.ignore_mouse_constraints) {
+        if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
+            wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
+        }
 
-            Surface* surface = Surface::from(constraint->surface);
-            if (surface == get_focused_surface(server)) {
+        bool constraint_active = false;
+        Defer _ = [&] {
+            if (!constraint_active && server->pointer.active_constraint) {
+                log_info("Pointer constraint deactivated: {} (reason: no constraints active)", pointer_constraint_to_string(server->pointer.active_constraint));
+                wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
+                server->pointer.active_constraint = nullptr;
+            }
+        };
 
-                wlr_box bounds = surface_get_bounds(surface);
-                sx = server->cursor->x - bounds.x;
-                sy = server->cursor->y - bounds.y;
-
-                double sx_confined, sy_confined;
-                if (wlr_region_confine(&constraint->region, sx, sy, sx + dx, sy + dy, &sx_confined, &sy_confined)) {
-                    dx = sx_confined - sx;
-                    dy = sy_confined - sy;
+        if (surface && surface == get_focused_surface(server)) {
+            wlr_pointer_constraint_v1* constraint =
+                wlr_pointer_constraints_v1_constraint_for_surface(server->pointer.pointer_constraints, wlr_surface, server->seat);
+            if (constraint) {
+                if (constraint != server->pointer.active_constraint) {
+                    if (server->pointer.active_constraint) {
+                        log_info("Pointer constraint deactivated: {} (reason: replacing with new constraint)", pointer_constraint_to_string(server->pointer.active_constraint));
+                        wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
+                    }
+                    log_info("Pointer constraint activated: {}", pointer_constraint_to_string(constraint));
+                    wlr_pointer_constraint_v1_send_activated(constraint);
+                    server->pointer.active_constraint = constraint;
                 }
 
-                if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-                    return;
+                constraint_active = true;
+
+                double sx_confined, sy_confined;
+                bool contained = wlr_region_confine(&constraint->region, sx, sy, sx + dx, sy + dy, &sx_confined, &sy_confined);
+
+                // wlr_box bounds = surface_get_bounds(surface);
+                // log_debug("Confine bounds ({:4}, {:4}) ({:4}, {:4}) old ({:4.0f}, {:4.0f}) new ({:4.0f}, {:4.0f}) confined ({:4.0f}, {:4.0f}) contained = {}",
+                //     bounds.x, bounds.y, bounds.width, bounds.height,
+                //     sx, sy,
+                //     sx + dx, sy + dy,
+                //     sx_confined, sy_confined,
+                //     contained);
+
+                if (contained) {
+                    if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+                        return;
+                    }
+
+                    dx = sx_confined - sx;
+                    dy = sy_confined - sy;
                 }
             }
         }
@@ -474,6 +536,12 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     // Notify
 
     if (wlr_surface) {
+        if (!time_msecs) {
+            timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            time_msecs = now.tv_sec * 1000 + now.tv_nsec / 1000'000;
+        }
+
         wlr_seat_pointer_notify_enter(seat, wlr_surface, sx, sy);
         wlr_seat_pointer_notify_motion(seat, time_msecs, sx, sy);
     } else {
@@ -492,7 +560,7 @@ void server_cursor_motion(wl_listener* listener, void* data)
 
     // TODO: Handle custom acceleration here
 
-    process_cursor_motion(server, event->time_msec, &event->pointer->base, event->delta_x, event->delta_y, event->unaccel_dx, event->unaccel_dy);
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, event->delta_x, event->delta_y, event->delta_x, event->delta_y, event->unaccel_dx, event->unaccel_dy);
 }
 
 void server_cursor_motion_absolute(wl_listener* listener, void* data)
@@ -515,9 +583,15 @@ void server_cursor_motion_absolute(wl_listener* listener, void* data)
         wlr_cursor_absolute_to_layout_coords(server->cursor, &event->pointer->base, event->x, event->y, &lx, &ly);
     }
 
+    Pointer* pointer = Pointer::from(event->pointer);
+
     double dx = lx - server->cursor->x;
     double dy = ly - server->cursor->y;
-    process_cursor_motion(server, event->time_msec, &event->pointer->base, dx, dy, dx, dy);
+    double rel_dx = (lx - pointer->last_abs_x) * pointer_abs_to_rel_speed_multiplier;
+    double rel_dy = (ly - pointer->last_abs_y) * pointer_abs_to_rel_speed_multiplier;
+    pointer->last_abs_x = lx;
+    pointer->last_abs_y = ly;
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, dx, dy, rel_dx, rel_dy, rel_dx, rel_dy);
 }
 
 void server_cursor_button(wl_listener* listener, void* data)
@@ -657,18 +731,6 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 {
     // log_trace("Button {} -> {}", libevdev_event_code_get_name(EV_KEY, event.button), magic_enum::enum_name(event.state));
 
-    // Update cursor button pressed count
-
-    uint32_t prev_button_count = server->button_pressed_count;
-    server->button_pressed_count += event.state == WL_POINTER_BUTTON_STATE_PRESSED ? 1 : -1;
-    if (server->button_pressed_count < 0) {
-        // TODO: Handle button pressed count using per-button state map for each pointer to avoid duplicate press events causing issues
-        //       Preferably we could just use wlr_pointer::buttons, but that is only updated on `wlr_seat_pointer_notify_button` which
-        //       also passes events on to clients
-        log_warn("Mouse button pressed count < 0, did we miss a press event?");
-        server->button_pressed_count = 0;
-    }
-
     // Handle interrupt focus cycle
 
     bool focus_cycle_interrupted = event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle;
@@ -703,7 +765,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
     // Leave move/size modes on all mouse buttons released
 
     if (server->interaction_mode == InteractionMode::move || server->interaction_mode == InteractionMode::resize) {
-        if (event.state == WL_POINTER_BUTTON_STATE_RELEASED && server->button_pressed_count == 0) {
+        if (event.state == WL_POINTER_BUTTON_STATE_RELEASED && !get_num_pointer_buttons_down(server)) {
             set_interaction_mode(server, InteractionMode::passthrough);
         }
         return true;
@@ -734,7 +796,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     // Focus window on any button press (only switch focus if no previous focus)
 
-    if (prev_button_count == 0 || !get_focused_surface(server)) {
+    if (get_num_pointer_buttons_down(server) == 1 || !get_focused_surface(server)) {
         if (surface_under_cursor) {
             surface_focus(surface_under_cursor);
         } else if (get_focused_surface(server)) {

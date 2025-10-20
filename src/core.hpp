@@ -46,6 +46,7 @@ static constexpr int32_t     keyboard_repeat_rate  = 25;
 static constexpr int32_t     keyboard_repeat_delay = 600;
 
 static constexpr double libinput_mouse_speed = -0.66;
+static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
 // -----------------------------------------------------------------------------
 
@@ -82,6 +83,7 @@ struct Toplevel;
 struct LayerSurface;
 struct Output;
 struct Keyboard;
+struct Pointer;
 
 struct Server
 {
@@ -94,7 +96,7 @@ struct Server
 
     struct {
         std::filesystem::path original_cwd;
-        bool ignore_mouse_constraints = false;
+        bool is_nested;
     } debug;
 
     wlr_scene* scene;
@@ -109,12 +111,11 @@ struct Server
     wlr_xdg_shell* xdg_shell;
     wlr_layer_shell_v1* layer_shell;
 
-    bool                 cursor_is_default = true;
-    wlr_surface*         cursor_surface;
-    wlr_cursor*          cursor;
-    wlr_xcursor_manager* cursor_manager;
-
-    int32_t button_pressed_count = 0;
+    bool                  cursor_is_default = true;
+    wlr_surface*          cursor_surface;
+    wlr_cursor*           cursor;
+    wlr_xcursor_manager*  cursor_manager;
+    std::vector<Pointer*> pointers;
 
     wlr_seat* seat;
     std::vector<Keyboard*> keyboards;
@@ -159,6 +160,20 @@ struct Keyboard
 
     Server* server;
     struct wlr_keyboard* wlr_keyboard;
+};
+
+struct Pointer
+{
+    ListenerSet listeners;
+
+    Server* server;
+
+    struct wlr_pointer* wlr_pointer;
+
+    double last_abs_x;
+    double last_abs_y;
+
+    static Pointer* from(struct wlr_pointer* pointer) { return pointer ? static_cast<Pointer*>(pointer->data) : nullptr; }
 };
 
 struct Output
@@ -293,12 +308,14 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 
 // ---- Pointer ----------------------------------------------------------------
 
+uint32_t get_num_pointer_buttons_down(Server*);
+
 bool is_cursor_visible(Server*);
 
 void pointer_update_debug_visual(Server*);
 
 void process_cursor_resize(Server*);
-void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device *, double dx, double dy, double dx_unaccel, double dy_unaccel);
+void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, double dx, double dy, double rel_dx, double rel_dy, double dx_unaccel, double dy_unaccel);
 
 void seat_reset_cursor(Server*);
 void seat_request_set_cursor(      wl_listener*, void*);
@@ -309,6 +326,8 @@ void server_cursor_motion_absolute(wl_listener*, void*);
 void server_cursor_button(         wl_listener*, void*);
 void server_cursor_axis(           wl_listener*, void*);
 void server_cursor_frame(          wl_listener*, void*);
+
+void pointer_destroy(wl_listener*, void*);
 
 // ---- Pointer.Constraints ----------------------------------------------------
 

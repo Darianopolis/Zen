@@ -153,7 +153,7 @@ void server_new_output(wl_listener* listener, void* data)
     wlr_scene_output_layout_add_output(server->scene_output_layout, l_output, scene_output);
     output->scene_output = scene_output;
 
-    if (matched_rule && matched_rule->primary && !server->debug.ignore_mouse_constraints) {
+    if (matched_rule && matched_rule->primary && !server->debug.is_nested) {
         wlr_box bounds = output_get_bounds(output);
         double x = bounds.x + bounds.width / 2.0;
         double y = bounds.y + bounds.height / 2.0;

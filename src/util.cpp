@@ -10,16 +10,7 @@ void spawn(const char* file, std::span<const std::string_view> argv, std::span<c
     for (std::string& s : argv_str) argv_cstr.emplace_back(s.data());
     argv_cstr.emplace_back(nullptr);
 
-    {
-        std::string args_preview = "";
-        for (std::string_view a : argv) {
-            if (a.empty()) continue;
-            if (!args_preview.empty()) args_preview += ", ";
-            args_preview += std::format("\"{}\"", a);
-        }
-
-        log_info("Spawning process [{}] args [{}]", file, args_preview);
-    }
+    log_info("Spawning process [{}] args {}", file, argv);
 
     if (fork() == 0) {
         for (const SpawnEnvAction& env_action : env_actions) {

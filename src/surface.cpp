@@ -130,7 +130,7 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
     toplevel->resize.last_resize_serial = toplevel->resize.last_commited_serial;
 
     // Update cursor focus if window under cursor has changed
-    process_cursor_motion(toplevel->server, 0, nullptr, 0, 0, 0, 0);
+    process_cursor_motion(toplevel->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
 
 #if NOISY_RESIZE
     {
@@ -230,14 +230,14 @@ void toplevel_set_activated(Toplevel* toplevel, bool active)
 // -----------------------------------------------------------------------------
 
 static
-std::string toplevel_debug_get_name(Toplevel* toplevel)
+std::string toplevel_to_string(Toplevel* toplevel)
 {
     return toplevel
         ? std::format("Toplevel<{}>({}, {})",
             (void*)toplevel,
             toplevel->xdg_toplevel()->app_id ? toplevel->xdg_toplevel()->app_id : "?",
             toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?")
-        : "";
+        : "nullptr";
 }
 
 static
@@ -248,7 +248,7 @@ void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for
             if (&toplevel->scene_tree->node != node) {
                 // TODO: Root cause this issue in wlroots
                 log_error("BUG - Unexpected wlr_scene_node referencing {} (expected {}, got {}), unlinking!",
-                    toplevel_debug_get_name(toplevel),
+                    toplevel_to_string(toplevel),
                     (void*)&toplevel->scene_tree->node,
                     (void*)node);
                 node->data = nullptr;
@@ -397,18 +397,18 @@ void surface_focus(Surface* surface)
         toplevel_set_activated(Toplevel::from(surface), true);
     }
 
-    if (surface->wlr_surface != server->seat->keyboard_state.focused_surface) {
-        // Focusing surface that didn't previously have keyboard focus, clear pointer to force a cursor surface update
-        wlr_seat_pointer_clear_focus(server->seat);
-        seat_reset_cursor(surface->server);
-    }
+    // if (surface->wlr_surface != server->seat->keyboard_state.focused_surface) {
+    //     // Focusing surface that didn't previously have keyboard focus, clear pointer to force a cursor surface update
+    //     wlr_seat_pointer_clear_focus(server->seat);
+    //     seat_reset_cursor(surface->server);
+    // }
 
     if (keyboard) {
         wlr_seat_keyboard_notify_enter(seat, wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
 
     // TODO: Tidy up and consolidate API for handling (re)focus
-    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0);
+    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0, 0, 0);
 }
 
 void surface_unfocus(Surface* surface, bool force)
@@ -462,7 +462,7 @@ void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel mapped:    {}", toplevel_debug_get_name(toplevel));
+    log_debug("Toplevel mapped:    {}", toplevel_to_string(toplevel));
 
     surface_focus(toplevel);
 }
@@ -471,7 +471,7 @@ void toplevel_unmap(wl_listener* listener, void*)
 {
     Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel unmapped:  {}", toplevel_debug_get_name(unmapped_toplevel));
+    log_debug("Toplevel unmapped:  {}", toplevel_to_string(unmapped_toplevel));
 
     // Reset interaction mode if grabbed toplevel was unmapped
     if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
@@ -500,7 +500,7 @@ void toplevel_commit(wl_listener* listener, void*)
 
     if (toplevel->xdg_toplevel()->base->initial_commit) {
 
-        log_info("Toplevel committed: {}", toplevel_debug_get_name(toplevel));
+        log_info("Toplevel committed: {}", toplevel_to_string(toplevel));
 
         decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), 0, 0);
@@ -542,7 +542,7 @@ void toplevel_destroy(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     log_debug("Toplevel destroyed: {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
-        toplevel_debug_get_name(toplevel),
+        toplevel_to_string(toplevel),
         (void*)toplevel->xdg_toplevel()->base->surface,
         (void*)toplevel->xdg_toplevel(),
         (void*)&toplevel->scene_tree->node);
@@ -650,7 +650,7 @@ void server_new_toplevel(wl_listener* listener, void* data)
     toplevel->scene_tree->node.data = toplevel;
 
     log_debug("Toplevel created:   {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
-        toplevel_debug_get_name(toplevel),
+        toplevel_to_string(toplevel),
         (void*)xdg_toplevel->base->surface,
         (void*)xdg_toplevel,
         (void*)&toplevel->scene_tree->node);
