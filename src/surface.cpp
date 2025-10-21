@@ -376,7 +376,6 @@ void surface_focus(Surface* surface)
     wlr_surface* prev_wlr_surface = seat->keyboard_state.focused_surface;
     struct wlr_surface* wlr_surface = surface->wlr_surface;
 
-    // TODO: This causes issues when server.focused_toplevel and keyboard.focused_surface are desyncd
     if (prev_wlr_surface == wlr_surface) return;
 
     if (Toplevel* prev_toplevel = Toplevel::from(prev_wlr_surface)) {
@@ -511,6 +510,14 @@ void toplevel_commit(wl_listener* listener, void*)
     if (toplevel->xdg_toplevel()->base->initial_commit) {
 
         log_info("Toplevel committed: {}", toplevel_to_string(toplevel));
+
+        for (const WindowRule& rule : window_rules) {
+            if (rule.app_id && (!toplevel->xdg_toplevel()->app_id || !std::string_view(toplevel->xdg_toplevel()->app_id).starts_with(rule.app_id))) continue;
+            if (rule.title && (!toplevel->xdg_toplevel()->title || !std::string_view(toplevel->xdg_toplevel()->title).starts_with(rule.title))) continue;
+
+            log_warn("  Applying quirks to window");
+            toplevel->quirks = rule.quirks;
+        }
 
         decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), 0, 0);

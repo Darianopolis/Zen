@@ -11,6 +11,7 @@
 #include <string_view>
 #include <optional>
 #include <filesystem>
+#include <variant>
 
 #include <wayland-server-core.h>
 #include <xkbcommon/xkbcommon.h>

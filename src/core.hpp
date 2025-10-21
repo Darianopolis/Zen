@@ -32,6 +32,15 @@ static constexpr struct {
 } zone_external_padding_ltrb;
 static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 
+static constexpr const char* keyboard_layout       = "gb";
+static constexpr int32_t     keyboard_repeat_rate  = 25;
+static constexpr int32_t     keyboard_repeat_delay = 600;
+
+static constexpr double libinput_mouse_speed = -0.66;
+static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
+
+// -----------------------------------------------------------------------------
+
 struct OutputRule { const char* name; int x, y; bool primary; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0, .primary = true },
@@ -41,12 +50,22 @@ static constexpr OutputRule output_rules[] = {
     { .name = "DP-3", .x = -3840, .y = 0                  },
 };
 
-static constexpr const char* keyboard_layout       = "gb";
-static constexpr int32_t     keyboard_repeat_rate  = 25;
-static constexpr int32_t     keyboard_repeat_delay = 600;
+// -----------------------------------------------------------------------------
 
-static constexpr double libinput_mouse_speed = -0.66;
-static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
+struct WindowQuirks
+{
+    bool force_pointer_constraint = false;
+};
+struct WindowRule
+{
+    const char* app_id;
+    const char* title;
+    WindowQuirks quirks;
+};
+static const WindowRule window_rules[] = {
+    { .app_id = "Minecraft",  .quirks{.force_pointer_constraint = true} },
+    { .app_id = "steam_app_", .quirks{.force_pointer_constraint = true} },
+};
 
 // -----------------------------------------------------------------------------
 
@@ -123,6 +142,7 @@ struct Server
         wlr_pointer_constraints_v1* pointer_constraints;
         wlr_pointer_constraint_v1* active_constraint;
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
+        bool            debug_visual_enabled = false;
         wlr_scene_rect* debug_visual;
         uint32_t        debug_visual_half_extent;
         bool            cursor_is_visible;
@@ -258,6 +278,8 @@ struct Toplevel : Surface
         uint32_t last_resize_serial = 0;
         uint32_t last_commited_serial = 0;
     } resize;
+
+    WindowQuirks quirks;
 };
 
 struct Popup : Surface

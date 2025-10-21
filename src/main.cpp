@@ -11,7 +11,6 @@ struct startup_options
     const char* log_file;
     uint32_t additional_outputs;
     bool ctrl_mod;
-    bool show_debug_cursor_visual;
 };
 
 static
@@ -141,9 +140,10 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&              server->seat->events.request_start_drag,    server, seat_request_start_drag);
     server->listeners.listen(&              server->seat->events.start_drag,            server, seat_start_drag);
 
-    if (options.show_debug_cursor_visual) {
+    {
         server->pointer.debug_visual_half_extent = 4;
         server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
+        wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
     }
 
     update_cursor_state(server);
@@ -234,8 +234,6 @@ int main(int argc, char* argv[])
             options.xwayland_socket = param();
         } else if ("--ctrl-mod"sv == arg) {
             options.ctrl_mod = true;
-        } else if ("--debug-cursor"sv == arg) {
-            options.show_debug_cursor_visual = true;
         } else if ("--outputs"sv == arg) {
             const char* p = param();
             int v = 1;

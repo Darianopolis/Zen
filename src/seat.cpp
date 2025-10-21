@@ -213,7 +213,7 @@ void cursor_surface_destroy(wl_listener* listener, void*)
 static
 void update_cursor_debug_visual_position(Server* server)
 {
-    if (!server->pointer.debug_visual) return;
+    if (!server->pointer.debug_visual_enabled) return;
 
     int32_t he = server->pointer.debug_visual_half_extent;
     wlr_scene_node_set_position(&server->pointer.debug_visual->node,
@@ -248,7 +248,8 @@ void update_cursor_state(Server* server)
 
     // Update debug visual
 
-    if (server->pointer.debug_visual) {
+    wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, server->pointer.debug_visual_enabled);
+    if (server->pointer.debug_visual_enabled) {
         wlr_scene_rect_set_color(server->pointer.debug_visual, debug_visual_color.values);
         update_cursor_debug_visual_position(server);
     }
@@ -355,28 +356,47 @@ void seat_drag_update_position(Server* server)
 
 // -----------------------------------------------------------------------------
 
-void server_pointer_constraint_destroy(wl_listener* listener, void* data)
+struct PointerConstraint
 {
-    wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
+    Server* server;
+    wlr_pointer_constraint_v1* constraint;
 
-    log_info("Pointer constraint destroyed: {}", pointer_constraint_to_string(constraint));
+    ListenerSet listeners;
+};
 
-    Server* server = listener_userdata<Server*>(listener);
-    if (server->pointer.active_constraint == constraint) {
-        server->pointer.active_constraint = nullptr;
+void server_pointer_constraint_destroy(wl_listener* listener, void*)
+{
+    PointerConstraint* constraint = listener_userdata<PointerConstraint*>(listener);
+
+    log_info("Pointer constraint destroyed: {}", pointer_constraint_to_string(constraint->constraint));
+
+    if (constraint->server->pointer.active_constraint == constraint->constraint) {
+        constraint->server->pointer.active_constraint = nullptr;
     }
 
-    unlisten(listener_from(listener));
+    delete constraint;
+}
+
+void server_pointer_constraint_set_region(wl_listener* listener, void*)
+{
+    PointerConstraint* pointer_constriant = listener_userdata<PointerConstraint*>(listener);
+
+    process_cursor_motion(pointer_constriant->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
 }
 
 void server_pointer_constraint_new(wl_listener* listener, void* data)
 {
+    Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
+
     log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), toplevel_to_string(Toplevel::from(constraint->surface)));
 
-    Server* server = listener_userdata<Server*>(listener);
+    PointerConstraint* pointer_constraint = new PointerConstraint{};
+    pointer_constraint->server = server;
+    pointer_constraint->constraint = constraint;
 
-    listen(&constraint->events.destroy, server, server_pointer_constraint_destroy);
+    pointer_constraint->listeners.listen(&constraint->events.destroy,    pointer_constraint, server_pointer_constraint_destroy);
+    pointer_constraint->listeners.listen(&constraint->events.set_region, pointer_constraint, server_pointer_constraint_set_region);
 }
 
 // -----------------------------------------------------------------------------
@@ -484,16 +504,16 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     // Handle constraints and update mouse
 
     {
-        // log_info("Pointer motion ({:7.2f}, {:7.2f}) rel ({:7.2f}, {:7.2f})", dx, dy, rel_dx, rel_dy);
-
-        // log_info("Pointer motion\n{}  surface = {}\n{}  pointer surface = {}\n{}  keyboard surface = {}",
+        // log_info("Pointer motion ({:7.2f}, {:7.2f}) rel ({:7.2f}, {:7.2f})\n{}  surface = {}\n{}  pointer surface = {}\n{}  keyboard surface = {}",
+        //     dx, dy, rel_dx, rel_dy,
         //     log_indent, surface_to_string(surface),
         //     log_indent, surface_to_string(Surface::from(server->seat->pointer_state.focused_surface)),
         //     log_indent, surface_to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
 
         if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
-            // if (server->seat->pointer_state.focused_surface && server->seat->pointer_state.focused_surface == server->seat->keyboard_state.focused_surface) {
-            if (surface == get_focused_surface(server)) {
+            Toplevel* pointer_tl = Toplevel::from(surface);
+            Toplevel* keyboard_tl = Toplevel::from(get_focused_surface(server));
+            if (pointer_tl && keyboard_tl && pointer_tl->xdg_toplevel()->base->client == keyboard_tl->xdg_toplevel()->base->client) {
                 // Only send relative pointer motion when pointer focus is keyboard focus
                 // (some applications will try to handle relative pointer input even when they're not focused)
                 wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
@@ -509,10 +529,14 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
             }
         };
 
-        if (surface && surface == get_focused_surface(server)) {
-            wlr_pointer_constraint_v1* constraint =
-                wlr_pointer_constraints_v1_constraint_for_surface(server->pointer.pointer_constraints, wlr_surface, server->seat);
-            if (constraint) {
+        Surface* focused_surface = get_focused_surface(server);
+        if (focused_surface) {
+
+            wlr_pointer_constraint_v1_type type;
+            const pixman_region32_t* region = nullptr;
+
+            if (wlr_pointer_constraint_v1* constraint = wlr_pointer_constraints_v1_constraint_for_surface(server->pointer.pointer_constraints, focused_surface->wlr_surface, server->seat)) {
+                constraint_active = true;
                 if (constraint != server->pointer.active_constraint) {
                     if (server->pointer.active_constraint) {
                         log_info("Pointer constraint deactivated: {} (reason: replacing with new constraint)", pointer_constraint_to_string(server->pointer.active_constraint));
@@ -523,27 +547,48 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
                     server->pointer.active_constraint = constraint;
                 }
 
-                constraint_active = true;
+                region = &constraint->region;
+                type = constraint->type;
+            } else if (Toplevel* toplevel = Toplevel::from(focused_surface); toplevel && toplevel->quirks.force_pointer_constraint) {
+                region = &toplevel->wlr_surface->input_region;
+                type = WLR_POINTER_CONSTRAINT_V1_CONFINED;
+            }
 
-                double sx_confined, sy_confined;
-                bool contained = wlr_region_confine(&constraint->region, sx, sy, sx + dx, sy + dy, &sx_confined, &sy_confined);
+            if (region) {
+                wlr_box bounds = surface_get_bounds(focused_surface);
+                sx = server->cursor->x - bounds.x;
+                sy = server->cursor->y - bounds.y;
 
-                // wlr_box bounds = surface_get_bounds(surface);
-                // log_debug("Confine bounds ({:4}, {:4}) ({:4}, {:4}) old ({:4.0f}, {:4.0f}) new ({:4.0f}, {:4.0f}) confined ({:4.0f}, {:4.0f}) contained = {}",
-                //     bounds.x, bounds.y, bounds.width, bounds.height,
+                bool was_inside;
+                Point constrained = constrain_to_region(region, Point(sx, sy), Point(sx + dx, sy + dy), &was_inside);
+
+                // log_warn("constraining ({:.1f}, {:.1f}) to ({}, {}) ({}, {}) = ({:.1f}, {:.1f}), was_inside = {}",
                 //     sx, sy,
-                //     sx + dx, sy + dy,
-                //     sx_confined, sy_confined,
-                //     contained);
+                //     bounds.x, bounds.y,
+                //     bounds.x + bounds.width, bounds.y + bounds.height,
+                //     constrained.x + bounds.x, constrained.y + bounds.y,
+                //     was_inside);
 
-                if (contained) {
-                    if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-                        wlr_seat_pointer_notify_enter(seat, wlr_surface, sx, sy);
-                        return;
-                    }
+                surface = focused_surface;
+                wlr_surface = surface->wlr_surface;
 
-                    dx = sx_confined - sx;
-                    dy = sy_confined - sy;
+                dx = constrained.x - sx;
+                dy = constrained.y - sy;
+
+                if (!was_inside) {
+                    log_warn("Warping from ({}, {}) to ({}, {})", sx, sy, constrained.x, constrained.y);
+
+                    wlr_seat_pointer_clear_focus(server->seat);
+                    wlr_cursor_warp(server->cursor, nullptr, constrained.x + bounds.x, constrained.y + bounds.y);
+                    sx = constrained.x;
+                    sy = constrained.y;
+                    dx = 0;
+                    dy = 0;
+                }
+
+                if (type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+                    wlr_seat_pointer_notify_enter(seat, wlr_surface, constrained.x, constrained.y);
+                    return;
                 }
             }
         }
@@ -712,6 +757,11 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                     toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
                 }
                 return true;
+            case XKB_KEY_j:
+                server->pointer.debug_visual_enabled = !server->pointer.debug_visual_enabled;
+                log_info("Debug cursor visual: {}", server->pointer.debug_visual_enabled ? "enabled" : "disabled");
+                update_cursor_state(server);
+                return true;
             default:
                 ;
         }
@@ -818,9 +868,15 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
         if (surface_under_cursor) {
             Surface* prev_focus = get_focused_surface(server);
             surface_focus(surface_under_cursor);
-            if (prev_focus != get_focused_surface(server) && !is_cursor_visible(server)) {
-                log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
-                return true;
+            if (prev_focus != get_focused_surface(server)) {
+                if (!is_cursor_visible(server)) {
+                    log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
+                    return true;
+                }
+                if (Toplevel* new_focus = Toplevel::from(get_focused_surface(server)); new_focus && new_focus->quirks.force_pointer_constraint) {
+                    log_warn("Button press event suppressed (reason: focused moved to window with pointer constraint quirk)");
+                    return true;
+                }
             }
         } else if (get_focused_surface(server)) {
             surface_unfocus(get_focused_surface(server), false);
