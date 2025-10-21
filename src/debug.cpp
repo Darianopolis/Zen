@@ -54,3 +54,8 @@ std::string cursor_surface_to_string(CursorSurface* cursor_surface)
 
     return std::format("CursorSurface<{}>(wlr_surface = {}, visisble = {})", (void*)cursor_surface, (void*)cursor_surface->wlr_surface, cursor_surface_is_visible(cursor_surface));
 }
+
+std::string pointer_to_string(Pointer* pointer)
+{
+    return pointer ? std::format("Pointer<{}>", (void*)pointer) : "nullptr";
+}

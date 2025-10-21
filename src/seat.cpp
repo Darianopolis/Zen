@@ -107,12 +107,6 @@ void server_new_keyboard(Server* server, wlr_input_device* device)
     server->keyboards.emplace_back(keyboard);
 }
 
-static
-std::string pointer_to_string(Pointer* pointer)
-{
-    return pointer ? std::format("Pointer<{}>", (void*)pointer) : "nullptr";
-}
-
 void pointer_destroy(wl_listener* listener, void*)
 {
     Pointer* pointer = listener_userdata<Pointer*>(listener);
@@ -201,7 +195,6 @@ void cursor_surface_destroy(wl_listener* listener, void*)
 
     Surface* requestee_surface = Surface::from(cursor_surface->requestee_surface);
     if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
-        log_trace("  Unlinking requestee surface: {}", surface_to_string(requestee_surface));
         requestee_surface->cursor.surface = nullptr;
         requestee_surface->cursor.surface_set = false;
         update_cursor_state(cursor_surface->server);
@@ -230,18 +223,18 @@ void update_cursor_state(Server* server)
         CursorSurface* cursor_surface = focused_surface->cursor.surface;
         bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
         if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
-            log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
+            // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
             server->pointer.cursor_is_visible = visible;
 
             wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
             debug_visual_color = visible ? Color{0, 1, 0, 0.5} : Color{1, 0, 0, 0.5};
         } else {
-            log_debug("Cursor state: Client not allowed to hide cursor, using default");
+            // log_debug("Cursor state: Client not allowed to hide cursor, using default");
             wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
             debug_visual_color = Color{1, 1, 0, 0.5};
         }
     } else {
-        log_debug("Cursor state: No surface focus or surface cursor unset, using default");
+        // log_debug("Cursor state: No surface focus or surface cursor unset, using default");
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
         debug_visual_color = Color{1, 0, 1, 0.5};
     }
@@ -286,7 +279,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
         }
     }
 
-    log_info("Cursor request (surface = {:14}) for {}", (void*)event->surface, surface_to_string(requestee_surface));
+    // log_info("Cursor request (surface = {:14}) for {}", (void*)event->surface, surface_to_string(requestee_surface));
     requestee_surface->cursor.surface = cursor_surface;
     requestee_surface->cursor.hotspot_x = event->hotspot_x;
     requestee_surface->cursor.hotspot_y = event->hotspot_y;
@@ -698,6 +691,30 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
     wl_keyboard_key_state state = event.state;
 
     // log_trace("Key {:#6x} -> {}", sym, magic_enum::enum_name(state));
+
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        switch (sym) {
+            case XKB_KEY_XF86AudioLowerVolume:
+                spawn("wpctl", {"wpctl",  "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01-"});
+                return true;
+            case XKB_KEY_XF86AudioMute:
+                spawn("wpctl", {"wpctl",  "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"});
+                return true;
+            case XKB_KEY_XF86AudioRaiseVolume:
+                spawn("wpctl", {"wpctl",  "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01+"});
+                return true;
+            case XKB_KEY_XF86AudioPlay:
+                spawn("playerctl", {"playerctl", "-p", playerctl_player_name, "play-pause"});
+                return true;
+            case XKB_KEY_XF86AudioPrev:
+                spawn("playerctl", {"playerctl", "-p", playerctl_player_name, "prev"});
+                return true;
+            case XKB_KEY_XF86AudioNext:
+                spawn("playerctl", {"playerctl", "-p", playerctl_player_name, "next"});
+                return true;
+            break;
+        }
+    }
 
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
         switch (sym)

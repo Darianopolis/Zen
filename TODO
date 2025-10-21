@@ -71,6 +71,7 @@
 
 ### Additional
 
+- Focus follows mouse
 - Pseudo-fullscreen mode
    - Per-window mode to spoof permenant fullscreen state/size
       - Particularly useful for games that misbehave when resized

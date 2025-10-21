@@ -458,7 +458,6 @@ void surface_cleanup(Surface* surface)
 {
     if (surface->cursor.surface) {
         // Unlink any cursor surface that might still be referencing this surface
-        log_trace("Surface cleanup: unlinking cursor {}", cursor_surface_to_string(surface->cursor.surface));
         surface->cursor.surface->requestee_surface = nullptr;
     }
 

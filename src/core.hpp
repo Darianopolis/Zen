@@ -41,6 +41,10 @@ static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
 // -----------------------------------------------------------------------------
 
+static constexpr const char* playerctl_player_name = "spotify";
+
+// -----------------------------------------------------------------------------
+
 struct OutputRule { const char* name; int x, y; bool primary; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0, .primary = true },
@@ -471,3 +475,4 @@ std::string surface_to_string(Surface* surface);
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
 std::string client_to_string(wl_client* client);
 std::string cursor_surface_to_string(CursorSurface*);
+std::string pointer_to_string(Pointer* pointer);
