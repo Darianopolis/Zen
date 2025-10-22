@@ -504,13 +504,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         //     log_indent, surface_to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
 
         if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
-            Toplevel* pointer_tl = Toplevel::from(surface);
-            Toplevel* keyboard_tl = Toplevel::from(get_focused_surface(server));
-            if (pointer_tl && keyboard_tl && pointer_tl->xdg_toplevel()->base->client == keyboard_tl->xdg_toplevel()->base->client) {
-                // Only send relative pointer motion when pointer focus is keyboard focus
-                // (some applications will try to handle relative pointer input even when they're not focused)
-                wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
-            }
+            wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
         }
 
         bool constraint_active = false;
@@ -766,12 +760,12 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 return true;
             case XKB_KEY_q:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
+                    toplevel_close(focused);
                 }
                 return true;
             case XKB_KEY_f:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
+                    toplevel_set_fullscreen(focused, !toplevel_is_fullscreen(focused));
                 }
                 return true;
             case XKB_KEY_j:
@@ -871,7 +865,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
             } else if (event.button == BTN_RIGHT) {
                 toplevel_begin_interactive(toplevel, InteractionMode::resize);
             } else if (event.button == BTN_MIDDLE) {
-                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
+                toplevel_close(toplevel);
             }
         } else {
             log_warn("Compositor button pressed while cursor is hidden");

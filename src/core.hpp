@@ -409,11 +409,11 @@ Output* get_output_for_surface(     Surface*);
 wlr_box output_get_bounds( Output*);
 void    output_reconfigure(Output*);
 
-void output_frame(               wl_listener*, void*);
-void output_request_state(       wl_listener*, void*);
-void output_destroy(             wl_listener*, void*);
-void server_new_output(          wl_listener*, void*);
-void server_output_layout_change(wl_listener*, void*);
+void output_frame(        wl_listener*, void*);
+void output_request_state(wl_listener*, void*);
+void output_destroy(      wl_listener*, void*);
+void output_new(          wl_listener*, void*);
+void output_layout_change(wl_listener*, void*);
 
 // ---- Surface ----------------------------------------------------------------
 
@@ -431,7 +431,10 @@ void surface_cleanup(Surface*);
 
 // ---- Surface.LayerSurface ---------------------------------------------------
 
-void server_new_layer_surface(wl_listener*, void*);
+void layer_surface_commit( wl_listener* listener, void*);
+void layer_surface_unmap(  wl_listener*, void*);
+void layer_surface_destroy(wl_listener* listener, void*);
+void layer_surface_new(wl_listener*, void*);
 void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 
 // ---- Surface.Toplevel -------------------------------------------------------
@@ -439,11 +442,12 @@ void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 void toplevel_resize(          Toplevel*, int width, int height);
 void toplevel_set_bounds(      Toplevel*, wlr_box);
 void toplevel_set_activated(   Toplevel*, bool active);
+bool toplevel_is_fullscreen(   Toplevel*);
 void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
 void toplevel_update_border(   Toplevel*);
 bool toplevel_is_interactable( Toplevel*);
-
 void toplevel_begin_interactive(Toplevel*, InteractionMode);
+void toplevel_close(            Toplevel*);
 
 void toplevel_map(               wl_listener*, void*);
 void toplevel_unmap(             wl_listener*, void*);
@@ -452,7 +456,7 @@ void toplevel_destroy(           wl_listener*, void*);
 void toplevel_request_minimize(  wl_listener*, void*);
 void toplevel_request_maximize(  wl_listener*, void*);
 void toplevel_request_fullscreen(wl_listener*, void*);
-void server_new_toplevel(        wl_listener*, void*);
+void toplevel_new(               wl_listener*, void*);
 
 // ---- Surface.Toplevel.Decoration --------------------------------------------
 
@@ -464,9 +468,9 @@ void decoration_destroy(     wl_listener*, void*);
 
 // ---- Surface.Popup ----------------------------------------------------------
 
-void popup_commit(    wl_listener*, void*);
-void popup_destroy(   wl_listener*, void*);
-void server_new_popup(wl_listener*, void*);
+void popup_commit( wl_listener*, void*);
+void popup_destroy(wl_listener*, void*);
+void popup_new(    wl_listener*, void*);
 
 // ---- Debug ------------------------------------------------------------------
 

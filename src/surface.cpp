@@ -1,6 +1,11 @@
 #include "pch.hpp"
 #include "core.hpp"
 
+void toplevel_close(Toplevel* toplevel)
+{
+    wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
+}
+
 Surface* get_focused_surface(Server* server)
 {
     return Surface::from(server->seat->keyboard_state.focused_surface);
@@ -16,7 +21,7 @@ void toplevel_update_border(Toplevel* toplevel)
     wlr_box bounds = surface_get_bounds(toplevel);
 
     bool show = bounds.width && bounds.height;
-    show &= !toplevel->xdg_toplevel()->current.fullscreen;
+    show &= !toplevel_is_fullscreen(toplevel);
 
     wlr_box positions[4];
     positions[left]   = { -border_width, -border_width,  border_width, bounds.height + border_width * 2 };
@@ -188,6 +193,11 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
     wlr_scene_node_set_position(&toplevel->popup_tree->node, x, y);
 
     toplevel_resize(toplevel, box.width, box.height);
+}
+
+bool toplevel_is_fullscreen(Toplevel* toplevel)
+{
+    return toplevel->xdg_toplevel()->current.fullscreen;
 }
 
 void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
@@ -571,7 +581,7 @@ void toplevel_destroy(wl_listener* listener, void*)
 
 bool toplevel_is_interactable(Toplevel* toplevel)
 {
-    if (toplevel->xdg_toplevel()->current.fullscreen) return false;
+    if (toplevel_is_fullscreen(toplevel)) return false;
 
     return true;
 }
@@ -650,7 +660,7 @@ void toplevel_request_fullscreen(wl_listener* listener, void*)
     }
 }
 
-void server_new_toplevel(wl_listener* listener, void* data)
+void toplevel_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_xdg_toplevel* xdg_toplevel = static_cast<wlr_xdg_toplevel*>(data);
@@ -699,6 +709,20 @@ void decoration_set_mode(Toplevel* toplevel)
     }
 }
 
+void decoration_request_mode(wl_listener* listener, void*)
+{
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+    decoration_set_mode(toplevel);
+}
+
+void decoration_destroy(wl_listener* listener, void*)
+{
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+
+    toplevel->decoration.xdg_decoration = nullptr;
+    toplevel->decoration.listeners.clear();
+}
+
 void decoration_new(wl_listener*, void* data)
 {
     wlr_xdg_toplevel_decoration_v1* xdg_decoration = static_cast<wlr_xdg_toplevel_decoration_v1*>(data);
@@ -717,20 +741,6 @@ void decoration_new(wl_listener*, void* data)
     decoration_set_mode(toplevel);
 }
 
-void decoration_request_mode(wl_listener* listener, void*)
-{
-    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
-    decoration_set_mode(toplevel);
-}
-
-void decoration_destroy(wl_listener* listener, void*)
-{
-    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
-
-    toplevel->decoration.xdg_decoration = nullptr;
-    toplevel->decoration.listeners.clear();
-}
-
 // -----------------------------------------------------------------------------
 
 void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
@@ -745,7 +755,6 @@ void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
     }
 }
 
-static
 void layer_surface_commit(wl_listener* listener, void*)
 {
     LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
@@ -761,13 +770,11 @@ void layer_surface_commit(wl_listener* listener, void*)
     output_reconfigure(get_output_for_surface(layer_surface));
 }
 
-static
 void layer_surface_unmap(wl_listener*, void*)
 {
     // TODO
 }
 
-static
 void layer_surface_destroy(wl_listener* listener, void*)
 {
     LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
@@ -787,7 +794,7 @@ void layer_surface_destroy(wl_listener* listener, void*)
     delete layer_surface;
 }
 
-void server_new_layer_surface(wl_listener* listener, void* data)
+void layer_surface_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
 
@@ -870,7 +877,7 @@ void popup_destroy(wl_listener* listener, void*)
     delete popup;
 }
 
-void server_new_popup(wl_listener* listener, void* data)
+void popup_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_xdg_popup* xdg_popup = static_cast<wlr_xdg_popup*>(data);
