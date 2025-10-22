@@ -1,27 +1,23 @@
 #include "core.hpp"
 
-std::string toplevel_to_string(Toplevel* toplevel)
+std::string to_string(Surface* surface)
 {
-    return toplevel
-        ? std::format("Toplevel<{}>({}, {})",
-            (void*)toplevel,
-            toplevel->xdg_toplevel()->app_id ? toplevel->xdg_toplevel()->app_id : "?",
-            toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?")
-        : "nullptr";
+    return surface ? surface->to_string() : "nullptr";
 }
 
-std::string surface_to_string(Surface* surface)
+std::string Toplevel::to_string()
 {
-    if (!surface) return "nullptr";
-    switch (surface->role) {
-        case SurfaceRole::toplevel:      return toplevel_to_string(Toplevel::from(surface));
-        case SurfaceRole::popup:         return std::format("Popup<{}>", (void*)surface);
-        case SurfaceRole::layer_surface: return std::format("LayerSurface<{}>", (void*)surface);
-        default:
-    }
+    return std::format("XdgToplevel<{}>({}, {})",
+        (void*)this,
+        xdg_toplevel->app_id ? xdg_toplevel->app_id : "?",
+        xdg_toplevel->title ? xdg_toplevel->title   : "?");
+}
 
-
-    return std::format("InvalidSurface<{}>(role = {})", (void*)surface, std::to_underlying(surface->role));
+std::string Popup::to_string() { return std::format("XdgPopup<{}>", (void*)this); }
+std::string LayerSurface::to_string() { return std::format("WlrLayerSurface<{}>", (void*)this); }
+std::string CursorSurface::to_string()
+{
+    return std::format("CursorSurface<{}>(wlr_surface = {}, visisble = {})", (void*)this, (void*)surface, cursor_surface_is_visible(this));
 }
 
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint)
@@ -52,7 +48,7 @@ std::string cursor_surface_to_string(CursorSurface* cursor_surface)
 {
     if (!cursor_surface) return "nullptr";
 
-    return std::format("CursorSurface<{}>(wlr_surface = {}, visisble = {})", (void*)cursor_surface, (void*)cursor_surface->wlr_surface, cursor_surface_is_visible(cursor_surface));
+    return std::format("CursorSurface<{}>(wlr_surface = {}, visisble = {})", (void*)cursor_surface, (void*)cursor_surface->wlr_surface(), cursor_surface_is_visible(cursor_surface));
 }
 
 std::string pointer_to_string(Pointer* pointer)

@@ -178,7 +178,7 @@ void server_new_input(wl_listener* listener, void* data)
 
 bool cursor_surface_is_visible(CursorSurface* cursor_surface)
 {
-    return cursor_surface->wlr_surface->current.width && cursor_surface->wlr_surface->current.height;
+    return cursor_surface->wlr_surface()->current.width && cursor_surface->wlr_surface()->current.height;
 }
 
 void cursor_surface_commit(wl_listener* listener, void*)
@@ -191,14 +191,16 @@ void cursor_surface_destroy(wl_listener* listener, void*)
 {
     CursorSurface* cursor_surface = listener_userdata<CursorSurface*>(listener);
 
-    log_info("Cursor destroyed: {}", cursor_surface_to_string(cursor_surface));
+    log_info("Cursor destroyed: {}", to_string(cursor_surface));
 
-    Surface* requestee_surface = Surface::from(cursor_surface->requestee_surface);
+    Surface* requestee_surface = cursor_surface->requestee_surface;
     if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
         requestee_surface->cursor.surface = nullptr;
         requestee_surface->cursor.surface_set = false;
         update_cursor_state(cursor_surface->server);
     }
+
+    cursor_surface->unlink();
 
     delete cursor_surface;
 }
@@ -226,7 +228,7 @@ void update_cursor_state(Server* server)
             // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
             server->pointer.cursor_is_visible = visible;
 
-            wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
+            wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface() : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
             debug_visual_color = visible ? Color{0, 1, 0, 0.5} : Color{1, 0, 0, 0.5};
         } else {
             // log_debug("Cursor state: Client not allowed to hide cursor, using default");
@@ -268,18 +270,18 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
 
             cursor_surface = new CursorSurface {};
             cursor_surface->server = server;
-            cursor_surface->requestee_surface = requestee_surface->wlr_surface;
-            cursor_surface->wlr_surface = event->surface;
+            cursor_surface->requestee_surface = requestee_surface;
+            cursor_surface->surface = event->surface;
             cursor_surface->listeners.listen(&event->surface->events.commit, cursor_surface, cursor_surface_commit);
             cursor_surface->listeners.listen(&event->surface->events.destroy, cursor_surface, cursor_surface_destroy);
 
             event->surface->data = cursor_surface;
 
-            log_info("Cursor created:   {}", cursor_surface_to_string(cursor_surface));
+            log_info("Cursor created:   {}", to_string(cursor_surface));
         }
     }
 
-    // log_info("Cursor request (surface = {:14}) for {}", (void*)event->surface, surface_to_string(requestee_surface));
+    // log_info("Cursor request (surface = {:14}) for {}", (void*)event->surface, to_string(requestee_surface));
     requestee_surface->cursor.surface = cursor_surface;
     requestee_surface->cursor.hotspot_x = event->hotspot_x;
     requestee_surface->cursor.hotspot_y = event->hotspot_y;
@@ -382,7 +384,7 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
 
-    log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), toplevel_to_string(Toplevel::from(constraint->surface)));
+    log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), to_string(Toplevel::from(constraint->surface)));
 
     PointerConstraint* pointer_constraint = new PointerConstraint{};
     pointer_constraint->server = server;
@@ -421,7 +423,7 @@ void process_cursor_move(Server* server)
 {
     Toplevel* toplevel = server->movesize.grabbed_toplevel;
 
-    wlr_box bounds = surface_get_bounds(toplevel);
+    wlr_box bounds = toplevel->get_bounds();
     bounds.x = server->movesize.grab_bounds.x + int(server->cursor->x - server->movesize.grab.x);
     bounds.y = server->movesize.grab_bounds.y + int(server->cursor->y - server->movesize.grab.y);
     toplevel_set_bounds(toplevel, bounds);
@@ -484,8 +486,8 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     Surface* surface = nullptr;
     struct wlr_surface* wlr_surface = nullptr;
     if (get_num_pointer_buttons_down(server) > 0 && (surface = Surface::from(seat->pointer_state.focused_surface))) {
-        wlr_surface = surface->wlr_surface;
-        wlr_box coord_system = surface_get_coord_system(surface);
+        wlr_surface = surface->wlr_surface();
+        wlr_box coord_system = surface->get_coord_system();
         sx = server->cursor->x - coord_system.x;
         sy = server->cursor->y - coord_system.y;
     }
@@ -499,14 +501,14 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     {
         // log_info("Pointer motion ({:7.2f}, {:7.2f}) rel ({:7.2f}, {:7.2f})\n{}  surface = {}\n{}  pointer surface = {}\n{}  keyboard surface = {}",
         //     dx, dy, rel_dx, rel_dy,
-        //     log_indent, surface_to_string(surface),
-        //     log_indent, surface_to_string(Surface::from(server->seat->pointer_state.focused_surface)),
-        //     log_indent, surface_to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
+        //     log_indent, to_string(surface),
+        //     log_indent, to_string(Surface::from(server->seat->pointer_state.focused_surface)),
+        //     log_indent, to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
 
         if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
             Toplevel* pointer_tl = Toplevel::from(surface);
             Toplevel* keyboard_tl = Toplevel::from(get_focused_surface(server));
-            if (pointer_tl && keyboard_tl && pointer_tl->xdg_toplevel()->base->client == keyboard_tl->xdg_toplevel()->base->client) {
+            if (pointer_tl && keyboard_tl && pointer_tl->xdg_toplevel->base->client == keyboard_tl->xdg_toplevel->base->client) {
                 // Only send relative pointer motion when pointer focus is keyboard focus
                 // (some applications will try to handle relative pointer input even when they're not focused)
                 wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
@@ -528,7 +530,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
             wlr_pointer_constraint_v1_type type;
             const pixman_region32_t* region = nullptr;
 
-            if (wlr_pointer_constraint_v1* constraint = wlr_pointer_constraints_v1_constraint_for_surface(server->pointer.pointer_constraints, focused_surface->wlr_surface, server->seat)) {
+            if (wlr_pointer_constraint_v1* constraint = wlr_pointer_constraints_v1_constraint_for_surface(server->pointer.pointer_constraints, focused_surface->wlr_surface(), server->seat)) {
                 constraint_active = true;
                 if (constraint != server->pointer.active_constraint) {
                     if (server->pointer.active_constraint) {
@@ -543,12 +545,12 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
                 region = &constraint->region;
                 type = constraint->type;
             } else if (Toplevel* toplevel = Toplevel::from(focused_surface); toplevel && toplevel->quirks.force_pointer_constraint) {
-                region = &toplevel->wlr_surface->input_region;
+                region = &toplevel->wlr_surface()->input_region;
                 type = WLR_POINTER_CONSTRAINT_V1_CONFINED;
             }
 
             if (region) {
-                wlr_box bounds = surface_get_bounds(focused_surface);
+                wlr_box bounds = focused_surface->get_bounds();
                 sx = server->cursor->x - bounds.x;
                 sy = server->cursor->y - bounds.y;
 
@@ -563,7 +565,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
                 //     was_inside);
 
                 surface = focused_surface;
-                wlr_surface = surface->wlr_surface;
+                wlr_surface = surface->wlr_surface();
 
                 dx = constrained.x - sx;
                 dy = constrained.y - sy;
@@ -762,16 +764,16 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 spawn("xeyes", {"xeyes"});
                 return true;
             case XKB_KEY_s:
-                surface_unfocus(get_focused_surface(server), false);
+                Surface::unfocus(get_focused_surface(server), false);
                 return true;
             case XKB_KEY_q:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
+                    wlr_xdg_toplevel_send_close(focused->xdg_toplevel);
                 }
                 return true;
             case XKB_KEY_f:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
+                    toplevel_set_fullscreen(focused, !focused->xdg_toplevel->current.fullscreen);
                 }
                 return true;
             case XKB_KEY_j:
@@ -832,9 +834,9 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
         // If we interrupted a focus cycle by clicking a previously hidden toplevel,
         // don't transfer focus as it wouldn't have been visible to the user before the press
         if (Toplevel::from(surface_under_cursor)) {
-            surface_unfocus(get_focused_surface(server), false);
+            Surface::unfocus(get_focused_surface(server), false);
         } else {
-            surface_focus(surface_under_cursor);
+            Surface::focus(surface_under_cursor);
         }
         return true;
     }
@@ -871,7 +873,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
             } else if (event.button == BTN_RIGHT) {
                 toplevel_begin_interactive(toplevel, InteractionMode::resize);
             } else if (event.button == BTN_MIDDLE) {
-                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
+                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel);
             }
         } else {
             log_warn("Compositor button pressed while cursor is hidden");
@@ -884,7 +886,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
     if (get_num_pointer_buttons_down(server) == 1 || !get_focused_surface(server)) {
         if (surface_under_cursor) {
             Surface* prev_focus = get_focused_surface(server);
-            surface_focus(surface_under_cursor);
+            Surface::focus(surface_under_cursor);
             if (prev_focus != get_focused_surface(server)) {
                 if (!is_cursor_visible(server)) {
                     log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
@@ -896,7 +898,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
                 }
             }
         } else if (get_focused_surface(server)) {
-            surface_unfocus(get_focused_surface(server), false);
+            Surface::unfocus(get_focused_surface(server), false);
         }
     }
 

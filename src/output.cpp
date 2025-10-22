@@ -49,7 +49,7 @@ Output* get_output_for_surface(Surface* surface)
         return nullptr;
     }
 
-    return get_nearest_output_to_box(surface->server, surface_get_bounds(surface));
+    return get_nearest_output_to_box(surface->server, surface->get_bounds());
 }
 
 wlr_box output_get_bounds(Output* output)
@@ -94,7 +94,7 @@ void output_destroy(wl_listener* listener, void*)
 
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         for (LayerSurface* layer_surface : output->layers[layer]) {
-            wlr_layer_surface_v1_destroy(layer_surface->wlr_layer_surface());
+            wlr_layer_surface_v1_destroy(layer_surface->wlr_layer_surface);
         }
     }
 

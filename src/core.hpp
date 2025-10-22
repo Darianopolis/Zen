@@ -234,7 +234,6 @@ struct Surface
     Server* server;
     wlr_scene_tree* scene_tree;
     wlr_scene_tree* popup_tree;
-    struct wlr_surface* wlr_surface;
 
     struct {
         bool surface_set;
@@ -243,12 +242,29 @@ struct Surface
         int32_t hotspot_y;
     } cursor;
 
-    static Surface* from(void* data) {
+    static Surface* from_data(void* data) {
         Surface* surface = static_cast<Surface*>(data);
         return (surface && surface->role != SurfaceRole::invalid) ? surface : nullptr;
     }
-    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from(surface->data) : nullptr; }
-    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from(node->data)    : nullptr; }
+    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from_data(surface->data) : nullptr; }
+    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from_data(node->data)    : nullptr; }
+
+    virtual struct wlr_surface* wlr_surface() = 0;
+
+    wlr_box get_bounds();
+    virtual wlr_box get_geometry();
+    virtual wlr_box get_coord_system() { return get_bounds(); }
+
+    virtual std::string to_string() = 0;
+
+    void focus();
+    void unfocus(bool force);
+    static void focus(Surface* surface) { if (surface) surface->focus(); }
+    static void unfocus(Surface* surface, bool force) { if (surface) surface->unfocus(force);  }
+
+    bool unlinked = false;
+    void unlink();
+    virtual ~Surface() { if (!unlinked) log_error("Surface destroyed without being unlinked"); }
 };
 
 struct Toplevel : Surface
@@ -262,7 +278,8 @@ struct Toplevel : Surface
 
     ListenerSet listeners;
 
-    wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
+    virtual struct wlr_surface* wlr_surface() final override { return xdg_toplevel->base->surface; }
+    wlr_xdg_toplevel* xdg_toplevel;
 
     wlr_scene_rect* border[4];
     struct {
@@ -284,6 +301,11 @@ struct Toplevel : Surface
     } resize;
 
     WindowQuirks quirks;
+
+    virtual wlr_box get_geometry() final override;
+    virtual wlr_box get_coord_system() final override;
+
+    virtual std::string to_string() final override;
 };
 
 struct Popup : Surface
@@ -297,7 +319,12 @@ struct Popup : Surface
 
     ListenerSet listeners;
 
-    wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
+    virtual struct wlr_surface* wlr_surface() final override { return xdg_popup->base->surface; }
+    wlr_xdg_popup* xdg_popup;
+
+    virtual wlr_box get_geometry() final override;
+
+    virtual std::string to_string() final override;
 };
 
 struct LayerSurface : Surface
@@ -311,9 +338,14 @@ struct LayerSurface : Surface
 
     ListenerSet listeners;
 
-    wlr_layer_surface_v1* wlr_layer_surface() const { return wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface); }
+    virtual struct wlr_surface* wlr_surface() final override { return wlr_layer_surface->surface; }
+    wlr_layer_surface_v1* wlr_layer_surface;
 
     wlr_scene_layer_surface_v1* scene_layer_surface;
+
+    virtual wlr_box get_geometry() final override;
+
+    virtual std::string to_string() final override;
 };
 
 struct CursorSurface : Surface
@@ -323,8 +355,12 @@ struct CursorSurface : Surface
 
     ListenerSet listeners;
 
-    // TODO: Store Surface* and have Surface store CursorListener* to ensure lifetime safety
-    struct wlr_surface* requestee_surface;
+    virtual struct wlr_surface* wlr_surface() final override { return surface; }
+    struct wlr_surface* surface;
+
+    Surface* requestee_surface;
+
+    virtual std::string to_string() final override;
 };
 
 // ---- Policy -----------------------------------------------------------------
@@ -420,15 +456,6 @@ void server_output_layout_change(wl_listener*, void*);
 Surface* get_surface_at(     Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy);
 Surface* get_focused_surface(Server*);
 
-void surface_focus(  Surface*);
-void surface_unfocus(Surface*, bool force);
-
-wlr_box surface_get_bounds(      Surface*);
-wlr_box surface_get_geometry(    Surface*);
-wlr_box surface_get_coord_system(Surface*);
-
-void surface_cleanup(Surface*);
-
 // ---- Surface.LayerSurface ---------------------------------------------------
 
 void server_new_layer_surface(wl_listener*, void*);
@@ -470,9 +497,10 @@ void server_new_popup(wl_listener*, void*);
 
 // ---- Debug ------------------------------------------------------------------
 
-std::string toplevel_to_string(Toplevel* toplevel);
-std::string surface_to_string(Surface* surface);
+std::string to_string(Surface* surface);
+// std::string toplevel_to_string(Toplevel* toplevel);
+// std::string to_string(Surface* surface);
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
 std::string client_to_string(wl_client* client);
-std::string cursor_surface_to_string(CursorSurface*);
+// std::string cursor_surface_to_string(CursorSurface*);
 std::string pointer_to_string(Pointer* pointer);

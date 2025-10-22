@@ -13,10 +13,10 @@ void toplevel_update_border(Toplevel* toplevel)
     static constexpr uint32_t right = 2;
     static constexpr uint32_t bottom = 3;
 
-    wlr_box bounds = surface_get_bounds(toplevel);
+    wlr_box bounds = toplevel->get_bounds();
 
     bool show = bounds.width && bounds.height;
-    show &= !toplevel->xdg_toplevel()->current.fullscreen;
+    show &= !toplevel->xdg_toplevel->current.fullscreen;
 
     wlr_box positions[4];
     positions[left]   = { -border_width, -border_width,  border_width, bounds.height + border_width * 2 };
@@ -39,55 +39,65 @@ void toplevel_update_border(Toplevel* toplevel)
     }
 }
 
-wlr_box surface_get_geometry(Surface* surface)
+wlr_box Surface::get_bounds()
 {
-    wlr_box geom = {};
-    if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface->wlr_surface)) {
-        geom = xdg_surface->current.geometry;
+    wlr_box bounds = get_geometry();
+    wlr_scene_node_coords(&scene_tree->node, &bounds.x, &bounds.y);
+    return bounds;
+}
 
-        // Some clients (E.g. SDL3 + Vulkan) fail to report valid geometry. Fall back to surface dimensions.
-        if (geom.width == 0)  geom.width  = xdg_surface->surface->current.width  - geom.x;
-        if (geom.height == 0) geom.height = xdg_surface->surface->current.height - geom.y;
-    } else  if (wlr_layer_surface_v1* wlr_layer_surface = wlr_layer_surface_v1_try_from_wlr_surface(surface->wlr_surface)) {
-        geom.width = wlr_layer_surface->current.actual_width;
-        geom.height = wlr_layer_surface->current.actual_height;
-    } else {
-        log_error("failed to get surface geometry");
+wlr_box Surface::get_geometry()
+{
+    // Fallback geometry calculations based on wlr_surface
+
+    wlr_box geom = {};
+    if (struct wlr_surface* surface = wlr_surface()) {
+        geom.width = surface->current.width;
+        geom.height = surface->current.height;
     }
+    return geom;
+}
+
+static
+wlr_box xdg_toplevel_get_geometry(wlr_xdg_surface* xdg_surface)
+{
+    wlr_box geom = xdg_surface->current.geometry;
+
+    // Some clients (E.g. SDL3 + Vulkan) fail to report valid geometry. Fall back to surface dimensions.
+    // TODO: Prefer to fallback to physical buffer size in this case, as it's a better indication of the actual rendered geometry
+    if (geom.width == 0)  geom.width  = xdg_surface->surface->current.width  - geom.x;
+    if (geom.height == 0) geom.height = xdg_surface->surface->current.height - geom.y;
 
     return geom;
 }
 
-wlr_box surface_get_coord_system(Surface* surface)
+wlr_box Toplevel::get_geometry()
 {
-    wlr_box box = {};
-    if (surface->scene_tree) {
-        wlr_scene_node_coords(&surface->scene_tree->node, &box.x, &box.y);
-    }
-
-    if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface->wlr_surface)) {
-
-        // Scene node coordinates position the geometry origin, adjust to surface origin
-        box.x -= xdg_surface->current.geometry.x;
-        box.y -= xdg_surface->current.geometry.y;
-
-        box.width = xdg_surface->surface->current.width;
-        box.height = xdg_surface->surface->current.height;
-    }
-
-    if (wlr_layer_surface_v1* wlr_layer_surface = wlr_layer_surface_v1_try_from_wlr_surface(surface->wlr_surface)) {
-        box.width = wlr_layer_surface->current.actual_width;
-        box.height = wlr_layer_surface->current.actual_height;
-    }
-
-    return box;
+    return xdg_toplevel_get_geometry(xdg_toplevel->base);
 }
 
-wlr_box surface_get_bounds(Surface* surface)
+wlr_box Popup::get_geometry()
 {
-    wlr_box box = surface_get_geometry(surface);
-    wlr_scene_node_coords(&surface->scene_tree->node, &box.x, &box.y);
-    return box;
+    return xdg_toplevel_get_geometry(xdg_popup->base);
+}
+
+wlr_box LayerSurface::get_geometry()
+{
+    wlr_box geom;
+    geom.width = wlr_layer_surface->current.actual_width;
+    geom.height = wlr_layer_surface->current.actual_height;
+    return geom;
+}
+
+wlr_box Toplevel::get_coord_system()
+{
+    wlr_box system;
+    wlr_scene_node_coords(&scene_tree->node, &system.x, &system.y);
+    system.x -= xdg_toplevel->base->current.geometry.x;
+    system.y -= xdg_toplevel->base->current.geometry.y;
+    system.width = xdg_toplevel->base->surface->current.width;
+    system.height = xdg_toplevel->base->surface->current.height;
+    return system;
 }
 
 void toplevel_resize(Toplevel* toplevel, int width, int height)
@@ -108,14 +118,14 @@ void toplevel_resize(Toplevel* toplevel, int width, int height)
     } else {
         toplevel->resize.any_pending = false;
 
-        if (toplevel->xdg_toplevel()->pending.width != width || toplevel->xdg_toplevel()->pending.height != height) {
+        if (toplevel->xdg_toplevel->pending.width != width || toplevel->xdg_toplevel->pending.height != height) {
 #if NOISY_RESIZE
             log_debug("resize.request[{}] ({}, {}) -> ({}, {})", toplevel->resize.last_resize_serial,
                 toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
                 width,                                 height);
 #endif
 
-            toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), width, height);
+            toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, width, height);
         }
     }
 }
@@ -123,8 +133,8 @@ void toplevel_resize(Toplevel* toplevel, int width, int height)
 static
 void toplevel_resize_handle_commit(Toplevel* toplevel)
 {
-    if (toplevel->resize.last_commited_serial == toplevel->xdg_toplevel()->base->current.configure_serial) return;
-    toplevel->resize.last_commited_serial = toplevel->xdg_toplevel()->base->current.configure_serial;
+    if (toplevel->resize.last_commited_serial == toplevel->xdg_toplevel->base->current.configure_serial) return;
+    toplevel->resize.last_commited_serial = toplevel->xdg_toplevel->base->current.configure_serial;
 
     if (toplevel->resize.last_commited_serial < toplevel->resize.last_resize_serial) return;
     toplevel->resize.last_resize_serial = toplevel->resize.last_commited_serial;
@@ -145,7 +155,7 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
     }
 #endif
 
-    wlr_box bounds = surface_get_bounds(toplevel);
+    wlr_box bounds = toplevel->get_bounds();
 #if NOISY_RESIZE
     log_debug("resize.commit[{}] ({}, {})", toplevel->resize.last_commited_serial, bounds.width, bounds.height);
 #endif
@@ -157,14 +167,14 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
         toplevel->resize.any_pending = false;
         toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height);
     } else {
-        if (bounds.width != toplevel->xdg_toplevel()->current.width || bounds.height != toplevel->xdg_toplevel()->current.height) {
+        if (bounds.width != toplevel->xdg_toplevel->current.width || bounds.height != toplevel->xdg_toplevel->current.height) {
             // Client has committed geometry that doesn't match our requested size
             // Resize toplevel to match committed geometry (client authoritative)
 #if NOISY_RESIZE
             log_debug("  no pending resizes, new bounds don't match requested toplevel size, overriding toplevel size (client authoritative)");
 #else
             log_warn("Overriding requested toplevel size ({}, {}) with surface size ({}, {})",
-                toplevel->xdg_toplevel()->current.width, toplevel->xdg_toplevel()->current.height, bounds.width, bounds.height);
+                toplevel->xdg_toplevel->current.width, toplevel->xdg_toplevel->current.height, bounds.width, bounds.height);
 #endif
             toplevel_resize(toplevel, bounds.width, bounds.height);
         }
@@ -173,8 +183,8 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
 
 void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
 {
-    if (toplevel->xdg_toplevel()->current.maximized) {
-        wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), false);
+    if (toplevel->xdg_toplevel->current.maximized) {
+        wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel, false);
     }
 
     // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
@@ -193,11 +203,11 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
 void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
 {
     if (fullscreen) {
-        wlr_box prev = surface_get_bounds(toplevel);
+        wlr_box prev = toplevel->get_bounds();
         Output* output = get_output_for_surface(toplevel);
         if (output) {
             wlr_box b = output_get_bounds(output);
-            wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), true);
+            wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, true);
             toplevel_set_bounds(toplevel, b);
             toplevel->prev_bounds = prev;
             // TODO: With layers implemented, move output background rect to fullscreen layer
@@ -209,7 +219,7 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
             //        visible below the fullscreened surface.
         }
     } else {
-        wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), false);
+        wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel, false);
 
         // Constrain prev bounds to output when exiting fullscreen to avoid the case
         // where the window is still full size and the borders are now hidden.
@@ -224,11 +234,11 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
 void toplevel_set_activated(Toplevel* toplevel, bool active)
 {
     if (active) {
-        log_info("Activating toplevel:  {}", surface_to_string(toplevel));
+        log_info("Activating toplevel:  {}", to_string(toplevel));
     } else {
-        log_info("Dectivating toplevel: {}", surface_to_string(toplevel));
+        log_info("Dectivating toplevel: {}", to_string(toplevel));
     }
-    wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel(), active);
+    wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, active);
     toplevel_update_border(toplevel);
 }
 
@@ -242,7 +252,7 @@ void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for
             if (&toplevel->scene_tree->node != node) {
                 // TODO: Root cause this issue in wlroots
                 log_error("BUG - Unexpected wlr_scene_node referencing {} (expected {}, got {}), unlinking!",
-                    toplevel_to_string(toplevel),
+                    to_string(toplevel),
                     (void*)&toplevel->scene_tree->node,
                     (void*)node);
                 node->data = nullptr;
@@ -289,11 +299,11 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
     set_interaction_mode(server, InteractionMode::focus_cycle);
 
-    surface_unfocus(get_focused_surface(server), true);
+    Surface::unfocus(get_focused_surface(server), true);
 
     Toplevel* current = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
-        bool new_current = !current && (!cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y));
+        bool new_current = !current && (!cursor || wlr_box_contains_point(ptr(toplevel->get_bounds()), cursor->x, cursor->y));
         focus_cycle_toplevel_set_enabled(toplevel, new_current);
         if (new_current) current = toplevel;
         return true;
@@ -319,7 +329,7 @@ void focus_cycle_end(Server* server)
     };
     walk_toplevels_front_to_back(server, FUNC_REF(fn));
 
-    surface_focus(focused);
+    Surface::focus(focused);
 }
 
 void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
@@ -333,7 +343,7 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
     auto iter_fn = backwards ? walk_toplevels_back_to_front : walk_toplevels_front_to_back;
 
     auto pick = [&](Toplevel* toplevel) -> bool {
-        bool in_cycle = !cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y);
+        bool in_cycle = !cursor || wlr_box_contains_point(ptr(toplevel->get_bounds()), cursor->x, cursor->y);
         if (!in_cycle) return true;
 
         // Is this is the first window in the cycle, mark incase we need to
@@ -367,33 +377,29 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
 
 // -----------------------------------------------------------------------------
 
-void surface_focus(Surface* surface)
+void Surface::focus()
 {
-    if (!surface) return;
-
-    Server* server = surface->server;
     wlr_seat* seat = server->seat;
-    wlr_surface* prev_wlr_surface = seat->keyboard_state.focused_surface;
-    struct wlr_surface* wlr_surface = surface->wlr_surface;
+    struct wlr_surface* prev_wlr_surface = seat->keyboard_state.focused_surface;
 
-    if (prev_wlr_surface == wlr_surface) return;
+    if (prev_wlr_surface == wlr_surface()) return;
 
     if (Toplevel* prev_toplevel = Toplevel::from(prev_wlr_surface)) {
         toplevel_set_activated(prev_toplevel, false);
     }
 
-    log_info("Focusing surface:   {}", surface_to_string(surface));
+    log_info("Focusing surface:   {}", to_string());
 
-    Toplevel* toplevel = Toplevel::from(surface);
+    Toplevel* toplevel = Toplevel::from(this);
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     if (toplevel) {
-        wlr_scene_node_raise_to_top(&surface->scene_tree->node);
-        toplevel_set_activated(Toplevel::from(surface), true);
+        wlr_scene_node_raise_to_top(&scene_tree->node);
+        toplevel_set_activated(Toplevel::from(this), true);
     }
 
     if (keyboard) {
-        wlr_seat_keyboard_notify_enter(seat, wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+        wlr_seat_keyboard_notify_enter(seat, wlr_surface(), keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
     }
 
     // TODO: Tidy up and consolidate API for handling (re)focus
@@ -401,26 +407,25 @@ void surface_focus(Surface* surface)
     update_cursor_state(server);
 }
 
-void surface_unfocus(Surface* surface, bool force)
+void Surface::unfocus(bool force)
 {
-    if (!surface) return;
-    if (get_focused_surface(surface->server) != surface)
+    if (get_focused_surface(server) != this)
         return;
 
-    log_info("Unfocusing surface: {}", surface_to_string(surface));
+    log_info("Unfocusing surface: {}", to_string());
 
-    if (Toplevel* toplevel = Toplevel::from(surface)) {
+    if (Toplevel* toplevel = Toplevel::from(this)) {
         toplevel_set_activated(toplevel, false);
     }
 
     if (force) {
-        wlr_seat_keyboard_clear_focus(surface->server->seat);
+        wlr_seat_keyboard_clear_focus(server->seat);
     } else {
-        wlr_seat_keyboard_notify_clear_focus(surface->server->seat);
+        wlr_seat_keyboard_notify_clear_focus(server->seat);
     }
 
-    process_cursor_motion(surface->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
-    update_cursor_state(surface->server);
+    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    update_cursor_state(server);
 }
 
 Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
@@ -454,14 +459,18 @@ Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_su
     return surface;
 }
 
-void surface_cleanup(Surface* surface)
+void Surface::unlink()
 {
-    if (surface->cursor.surface) {
+    if (cursor.surface) {
         // Unlink any cursor surface that might still be referencing this surface
-        surface->cursor.surface->requestee_surface = nullptr;
+        cursor.surface->requestee_surface = nullptr;
     }
 
-    surface->wlr_surface->data = nullptr;
+    if (struct wlr_surface* surface = wlr_surface()) {
+        surface->data = nullptr;
+    }
+
+    unlinked = true;
 }
 
 // -----------------------------------------------------------------------------
@@ -470,16 +479,16 @@ void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel mapped:    {}", toplevel_to_string(toplevel));
+    log_debug("Toplevel mapped:    {}", to_string(toplevel));
 
-    surface_focus(toplevel);
+    Surface::focus(toplevel);
 }
 
 void toplevel_unmap(wl_listener* listener, void*)
 {
     Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel unmapped:  {}", toplevel_to_string(unmapped_toplevel));
+    log_debug("Toplevel unmapped:  {}", to_string(unmapped_toplevel));
 
     // Reset interaction mode if grabbed toplevel was unmapped
     if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
@@ -489,11 +498,11 @@ void toplevel_unmap(wl_listener* listener, void*)
     // TODO: Handle toplevel unmap during zone operation
 
     if (get_focused_surface(unmapped_toplevel->server) == unmapped_toplevel) {
-        surface_unfocus(unmapped_toplevel, true);
+        Surface::unfocus(unmapped_toplevel, true);
 
         auto fn = [&](Toplevel* toplevel) {
             if (toplevel != unmapped_toplevel) {
-                surface_focus(toplevel);
+                Surface::focus(toplevel);
                 return false;
             }
             return true;
@@ -506,30 +515,30 @@ void toplevel_commit(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    if (toplevel->xdg_toplevel()->base->initial_commit) {
+    if (toplevel->xdg_toplevel->base->initial_commit) {
 
-        log_info("Toplevel committed: {}", toplevel_to_string(toplevel));
+        log_info("Toplevel committed: {}", to_string(toplevel));
 
         for (const WindowRule& rule : window_rules) {
-            if (rule.app_id && (!toplevel->xdg_toplevel()->app_id || !std::string_view(toplevel->xdg_toplevel()->app_id).starts_with(rule.app_id))) continue;
-            if (rule.title && (!toplevel->xdg_toplevel()->title || !std::string_view(toplevel->xdg_toplevel()->title).starts_with(rule.title))) continue;
+            if (rule.app_id && (!toplevel->xdg_toplevel->app_id || !std::string_view(toplevel->xdg_toplevel->app_id).starts_with(rule.app_id))) continue;
+            if (rule.title && (!toplevel->xdg_toplevel->title || !std::string_view(toplevel->xdg_toplevel->title).starts_with(rule.title))) continue;
 
             log_warn("  Applying quirks to window");
             toplevel->quirks = rule.quirks;
         }
 
         decoration_set_mode(toplevel);
-        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), 0, 0);
+        wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
     } else {
-        if (toplevel->xdg_toplevel()->current.width == 0) {
+        if (toplevel->xdg_toplevel->current.width == 0) {
             // Toplevel initial commit response
 
-            wlr_box bounds = surface_get_bounds(toplevel);
+            wlr_box bounds = toplevel->get_bounds();
 
-            if (toplevel->xdg_toplevel()->parent) {
+            if (toplevel->xdg_toplevel->parent) {
                 // Child, position at center of parent.
                 // TODO: Use xdg_positioner requests to position child windwos
-                wlr_box parent_bounds = surface_get_bounds(Surface::from(toplevel->xdg_toplevel()->parent->base->surface));
+                wlr_box parent_bounds = Surface::from(toplevel->xdg_toplevel->parent->base->surface)->get_bounds();
                 bounds.x = parent_bounds.x + (parent_bounds.width - bounds.width)   / 2;
                 bounds.y = parent_bounds.y + (parent_bounds.height - bounds.height) / 2;
             } else {
@@ -558,20 +567,21 @@ void toplevel_destroy(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     log_debug("Toplevel destroyed: {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
-        toplevel_to_string(toplevel),
-        (void*)toplevel->xdg_toplevel()->base->surface,
-        (void*)toplevel->xdg_toplevel(),
+        to_string(toplevel),
+        (void*)toplevel->xdg_toplevel->base->surface,
+        (void*)toplevel->xdg_toplevel,
         (void*)&toplevel->scene_tree->node);
 
     wlr_scene_node_destroy(&toplevel->popup_tree->node);
-    surface_cleanup(toplevel);
+
+    toplevel->unlink();
 
     delete toplevel;
 }
 
 bool toplevel_is_interactable(Toplevel* toplevel)
 {
-    if (toplevel->xdg_toplevel()->current.fullscreen) return false;
+    if (toplevel->xdg_toplevel->current.fullscreen) return false;
 
     return true;
 }
@@ -584,7 +594,7 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
 
     uint32_t edges = 0;
     if (mode == InteractionMode::resize) {
-        wlr_box bounds = surface_get_bounds(toplevel);
+        wlr_box bounds = toplevel->get_bounds();
         int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
         int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
 
@@ -603,10 +613,10 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
 
     if (mode == InteractionMode::move) {
         server->movesize.grab = Point{server->cursor->x, server->cursor->y};
-        server->movesize.grab_bounds = surface_get_bounds(toplevel);
+        server->movesize.grab_bounds = toplevel->get_bounds();
     } else {
         server->movesize.grab = Point{server->cursor->x, server->cursor->y};
-        server->movesize.grab_bounds = surface_get_bounds(toplevel);
+        server->movesize.grab_bounds = toplevel->get_bounds();
         server->movesize.resize_edges = edges;
     }
 }
@@ -615,9 +625,9 @@ void toplevel_request_minimize(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    if (toplevel->xdg_toplevel()->base->initialized) {
+    if (toplevel->xdg_toplevel->base->initialized) {
         // We don't support minimize, send empty configure
-        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel()->base);
+        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
     }
 }
 
@@ -625,12 +635,12 @@ void toplevel_request_maximize(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    if (toplevel->xdg_toplevel()->base->initialized) {
-        if (toplevel->xdg_toplevel()->requested.maximized) {
-            toplevel->prev_bounds = surface_get_bounds(toplevel);
+    if (toplevel->xdg_toplevel->base->initialized) {
+        if (toplevel->xdg_toplevel->requested.maximized) {
+            toplevel->prev_bounds = toplevel->get_bounds();
             if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
                 toplevel_set_bounds(toplevel, zone_apply_external_padding(output->workarea));
-                wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), true);
+                wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel, true);
             }
         } else {
             if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
@@ -645,8 +655,8 @@ void toplevel_request_fullscreen(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    if (toplevel->xdg_toplevel()->base->initialized) {
-        toplevel_set_fullscreen(toplevel, toplevel->xdg_toplevel()->requested.fullscreen);
+    if (toplevel->xdg_toplevel->base->initialized) {
+        toplevel_set_fullscreen(toplevel, toplevel->xdg_toplevel->requested.fullscreen);
     }
 }
 
@@ -658,14 +668,14 @@ void server_new_toplevel(wl_listener* listener, void* data)
     Toplevel* toplevel = new Toplevel{};
     toplevel->role = SurfaceRole::toplevel;
     toplevel->server = server;
-    toplevel->wlr_surface = xdg_toplevel->base->surface;
-    toplevel->wlr_surface->data = toplevel;
+    toplevel->xdg_toplevel = xdg_toplevel;
+    toplevel->xdg_toplevel->base->surface->data = toplevel;
 
     toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
 
     log_debug("Toplevel created:   {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})\n{}  for {}",
-        toplevel_to_string(toplevel),
+        to_string(toplevel),
         (void*)xdg_toplevel->base->surface,
         (void*)xdg_toplevel,
         (void*)&toplevel->scene_tree->node,
@@ -694,7 +704,7 @@ void decoration_set_mode(Toplevel* toplevel)
 {
     if (!toplevel->decoration.xdg_decoration) return;
 
-    if (toplevel->xdg_toplevel()->base->initialized) {
+    if (toplevel->xdg_toplevel->base->initialized) {
         wlr_xdg_toplevel_decoration_v1_set_mode(toplevel->decoration.xdg_decoration, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
 }
@@ -738,7 +748,7 @@ void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
     wlr_box full_area = output_get_bounds(output);
 
     for (LayerSurface* layer_surface : output->layers[layer]) {
-        if (!layer_surface->wlr_layer_surface()->initialized) continue;
+        if (!layer_surface->wlr_layer_surface->initialized) continue;
 
         wlr_scene_layer_surface_v1_configure(layer_surface->scene_layer_surface, &full_area, &output->workarea);
         wlr_scene_node_set_position(&layer_surface->popup_tree->node, layer_surface->scene_tree->node.x, layer_surface->scene_tree->node.y);
@@ -780,7 +790,7 @@ void layer_surface_destroy(wl_listener* listener, void*)
     }
 
     wlr_scene_node_destroy(&layer_surface->popup_tree->node);
-    surface_cleanup(layer_surface);
+    layer_surface->unlink();
 
     output_reconfigure(output);
 
@@ -804,8 +814,8 @@ void server_new_layer_surface(wl_listener* listener, void* data)
     LayerSurface* layer_surface = new LayerSurface{};
     layer_surface->role = SurfaceRole::layer_surface;
     layer_surface->server = server;
-    layer_surface->wlr_surface = wlr_layer_surface->surface;
-    layer_surface->wlr_surface->data = layer_surface;
+    layer_surface->wlr_layer_surface = wlr_layer_surface;
+    layer_surface->wlr_layer_surface->surface->data = layer_surface;
 
     layer_surface->listeners.listen(&wlr_layer_surface->surface->events.commit,  layer_surface, layer_surface_commit);
     layer_surface->listeners.listen(&wlr_layer_surface->surface->events.unmap,   layer_surface, layer_surface_unmap);
@@ -819,8 +829,8 @@ void server_new_layer_surface(wl_listener* listener, void* data)
 
     output->layers[wlr_layer_surface->pending.layer].emplace_back(layer_surface);
 
-    wlr_surface_send_enter(layer_surface->wlr_surface, output->wlr_output);
-    surface_focus(layer_surface);
+    wlr_surface_send_enter(layer_surface->wlr_surface(), output->wlr_output);
+    Surface::focus(layer_surface);
 }
 
 // -----------------------------------------------------------------------------
@@ -829,7 +839,7 @@ void popup_commit(wl_listener* listener, void*)
 {
     Popup* popup = listener_userdata<Popup*>(listener);
 
-    wlr_xdg_popup* xdg_popup = popup->xdg_popup();
+    wlr_xdg_popup* xdg_popup = popup->xdg_popup;
 
     if (!xdg_popup->base->initial_commit) {
         return;
@@ -847,10 +857,10 @@ void popup_commit(wl_listener* listener, void*)
         {
             Surface* cur = parent;
             while (cur->role == SurfaceRole::popup) {
-                cur = Surface::from(Popup::from(cur)->xdg_popup()->parent);
+                cur = Surface::from(Popup::from(cur)->xdg_popup->parent);
             }
 
-            wlr_box coord_system = surface_get_coord_system(cur);
+            wlr_box coord_system = cur->get_coord_system();
             output_bounds.x -= coord_system.x;
             output_bounds.y -= coord_system.y;
         }
@@ -865,7 +875,7 @@ void popup_destroy(wl_listener* listener, void*)
 {
     Popup* popup = listener_userdata<Popup*>(listener);
 
-    surface_cleanup(popup);
+    popup->unlink();
 
     delete popup;
 }
@@ -878,8 +888,8 @@ void server_new_popup(wl_listener* listener, void* data)
     Popup* popup = new Popup{};
     popup->role = SurfaceRole::popup;
     popup->server = server;
-    popup->wlr_surface = xdg_popup->base->surface;
-    popup->wlr_surface->data = popup;
+    popup->xdg_popup = xdg_popup;
+    popup->xdg_popup->base->surface->data = popup;
 
     popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup, popup_commit);
     popup->listeners.listen(&               xdg_popup->events.destroy, popup, popup_destroy);

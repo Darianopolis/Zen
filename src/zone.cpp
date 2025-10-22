@@ -34,7 +34,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
                 double sx, sy;
                 wlr_surface* surface = nullptr;
                 if (Toplevel* toplevel = Toplevel::from(get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy))) {
-                    surface_focus(toplevel);
+                    Surface::focus(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
                         wlr_scene_rect_set_color(server->zone.selector, zone_color_inital.values);
