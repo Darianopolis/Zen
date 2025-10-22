@@ -23,13 +23,13 @@ static constexpr Color zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
 
 static constexpr uint32_t zone_horizontal_zones = 6;
 static constexpr uint32_t zone_vertical_zones   = 2;
-static constexpr Point    zone_selection_leeway = { 200, 200 };
+static constexpr int      zone_selection_leeway[] = { 200, 200 };
 static constexpr struct {
     int left   = 7 + border_width;
     int top    = 7 + border_width;
     int right  = 7 + border_width;
     int bottom = 4 + border_width;
-} zone_external_padding_ltrb;
+} zone_external_padding;
 static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 
 static constexpr const char* keyboard_layout       = "gb";
@@ -171,8 +171,8 @@ struct Server
     struct {
         wlr_box selection;
         wlr_scene_rect* selector;
-        Box initial_zone = {};
-        Box final_zone   = {};
+        wlr_box initial_zone = {};
+        wlr_box final_zone   = {};
         bool moving    = false;
         bool selecting = false;
     } zone;

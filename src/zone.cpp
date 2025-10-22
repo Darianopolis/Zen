@@ -3,7 +3,7 @@
 
 wlr_box zone_apply_external_padding(wlr_box box)
 {
-    auto pad = zone_external_padding_ltrb;
+    auto pad = zone_external_padding;
 
     if (box.width > pad.left + pad.right) {
         box.x += pad.left;
@@ -52,8 +52,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
         } else if (server->zone.moving) {
             if (server->zone.selecting) {
                 if (Toplevel* focused_toplevel = Toplevel::from(get_focused_surface(server))) {
-                    wlr_box box = box_round_to_wlr_box(server->zone.final_zone);
-                    toplevel_set_bounds(focused_toplevel, box);
+                    toplevel_set_bounds(focused_toplevel, server->zone.final_zone);
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
@@ -75,6 +74,23 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     return false;
 }
 
+void get_zone_axis(int start, int total_length, int start_pad, int inner_pad, int end_pad, int num_zones, int i, int* offset, int* size)
+{
+    int usable_length = total_length - start_pad - end_pad - (inner_pad * (num_zones - 1));
+    double ideal_zone_size = double(usable_length) / num_zones;
+    *offset  = std::round(ideal_zone_size *  i     );
+    *size    = std::round(ideal_zone_size * (i + 1)) - *offset;
+    *offset += start + start_pad + inner_pad * i;
+}
+
+wlr_box get_zone_box(wlr_box workarea, int zone_x, int zone_y)
+{
+    wlr_box zone;
+    get_zone_axis(workarea.x, workarea.width,  zone_external_padding.left, zone_internal_padding, zone_external_padding.right,  zone_horizontal_zones, zone_x, &zone.x, &zone.width);
+    get_zone_axis(workarea.y, workarea.height, zone_external_padding.top,  zone_internal_padding, zone_external_padding.bottom, zone_vertical_zones,   zone_y, &zone.y, &zone.height);
+    return zone;
+}
+
 void zone_process_cursor_motion(Server* server)
 {
     Output* output = get_output_at(server, {server->cursor->x, server->cursor->y});
@@ -82,40 +98,20 @@ void zone_process_cursor_motion(Server* server)
 
     Point point { server->cursor->x, server->cursor->y };
 
-    Box pointer_zone = {};
+    wlr_box pointer_zone = {};
     bool any_zones = false;
 
-    Point extent { double(workarea.width) / zone_horizontal_zones, double(workarea.height) / zone_vertical_zones };
     for (uint32_t zone_x = 0; zone_x < zone_horizontal_zones; ++zone_x) {
         for (uint32_t zone_y = 0; zone_y < zone_vertical_zones; ++zone_y) {
-            Box rect {
-                .x = workarea.x + extent.x * zone_x,
-                .y = workarea.y + extent.y * zone_y,
-                .width = extent.x,
-                .height = extent.y,
+            wlr_box rect = get_zone_box(workarea, zone_x, zone_y);
+            wlr_box check_rect {
+                .x      = rect.x      - zone_selection_leeway[0],
+                .y      = rect.y      - zone_selection_leeway[1],
+                .width  = rect.width  + zone_selection_leeway[0] * 2,
+                .height = rect.height + zone_selection_leeway[1] * 2,
             };
 
-            Box check_rect {
-                .x      = rect.x      - zone_selection_leeway.x,
-                .y      = rect.y      - zone_selection_leeway.y,
-                .width  = rect.width  + zone_selection_leeway.x * 2,
-                .height = rect.height + zone_selection_leeway.y * 2,
-            };
-
-            if (box_contains_point(check_rect, point)) {
-
-                auto outer = zone_external_padding_ltrb;
-
-                // Compute padding
-                constexpr auto pad = [](int external_padding, bool c) { return c ? external_padding : zone_internal_padding / 2; };
-                Point tl_inset{ pad(outer.left,  zone_x == 0),                           pad(outer.top,    zone_y == 0)                         };
-                Point br_inset{ pad(outer.right, zone_x == (zone_horizontal_zones - 1)), pad(outer.bottom, zone_y == (zone_vertical_zones - 1)) };
-                rect.x += tl_inset.x;
-                rect.y += tl_inset.y;
-                rect.width  -= tl_inset.x + br_inset.x;
-                rect.height -= tl_inset.y + br_inset.y;
-
-                // Expand selection zones
+            if (wlr_box_contains_point(&check_rect, point.x, point.y)) {
                 pointer_zone = any_zones ? box_outer(pointer_zone, rect) : rect;
                 any_zones = true;
             }
@@ -129,7 +125,7 @@ void zone_process_cursor_motion(Server* server)
             server->zone.final_zone = server->zone.initial_zone = pointer_zone;
         }
 
-        wlr_box b = box_round_to_wlr_box(server->zone.final_zone);
+        wlr_box b = server->zone.final_zone;
 
         wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
         wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);

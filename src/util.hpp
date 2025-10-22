@@ -42,10 +42,7 @@ struct Color
     float values[4];
 
     constexpr Color() = default;
-
-    constexpr Color(float r, float g, float b, float a)
-        : values { r * a, g * a, b * a, a }
-    {}
+    constexpr Color(float r, float g, float b, float a): values{ r * a, g * a, b * a, a } {}
 };
 
 // -----------------------------------------------------------------------------
@@ -63,53 +60,17 @@ double distance_between(Point a, Point b)
     return std::sqrt(dx * dx + dy * dy);
 }
 
-struct Box
-{
-    double x, y, width, height;
-};
-
-constexpr
-wlr_box box_round_to_wlr_box(Box in)
-{
-    wlr_box out;
-    out.x = std::floor(in.x);
-    out.y = std::floor(in.y);
-    out.width = std::ceil(in.x + in.width - out.x);
-    out.height = std::ceil(in.y + in.height - out.y);
-    return out;
-};
-
-constexpr
-Box box_outer(Box a, Box b)
-{
-    double left   = std::min(a.x,            b.x);
-    double top    = std::min(a.y,            b.y);
-    double right  = std::max(a.x + a.width,  b.x + b.width);
-    double bottom = std::max(a.y + a.height, b.y + b.height);
-    return {
-        .x = left,
-        .y = top,
-        .width = right - left,
-        .height = bottom - top,
-    };
-};
-
-constexpr
-bool box_contains_point(Box box, Point p)
-{
-    double l = box.x;
-    double t = box.y;
-    double r = box.x + box.width;
-    double b = box.y + box.height;
-    return p.x >= l && p.x < r && p.y >= t && p.y < b;
-};
-
 // -----------------------------------------------------------------------------
 
-constexpr int box_left(wlr_box box)   { return box.x; }
-constexpr int box_top(wlr_box box)    { return box.y; }
-constexpr int box_right(wlr_box box)  { return box.x + box.width;  }
-constexpr int box_bottom(wlr_box box) { return box.y + box.height; }
+constexpr
+wlr_box box_outer(wlr_box a, wlr_box b)
+{
+    int left   = std::min(a.x,            b.x);
+    int top    = std::min(a.y,            b.y);
+    int right  = std::max(a.x + a.width,  b.x + b.width);
+    int bottom = std::max(a.y + a.height, b.y + b.height);
+    return { left, top, right - left, bottom - top };
+};
 
 constexpr
 wlr_box constrain_box(wlr_box box, wlr_box bounds)
@@ -118,7 +79,7 @@ wlr_box constrain_box(wlr_box box, wlr_box bounds)
         box.x = bounds.x;
         box.width = bounds.width;
     } else {
-        if (int overlap_x = box_right(box) - box_right(bounds);  overlap_x > 0) box.x -= overlap_x;
+        if (int overlap_x = (box.x + box.width) - (bounds.x + bounds.width);  overlap_x > 0) box.x -= overlap_x;
         box.x = std::max(box.x, bounds.x);
     }
 
@@ -126,7 +87,7 @@ wlr_box constrain_box(wlr_box box, wlr_box bounds)
         box.y = bounds.y;
         box.height = bounds.height;
     } else {
-        if (int overlap_y = box_bottom(box) - box_bottom(bounds); overlap_y > 0) box.y -= overlap_y;
+        if (int overlap_y = (box.y + box.height) - (bounds.y + bounds.height); overlap_y > 0) box.y -= overlap_y;
         box.y = std::max(box.y, bounds.y);
     }
 

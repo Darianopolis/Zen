@@ -187,11 +187,6 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
     // TODO: Tidy up this API and make it clear what is relative to what.
     wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
 
-    // Match popup tree location
-    int x, y;
-    wlr_scene_node_coords(&toplevel->scene_tree->node, &x, &y);
-    wlr_scene_node_set_position(&toplevel->popup_tree->node, x, y);
-
     toplevel_resize(toplevel, box.width, box.height);
 }
 
@@ -573,7 +568,6 @@ void toplevel_destroy(wl_listener* listener, void*)
         (void*)toplevel->xdg_toplevel(),
         (void*)&toplevel->scene_tree->node);
 
-    wlr_scene_node_destroy(&toplevel->popup_tree->node);
     surface_cleanup(toplevel);
 
     delete toplevel;
@@ -681,14 +675,13 @@ void toplevel_new(wl_listener* listener, void* data)
         (void*)&toplevel->scene_tree->node,
         log_indent, client_to_string(xdg_toplevel->base->client->client));
 
-    toplevel->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
+    toplevel->popup_tree = toplevel->scene_tree;
 
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, toplevel_map);
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, toplevel_unmap);
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.commit, toplevel, toplevel_commit);
 
-    toplevel->listeners.listen(&xdg_toplevel->events.destroy, toplevel, toplevel_destroy);
-
+    toplevel->listeners.listen(&xdg_toplevel->events.destroy,            toplevel, toplevel_destroy);
     toplevel->listeners.listen(&xdg_toplevel->events.request_maximize,   toplevel, toplevel_request_maximize);
     toplevel->listeners.listen(&xdg_toplevel->events.request_minimize,   toplevel, toplevel_request_minimize);
     toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, toplevel_request_fullscreen);
