@@ -33,7 +33,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
             if (is_cursor_visible(server)) {
                 double sx, sy;
                 wlr_surface* surface = nullptr;
-                if (Toplevel* toplevel = Toplevel::from(get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy))) {
+                if (Surface* toplevel = get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy)) {
                     surface_focus(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
@@ -51,7 +51,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
             return true;
         } else if (server->zone.moving) {
             if (server->zone.selecting) {
-                if (Toplevel* focused_toplevel = Toplevel::from(get_focused_surface(server))) {
+                if (Surface* focused_toplevel = get_focused_surface(server)) {
                     wlr_box box = box_round_to_wlr_box(server->zone.final_zone);
                     toplevel_set_bounds(focused_toplevel, box);
                 }

@@ -1,25 +1,34 @@
 #include "core.hpp"
 
-std::string toplevel_to_string(Toplevel* toplevel)
+static
+std::string xdg_toplevel_to_string(XdgToplevel* toplevel)
 {
-    return toplevel
-        ? std::format("Toplevel<{}>({}, {})",
+    return std::format("XdgToplevel<{}>({}, {})",
             (void*)toplevel,
             toplevel->xdg_toplevel()->app_id ? toplevel->xdg_toplevel()->app_id : "?",
-            toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?")
-        : "nullptr";
+            toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?");
+}
+
+static
+std::string xsurface_to_string(XWaylandSurface* xwayland_surface)
+{
+    return std::format("XWaylandSurface<{}>({})",
+            (void*)xwayland_surface,
+            xwayland_surface->xwayland_surface->title ? xwayland_surface->xwayland_surface->title : "?");
 }
 
 std::string surface_to_string(Surface* surface)
 {
     if (!surface) return "nullptr";
-    switch (surface->role) {
-        case SurfaceRole::toplevel:      return toplevel_to_string(Toplevel::from(surface));
-        case SurfaceRole::popup:         return std::format("Popup<{}>", (void*)surface);
-        case SurfaceRole::layer_surface: return std::format("LayerSurface<{}>", (void*)surface);
-        default:
-    }
 
+    if (XdgToplevel* xdg_toplevel = XdgToplevel::get_impl(surface))
+        return xdg_toplevel_to_string(xdg_toplevel);
+    if (XWaylandSurface* xwayland_surface = XWaylandSurface::get_impl(surface))
+        return xsurface_to_string(xwayland_surface);
+    if (XdgPopup* xdg_popup = XdgPopup::get_impl(surface))
+        return std::format("XdgPopup<{}>", (void*)xdg_popup);
+    if (LayerSurface* layer_surface = LayerSurface::get_impl(surface))
+        return std::format("LayerSurface<{}>", (void*)layer_surface);
 
     return std::format("InvalidSurface<{}>(role = {})", (void*)surface, std::to_underlying(surface->role));
 }

@@ -56,7 +56,7 @@ static constexpr OutputRule output_rules[] = {
 
 // -----------------------------------------------------------------------------
 
-struct WindowQuirks
+struct SurfaceQuirks
 {
     bool force_pointer_constraint = false;
 };
@@ -64,7 +64,7 @@ struct WindowRule
 {
     const char* app_id;
     const char* title;
-    WindowQuirks quirks;
+    SurfaceQuirks quirks;
 };
 static const WindowRule window_rules[] = {
     { .app_id = "Minecraft",  .quirks{.force_pointer_constraint = true} },
@@ -102,7 +102,7 @@ enum class InteractionMode
     focus_cycle,
 };
 
-struct Toplevel;
+struct Surface;
 struct LayerSurface;
 struct CursorSurface;
 struct Output;
@@ -155,8 +155,8 @@ struct Server
     InteractionMode interaction_mode;
 
     struct {
-        // TODO: This needs to be cleaned up on Toplevel destroy to avoid dangling
-        Toplevel* grabbed_toplevel;
+        // TODO: This needs to be cleaned up on Surface destroy to avoid dangling
+        Surface* grabbed_toplevel;
         Point grab;
         wlr_box grab_bounds;
         uint32_t resize_edges;
@@ -231,6 +231,8 @@ struct Surface
 {
     SurfaceRole role = SurfaceRole::invalid;
 
+    ListenerSet listeners;
+
     Server* server;
     wlr_scene_tree* scene_tree;
     wlr_scene_tree* popup_tree;
@@ -243,34 +245,35 @@ struct Surface
         int32_t hotspot_y;
     } cursor;
 
-    static Surface* from(void* data) {
+    wlr_scene_rect* borders[4];
+
+    SurfaceQuirks quirks;
+
+    wlr_box prev_bounds;
+
+    static Surface* from_data(void* data) {
         Surface* surface = static_cast<Surface*>(data);
         return (surface && surface->role != SurfaceRole::invalid) ? surface : nullptr;
     }
-    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from(surface->data) : nullptr; }
-    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from(node->data)    : nullptr; }
+    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from_data(surface->data) : nullptr; }
+    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from_data(node->data)    : nullptr; }
+
+    // We only use a virtual destructor to enable dynamic_cast to the various implementation types
+    // without needing to maintain a impl type field
+    virtual ~Surface() = default;
 };
 
-struct Toplevel : Surface
+struct XdgToplevel : Surface
 {
-    static Toplevel* from(Surface* surface)
-    {
-        return (surface && surface->role == SurfaceRole::toplevel) ? static_cast<Toplevel*>(surface) : nullptr;
-    }
-    static Toplevel* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static Toplevel* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
-
-    ListenerSet listeners;
+    static XdgToplevel* get_impl(Surface* surface) { return dynamic_cast<XdgToplevel*>(surface); }
+    static void from();
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
 
-    wlr_scene_rect* border[4];
     struct {
         wlr_xdg_toplevel_decoration_v1* xdg_decoration;
         ListenerSet listeners;
     } decoration;
-
-    wlr_box prev_bounds;
 
     struct {
         bool enable_throttle_resize = true;
@@ -282,34 +285,28 @@ struct Toplevel : Surface
         uint32_t last_resize_serial = 0;
         uint32_t last_commited_serial = 0;
     } resize;
-
-    WindowQuirks quirks;
 };
 
-struct Popup : Surface
+struct XWaylandSurface : Surface
 {
-    static Popup* from(Surface* surface)
-    {
-        return (surface && surface->role == SurfaceRole::popup) ? static_cast<Popup*>(surface) : nullptr;
-    }
-    static Popup* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static Popup* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
+    static XWaylandSurface* get_impl(Surface* surface) { return dynamic_cast<XWaylandSurface*>(surface); }
+    static void from();
 
-    ListenerSet listeners;
+    wlr_xwayland_surface* xwayland_surface;
+};
+
+struct XdgPopup : Surface
+{
+    static XdgPopup* get_impl(Surface* surface) { return dynamic_cast<XdgPopup*>(surface); }
+    static void from();
 
     wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
 };
 
 struct LayerSurface : Surface
 {
-    static LayerSurface* from(Surface* surface)
-    {
-        return (surface && surface->role == SurfaceRole::layer_surface) ? static_cast<LayerSurface*>(surface) : nullptr;
-    }
-    static LayerSurface* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static LayerSurface* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
-
-    ListenerSet listeners;
+    static LayerSurface* get_impl(Surface* surface) { return dynamic_cast<LayerSurface*>(surface); }
+    static void from();
 
     wlr_layer_surface_v1* wlr_layer_surface() const { return wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface); }
 
@@ -318,13 +315,7 @@ struct LayerSurface : Surface
 
 struct CursorSurface : Surface
 {
-    // This listener inherits from Surface with an `invalid` role so that
-    // Surface::from(struct wlr_surface*) calls are still always safe to make
-
-    ListenerSet listeners;
-
-    // TODO: Store Surface* and have Surface store CursorListener* to ensure lifetime safety
-    struct wlr_surface* requestee_surface;
+    Surface* requestee_surface;
 };
 
 // ---- Policy -----------------------------------------------------------------
@@ -409,11 +400,11 @@ Output* get_output_for_surface(     Surface*);
 wlr_box output_get_bounds( Output*);
 void    output_reconfigure(Output*);
 
-void output_frame(               wl_listener*, void*);
-void output_request_state(       wl_listener*, void*);
-void output_destroy(             wl_listener*, void*);
-void server_new_output(          wl_listener*, void*);
-void server_output_layout_change(wl_listener*, void*);
+void output_frame(        wl_listener*, void*);
+void output_request_state(wl_listener*, void*);
+void output_destroy(      wl_listener*, void*);
+void output_new(          wl_listener*, void*);
+void output_layout_change(wl_listener*, void*);
 
 // ---- Surface ----------------------------------------------------------------
 
@@ -422,6 +413,7 @@ Surface* get_focused_surface(Server*);
 
 void surface_focus(  Surface*);
 void surface_unfocus(Surface*, bool force);
+void surface_close(  Surface*);
 
 wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);
@@ -436,27 +428,26 @@ void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
-void toplevel_resize(          Toplevel*, int width, int height);
-void toplevel_set_bounds(      Toplevel*, wlr_box);
-void toplevel_set_activated(   Toplevel*, bool active);
-void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
-void toplevel_update_border(   Toplevel*);
-bool toplevel_is_interactable( Toplevel*);
+void toplevel_set_bounds(       Surface*, wlr_box);
+void toplevel_set_activated(    Surface*, bool active);
+bool toplevel_is_fullscreen(    Surface*);
+void toplevel_set_fullscreen(   Surface*, bool fullscreen);
+void toplevel_update_border(    Surface*);
+bool toplevel_is_interactable(  Surface*);
+void toplevel_begin_interactive(Surface*, InteractionMode);
 
-void toplevel_begin_interactive(Toplevel*, InteractionMode);
-
-void toplevel_map(               wl_listener*, void*);
-void toplevel_unmap(             wl_listener*, void*);
-void toplevel_commit(            wl_listener*, void*);
-void toplevel_destroy(           wl_listener*, void*);
-void toplevel_request_minimize(  wl_listener*, void*);
-void toplevel_request_maximize(  wl_listener*, void*);
-void toplevel_request_fullscreen(wl_listener*, void*);
-void server_new_toplevel(        wl_listener*, void*);
+void xdg_toplevel_map(               wl_listener*, void*);
+void xdg_toplevel_unmap(             wl_listener*, void*);
+void xdg_toplevel_commit(            wl_listener*, void*);
+void xdg_toplevel_destroy(           wl_listener*, void*);
+void xdg_toplevel_request_minimize(  wl_listener*, void*);
+void xdg_toplevel_request_maximize(  wl_listener*, void*);
+void xdg_toplevel_request_fullscreen(wl_listener*, void*);
+void xdg_toplevel_new(               wl_listener*, void*);
 
 // ---- Surface.Toplevel.Decoration --------------------------------------------
 
-void decoration_set_mode(Toplevel*);
+void decoration_set_mode(XdgToplevel*);
 
 void decoration_new(         wl_listener*, void*);
 void decoration_request_mode(wl_listener*, void*);
@@ -464,13 +455,12 @@ void decoration_destroy(     wl_listener*, void*);
 
 // ---- Surface.Popup ----------------------------------------------------------
 
-void popup_commit(    wl_listener*, void*);
-void popup_destroy(   wl_listener*, void*);
-void server_new_popup(wl_listener*, void*);
+void xdg_popup_commit( wl_listener*, void*);
+void xdg_popup_destroy(wl_listener*, void*);
+void xdg_popup_new(    wl_listener*, void*);
 
 // ---- Debug ------------------------------------------------------------------
 
-std::string toplevel_to_string(Toplevel* toplevel);
 std::string surface_to_string(Surface* surface);
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
 std::string client_to_string(wl_client* client);

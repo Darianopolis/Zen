@@ -76,8 +76,8 @@ void seat_keyboard_focus_change(wl_listener*, void* data)
 {
     wlr_seat_keyboard_focus_change_event* event = static_cast<wlr_seat_keyboard_focus_change_event*>(data);
 
-    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) toplevel_update_border(toplevel);
-    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_border(toplevel);
+    if (Surface* toplevel = Surface::from(event->old_surface)) toplevel_update_border(toplevel);
+    if (Surface* toplevel = Surface::from(event->new_surface)) toplevel_update_border(toplevel);
 }
 
 void server_new_keyboard(Server* server, wlr_input_device* device)
@@ -193,7 +193,7 @@ void cursor_surface_destroy(wl_listener* listener, void*)
 
     log_info("Cursor destroyed: {}", cursor_surface_to_string(cursor_surface));
 
-    Surface* requestee_surface = Surface::from(cursor_surface->requestee_surface);
+    Surface* requestee_surface = cursor_surface->requestee_surface;
     if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
         requestee_surface->cursor.surface = nullptr;
         requestee_surface->cursor.surface_set = false;
@@ -268,7 +268,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
 
             cursor_surface = new CursorSurface {};
             cursor_surface->server = server;
-            cursor_surface->requestee_surface = requestee_surface->wlr_surface;
+            cursor_surface->requestee_surface = requestee_surface;
             cursor_surface->wlr_surface = event->surface;
             cursor_surface->listeners.listen(&event->surface->events.commit, cursor_surface, cursor_surface_commit);
             cursor_surface->listeners.listen(&event->surface->events.destroy, cursor_surface, cursor_surface_destroy);
@@ -382,7 +382,7 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
 
-    log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), toplevel_to_string(Toplevel::from(constraint->surface)));
+    log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), surface_to_string(Surface::from(constraint->surface)));
 
     PointerConstraint* pointer_constraint = new PointerConstraint{};
     pointer_constraint->server = server;
@@ -419,7 +419,7 @@ void set_interaction_mode(Server* server, InteractionMode mode)
 
 void process_cursor_move(Server* server)
 {
-    Toplevel* toplevel = server->movesize.grabbed_toplevel;
+    Surface* toplevel = server->movesize.grabbed_toplevel;
 
     wlr_box bounds = surface_get_bounds(toplevel);
     bounds.x = server->movesize.grab_bounds.x + int(server->cursor->x - server->movesize.grab.x);
@@ -504,9 +504,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         //     log_indent, surface_to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
 
         if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
-            Toplevel* pointer_tl = Toplevel::from(surface);
-            Toplevel* keyboard_tl = Toplevel::from(get_focused_surface(server));
-            if (pointer_tl && keyboard_tl && pointer_tl->xdg_toplevel()->base->client == keyboard_tl->xdg_toplevel()->base->client) {
+            if (surface == get_focused_surface(server)) {
                 // Only send relative pointer motion when pointer focus is keyboard focus
                 // (some applications will try to handle relative pointer input even when they're not focused)
                 wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
@@ -542,8 +540,8 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
                 region = &constraint->region;
                 type = constraint->type;
-            } else if (Toplevel* toplevel = Toplevel::from(focused_surface); toplevel && toplevel->quirks.force_pointer_constraint) {
-                region = &toplevel->wlr_surface->input_region;
+            } else if (focused_surface->quirks.force_pointer_constraint) {
+                region = &focused_surface->wlr_surface->input_region;
                 type = WLR_POINTER_CONSTRAINT_V1_CONFINED;
             }
 
@@ -726,7 +724,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
             case XKB_KEY_ISO_Left_Tab: {
                 bool do_cycle = true;
                 if (server->interaction_mode ==  InteractionMode::passthrough) {
-                    do_cycle = Toplevel::from(get_focused_surface(server));
+                    do_cycle = get_focused_surface(server);
                     focus_cycle_begin(server, nullptr);
                 }
                 if (do_cycle && server->interaction_mode == InteractionMode::focus_cycle) {
@@ -765,13 +763,11 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 surface_unfocus(get_focused_surface(server), false);
                 return true;
             case XKB_KEY_q:
-                if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    wlr_xdg_toplevel_send_close(focused->xdg_toplevel());
-                }
+                if (Surface* focused = get_focused_surface(server)) surface_close(focused);
                 return true;
             case XKB_KEY_f:
-                if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    toplevel_set_fullscreen(focused, !focused->xdg_toplevel()->current.fullscreen);
+                if (Surface* focused = get_focused_surface(server)) {
+                    toplevel_set_fullscreen(focused, toplevel_is_fullscreen(focused));
                 }
                 return true;
             case XKB_KEY_j:
@@ -831,7 +827,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
     if (focus_cycle_interrupted && surface_under_cursor != get_focused_surface(server)) {
         // If we interrupted a focus cycle by clicking a previously hidden toplevel,
         // don't transfer focus as it wouldn't have been visible to the user before the press
-        if (Toplevel::from(surface_under_cursor)) {
+        if (surface_under_cursor) {
             surface_unfocus(get_focused_surface(server), false);
         } else {
             surface_focus(surface_under_cursor);
@@ -864,14 +860,14 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     // Check for move/size interaction begin, or close-under-cursor
 
-    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && is_main_mod_down(server) && server->interaction_mode == InteractionMode::passthrough) {
+    if (surface_under_cursor && is_main_mod_down(server) && server->interaction_mode == InteractionMode::passthrough) {
         if (is_cursor_visible(server)) {
             if (event.button == BTN_LEFT && is_mod_down(server, WLR_MODIFIER_SHIFT)) {
-                toplevel_begin_interactive(toplevel, InteractionMode::move);
+                toplevel_begin_interactive(surface_under_cursor, InteractionMode::move);
             } else if (event.button == BTN_RIGHT) {
-                toplevel_begin_interactive(toplevel, InteractionMode::resize);
+                toplevel_begin_interactive(surface_under_cursor, InteractionMode::resize);
             } else if (event.button == BTN_MIDDLE) {
-                wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
+                surface_close(surface_under_cursor);
             }
         } else {
             log_warn("Compositor button pressed while cursor is hidden");
@@ -890,7 +886,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
                     log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
                     return true;
                 }
-                if (Toplevel* new_focus = Toplevel::from(get_focused_surface(server)); new_focus && new_focus->quirks.force_pointer_constraint) {
+                if (Surface* new_focus = get_focused_surface(server); new_focus && new_focus->quirks.force_pointer_constraint) {
                     log_warn("Button press event suppressed (reason: focused moved to window with pointer constraint quirk)");
                     return true;
                 }

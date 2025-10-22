@@ -101,7 +101,7 @@ void output_destroy(wl_listener* listener, void*)
     delete output;
 }
 
-void server_new_output(wl_listener* listener, void* data)
+void output_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_output* wlr_output = static_cast<struct wlr_output*>(data);
@@ -162,7 +162,7 @@ void server_new_output(wl_listener* listener, void* data)
     }
 }
 
-void server_output_layout_change(wl_listener* listener, void*)
+void output_layout_change(wl_listener* listener, void*)
 {
     Server* server = listener_userdata<Server*>(listener);
 

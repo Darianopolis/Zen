@@ -82,9 +82,9 @@ void init(Server* server, const startup_options& options)
     //       wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
 
     server->output_layout = wlr_output_layout_create(server->display);
-    server->listeners.listen(&server->output_layout->events.change, server, server_output_layout_change);
+    server->listeners.listen(&server->output_layout->events.change, server, output_layout_change);
 
-    server->listeners.listen(&server->backend->events.new_output, server, server_new_output);
+    server->listeners.listen(&server->backend->events.new_output, server, output_new);
 
     wlr_xdg_output_manager_v1_create(server->display, server->output_layout);
 
@@ -97,8 +97,8 @@ void init(Server* server, const startup_options& options)
     server->drag_icon_parent = wlr_scene_tree_create(server->layers[Strata::overlay]);
 
     server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
-    server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, server_new_toplevel);
-    server->listeners.listen(&server->xdg_shell->events.new_popup,    server, server_new_popup);
+    server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, xdg_toplevel_new);
+    server->listeners.listen(&server->xdg_shell->events.new_popup,    server, xdg_popup_new);
 
     server->layer_shell = wlr_layer_shell_v1_create(server->display, 3);
     server->listeners.listen(&server->layer_shell->events.new_surface, server, server_new_layer_surface);

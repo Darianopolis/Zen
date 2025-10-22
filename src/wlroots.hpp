@@ -5,6 +5,9 @@
 #include <pixman.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <xcb/xcb.h>
+#include <xcb/xcb_ewmh.h>
+#include <xcb/xcb_icccm.h>
 #include <wayland-server-core.h>
 
 extern "C" {
@@ -63,6 +66,12 @@ extern "C" {
 #define namespace namespace_
 # include <wlr/types/wlr_layer_shell_v1.h>
 #undef namespace
+
+// xwayland
+#define class class_
+# include <wlr/xwayland/xwayland.h> // uses reserved keyword "class" as struct member
+#undef class
+#include <wlr/xwayland.h>
 
 #pragma clang diagnostic pop
 
