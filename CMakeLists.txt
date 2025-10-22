@@ -64,6 +64,7 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/util.cpp
     src/zone.cpp
     src/debug.cpp
+    src/xwayland.cpp
     )
 target_link_libraries(${PROJECT_NAME} PUBLIC
     wayland-server

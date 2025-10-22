@@ -12,9 +12,10 @@ std::string xdg_toplevel_to_string(XdgToplevel* toplevel)
 static
 std::string xsurface_to_string(XWaylandSurface* xwayland_surface)
 {
-    return std::format("XWaylandSurface<{}>({})",
+    return std::format("XWaylandSurface<{}>({}, role = {})",
             (void*)xwayland_surface,
-            xwayland_surface->xwayland_surface->title ? xwayland_surface->xwayland_surface->title : "?");
+            xwayland_surface->xwayland_surface->title ? xwayland_surface->xwayland_surface->title : "?",
+            magic_enum::enum_name(xwayland_surface->role));
 }
 
 std::string surface_to_string(Surface* surface)

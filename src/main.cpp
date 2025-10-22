@@ -6,7 +6,8 @@ using namespace std::literals;
 
 struct startup_options
 {
-    const char* xwayland_socket;
+    const char* xwayland_satellite_socket;
+    bool xwayland_wlroots;
     const char* startup_cmd;
     const char* log_file;
     uint32_t additional_outputs;
@@ -146,6 +147,12 @@ void init(Server* server, const startup_options& options)
         wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
     }
 
+    unsetenv("DISPLAY");
+
+    if (options.xwayland_wlroots) {
+        xwayland_init(server);
+    }
+
     update_cursor_state(server);
 
     zone_init(server);
@@ -170,12 +177,13 @@ void run(Server* server, const startup_options& options)
     setenv("WAYLAND_DISPLAY", socket, true);
     setenv("XDG_CURRENT_DESKTOP", PROGRAM_NAME, true);
 
-    if (options.xwayland_socket) {
-        setenv("DISPLAY", options.xwayland_socket, true);
-        spawn("xwayland-satellite", {"xwayland-satellite", options.xwayland_socket});
-    } else {
-        unsetenv("DISPLAY");
+    if (options.xwayland_satellite_socket) {
+        setenv("DISPLAY", options.xwayland_satellite_socket, true);
+        spawn("xwayland-satellite", {"xwayland-satellite", options.xwayland_satellite_socket});
     }
+    // else {
+    //     unsetenv("DISPLAY");
+    // }
 
     if (options.startup_cmd) {
         spawn("/bin/sh", {"/bin/sh", "-c", options.startup_cmd});
@@ -191,6 +199,8 @@ void cleanup(Server* server)
     // TODO: Wait for clients to die properly
 
     server->listeners.clear();
+
+    xwayland_cleanup(server);
 
     wlr_xcursor_manager_destroy(server->cursor_manager);
     wlr_cursor_destroy(server->cursor);
@@ -230,8 +240,10 @@ int main(int argc, char* argv[])
             options.log_file = param();
         } else if ("--startup"sv == arg) {
             options.startup_cmd = param();
-        } else if ("--xwayland"sv == arg) {
-            options.xwayland_socket = param();
+        } else if ("--xwayland-satellite"sv == arg) {
+            options.xwayland_satellite_socket = param();
+        } else if ("--xwayland-wlroots"sv == arg) {
+            options.xwayland_wlroots = true;
         } else if ("--ctrl-mod"sv == arg) {
             options.ctrl_mod = true;
         } else if ("--outputs"sv == arg) {

@@ -144,6 +144,46 @@ void server_new_pointer(Server* server, wlr_input_device* device)
             libinput_device_config_accel_set_profile(libinput_device, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
             libinput_device_config_accel_set_speed(  libinput_device, libinput_mouse_speed);
         }
+
+        // static const libinput_config_tap_state tap_to_click = LIBINPUT_CONFIG_TAP_ENABLED;
+        // static const libinput_config_drag_state tap_and_drag = LIBINPUT_CONFIG_DRAG_ENABLED;
+        // static const libinput_config_drag_lock_state drag_lock = LIBINPUT_CONFIG_DRAG_LOCK_ENABLED_TIMEOUT;
+        // static const int natural_scrolling = 0;
+        // static const libinput_config_dwt_state disable_while_typing = LIBINPUT_CONFIG_DWT_ENABLED;
+        // static const int left_handed = 0;
+        // static const libinput_config_middle_emulation_state middle_button_emulation = LIBINPUT_CONFIG_MIDDLE_EMULATION_DISABLED;
+        // static const enum libinput_config_scroll_method scroll_method = LIBINPUT_CONFIG_SCROLL_2FG;
+        // static const enum libinput_config_click_method click_method = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
+        // static const uint32_t send_events_mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
+        // static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
+
+		// if (libinput_device_config_tap_get_finger_count(libinput_device)) {
+		// 	libinput_device_config_tap_set_enabled(libinput_device, tap_to_click);
+		// 	libinput_device_config_tap_set_drag_enabled(libinput_device, tap_and_drag);
+		// 	libinput_device_config_tap_set_drag_lock_enabled(libinput_device, drag_lock);
+		// 	libinput_device_config_tap_set_button_map(libinput_device, button_map);
+		// }
+
+		// if (libinput_device_config_scroll_has_natural_scroll(libinput_device))
+		// 	libinput_device_config_scroll_set_natural_scroll_enabled(libinput_device, natural_scrolling);
+
+		// if (libinput_device_config_dwt_is_available(libinput_device))
+		// 	libinput_device_config_dwt_set_enabled(libinput_device, disable_while_typing);
+
+		// if (libinput_device_config_left_handed_is_available(libinput_device))
+		// 	libinput_device_config_left_handed_set(libinput_device, left_handed);
+
+		// if (libinput_device_config_middle_emulation_is_available(libinput_device))
+		// 	libinput_device_config_middle_emulation_set_enabled(libinput_device, middle_button_emulation);
+
+		// if (libinput_device_config_scroll_get_methods(libinput_device) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
+		// 	libinput_device_config_scroll_set_method(libinput_device, scroll_method);
+
+		// if (libinput_device_config_click_get_methods(libinput_device) != LIBINPUT_CONFIG_CLICK_METHOD_NONE)
+		// 	libinput_device_config_click_set_method(libinput_device, click_method);
+
+		// if (libinput_device_config_send_events_get_modes(libinput_device))
+		// 	libinput_device_config_send_events_set_mode(libinput_device, send_events_mode);
     }
 
     pointer->listeners.listen(&device->events.destroy, pointer, pointer_destroy);
@@ -504,11 +544,11 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         //     log_indent, surface_to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
 
         if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
-            if (surface == get_focused_surface(server)) {
+            // if (surface == get_focused_surface(server)) {
                 // Only send relative pointer motion when pointer focus is keyboard focus
                 // (some applications will try to handle relative pointer input even when they're not focused)
                 wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
-            }
+            // }
         }
 
         bool constraint_active = false;
@@ -667,7 +707,12 @@ void server_cursor_axis(wl_listener* listener, void* data)
 
     if (input_handle_axis(server, *event)) return;
 
+	// wlr_seat_pointer_notify_motion(server->seat, event->time_msec, server->cursor->x, server->cursor->y);
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
+
+    // wlr_cursor_move(server->cursor, &server->pointers[0]->wlr_pointer->base, 1, 1);
+
+    // update_cursor_state(server);
 }
 
 void server_cursor_frame(wl_listener* listener, void*)

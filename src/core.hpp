@@ -118,6 +118,8 @@ struct Server
     wlr_renderer* renderer;
     wlr_allocator* allocator;
 
+    wlr_xwayland* xwayland;
+
     struct {
         std::filesystem::path original_cwd;
         bool is_nested;
@@ -293,6 +295,8 @@ struct XWaylandSurface : Surface
     static void from();
 
     wlr_xwayland_surface* xwayland_surface;
+
+    ListenerSet map_listeners;
 };
 
 struct XdgPopup : Surface
@@ -426,6 +430,20 @@ void surface_cleanup(Surface*);
 void server_new_layer_surface(wl_listener*, void*);
 void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 
+// ---- Surface.XWayland -------------------------------------------------------
+
+void xwayland_init(Server*);
+void xwayland_cleanup(Server*);
+void xwayland_ready(wl_listener*, void*);
+
+void xwayland_new(               wl_listener*, void*);
+void xwayland_destroy(           wl_listener*, void*);
+void xwayland_associate(         wl_listener*, void*);
+void xwayland_dissociate(        wl_listener*, void*);
+void xwayland_activate(          wl_listener*, void*);
+void xwayland_configure(         wl_listener*, void*);
+void xwayland_request_fullscreen(wl_listener*, void*);
+
 // ---- Surface.Toplevel -------------------------------------------------------
 
 void toplevel_set_bounds(       Surface*, wlr_box);
@@ -436,8 +454,8 @@ void toplevel_update_border(    Surface*);
 bool toplevel_is_interactable(  Surface*);
 void toplevel_begin_interactive(Surface*, InteractionMode);
 
-void xdg_toplevel_map(               wl_listener*, void*);
-void xdg_toplevel_unmap(             wl_listener*, void*);
+void surface_map(               wl_listener*, void*);
+void surface_unmap(             wl_listener*, void*);
 void xdg_toplevel_commit(            wl_listener*, void*);
 void xdg_toplevel_destroy(           wl_listener*, void*);
 void xdg_toplevel_request_minimize(  wl_listener*, void*);

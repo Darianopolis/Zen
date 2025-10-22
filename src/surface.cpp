@@ -234,6 +234,7 @@ void toplevel_set_bounds(Surface* surface, wlr_box box)
         xdg_toplevel_resize(xdg_toplevel, box.width, box.height);
     } else if (XWaylandSurface* xwayland_surface = XWaylandSurface::get_impl(surface)) {
         wlr_xwayland_surface_configure(xwayland_surface->xwayland_surface, box.x, box.y, box.width, box.height);
+        toplevel_update_border(surface);
     }
 }
 
@@ -528,46 +529,50 @@ void surface_cleanup(Surface* surface)
         surface->cursor.surface->requestee_surface = nullptr;
     }
 
-    surface->wlr_surface->data = nullptr;
+    if (surface->wlr_surface) {
+        surface->wlr_surface->data = nullptr;
+    }
 }
 
 // -----------------------------------------------------------------------------
 
-void xdg_toplevel_map(wl_listener* listener, void*)
+void surface_map(wl_listener* listener, void*)
 {
-    XdgToplevel* toplevel = listener_userdata<XdgToplevel*>(listener);
+    Surface* surface = listener_userdata<Surface*>(listener);
 
-    log_debug("Toplevel mapped:    {}", surface_to_string(toplevel));
+    log_debug("Toplevel mapped:    {}", surface_to_string(surface));
 
-    surface_focus(toplevel);
+    surface_focus(surface);
 }
 
-void xdg_toplevel_unmap(wl_listener* listener, void*)
+void surface_unmap(wl_listener* listener, void*)
 {
-    XdgToplevel* unmapped_toplevel = listener_userdata<XdgToplevel*>(listener);
+    Surface* surface = listener_userdata<Surface*>(listener);
 
-    log_debug("Toplevel unmapped:  {}", surface_to_string(unmapped_toplevel));
+    log_debug("Toplevel unmapped:  {}", surface_to_string(surface));
 
     // Reset interaction mode if grabbed toplevel was unmapped
-    if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
-        set_interaction_mode(unmapped_toplevel->server, InteractionMode::passthrough);
+    if (surface == surface->server->movesize.grabbed_toplevel) {
+        set_interaction_mode(surface->server, InteractionMode::passthrough);
     }
 
     // TODO: Handle toplevel unmap during zone operation
 
-    if (get_focused_surface(unmapped_toplevel->server) == unmapped_toplevel) {
-        surface_unfocus(unmapped_toplevel, true);
+    if (get_focused_surface(surface->server) == surface) {
+        surface_unfocus(surface, true);
 
         auto fn = [&](Surface* toplevel) {
-            if (toplevel != unmapped_toplevel) {
+            if (toplevel != surface) {
                 surface_focus(toplevel);
                 return false;
             }
             return true;
         };
-        walk_toplevels_front_to_back(unmapped_toplevel->server, FUNC_REF(fn));
+        walk_toplevels_front_to_back(surface->server, FUNC_REF(fn));
     }
 }
+
+// -----------------------------------------------------------------------------
 
 void xdg_toplevel_commit(wl_listener* listener, void*)
 {
@@ -739,8 +744,8 @@ void xdg_toplevel_new(wl_listener* listener, void* data)
 
     toplevel->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
 
-    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    toplevel, xdg_toplevel_map);
-    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  toplevel, xdg_toplevel_unmap);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.map,    static_cast<Surface*>(toplevel), surface_map);
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.unmap,  static_cast<Surface*>(toplevel), surface_unmap);
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.commit, toplevel, xdg_toplevel_commit);
 
     toplevel->listeners.listen(&xdg_toplevel->events.destroy, toplevel, xdg_toplevel_destroy);
@@ -931,6 +936,8 @@ void xdg_popup_destroy(wl_listener* listener, void*)
 {
     XdgPopup* popup = listener_userdata<XdgPopup*>(listener);
 
+    log_warn("Popup destroyed");
+
     surface_cleanup(popup);
 
     delete popup;
@@ -940,6 +947,8 @@ void xdg_popup_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_xdg_popup* xdg_popup = static_cast<wlr_xdg_popup*>(data);
+
+    log_warn("Popup created");
 
     XdgPopup* popup = new XdgPopup{};
     popup->role = SurfaceRole::popup;
