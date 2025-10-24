@@ -293,7 +293,7 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
     set_interaction_mode(server, InteractionMode::focus_cycle);
 
-    surface_unfocus(get_focused_surface(server), true);
+    surface_unfocus(get_focused_surface(server));
 
     Toplevel* current = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
@@ -381,7 +381,7 @@ void surface_focus(Surface* surface)
     if (prev_wlr_surface == wlr_surface) return;
 
     if (Toplevel* prev_toplevel = Toplevel::from(prev_wlr_surface)) {
-        toplevel_set_activated(prev_toplevel, false);
+        surface_unfocus(prev_toplevel);
     }
 
     log_info("Focusing surface:   {}", surface_to_string(surface));
@@ -390,7 +390,7 @@ void surface_focus(Surface* surface)
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     if (toplevel) {
-        wlr_scene_node_raise_to_top(&surface->scene_tree->node);
+        wlr_scene_node_reparent(&surface->scene_tree->node, surface->server->layers[Strata::focused]);
         toplevel_set_activated(Toplevel::from(surface), true);
     }
 
@@ -403,7 +403,7 @@ void surface_focus(Surface* surface)
     update_cursor_state(server);
 }
 
-void surface_unfocus(Surface* surface, bool force)
+void surface_unfocus(Surface* surface)
 {
     if (!surface) return;
     if (get_focused_surface(surface->server) != surface)
@@ -411,15 +411,15 @@ void surface_unfocus(Surface* surface, bool force)
 
     log_info("Unfocusing surface: {}", surface_to_string(surface));
 
+    // Move to top of "unfocused" layer
+
     if (Toplevel* toplevel = Toplevel::from(surface)) {
+        wlr_scene_node_reparent(&surface->scene_tree->node, surface->server->layers[Strata::floating]);
+        wlr_scene_node_raise_to_top(&surface->scene_tree->node);
         toplevel_set_activated(toplevel, false);
     }
 
-    if (force) {
-        wlr_seat_keyboard_clear_focus(surface->server->seat);
-    } else {
-        wlr_seat_keyboard_notify_clear_focus(surface->server->seat);
-    }
+    wlr_seat_keyboard_clear_focus(surface->server->seat);
 
     process_cursor_motion(surface->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
     update_cursor_state(surface->server);
@@ -491,7 +491,7 @@ void toplevel_unmap(wl_listener* listener, void*)
     // TODO: Handle toplevel unmap during zone operation
 
     if (get_focused_surface(unmapped_toplevel->server) == unmapped_toplevel) {
-        surface_unfocus(unmapped_toplevel, true);
+        surface_unfocus(unmapped_toplevel);
 
         auto fn = [&](Toplevel* toplevel) {
             if (toplevel != unmapped_toplevel) {

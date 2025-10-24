@@ -81,8 +81,9 @@ static const WindowRule window_rules[] = {
 enum class Strata
 {
     background,
-    bottom,
     floating,
+    bottom,
+    focused,
     top,
     overlay,
     debug,
@@ -428,7 +429,7 @@ Surface* get_surface_at(     Server* server, double lx, double ly, wlr_surface**
 Surface* get_focused_surface(Server*);
 
 void surface_focus(  Surface*);
-void surface_unfocus(Surface*, bool force);
+void surface_unfocus(Surface*);
 
 wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);

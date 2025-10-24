@@ -49,6 +49,7 @@
 - ✅ Improved window list/search/cycling
    - ✅ MOD + MouseScroll - Cycle through toplevels under mouse cursor
 - ✅ Screen casting
+- ✅ Bottom layer shell elements should be behind fullscreen applications when fullscreen app is on top and focused, but above otherwise
 
 ### Bugs
 
@@ -87,10 +88,11 @@
 
 ### Additional
 
-- Support key repeat
+- Support key repeat for bindings (e.g. volume up/down)
 - Smoother resize behaviour
    - Opposite corner/edge to resizing should remain pinned in place (E.g. currently if you resize from top-left, the bottom-right wobbles around)
 - Focus follows mouse?
+   - Perhaps a mode that defers to key presses, E.g. focus only follows mouse when no keys are pressed
 - Pseudo-fullscreen mode
    - Per-window mode to spoof permenant fullscreen state/size
       - Particularly useful for games that misbehave when resized
@@ -118,6 +120,7 @@
 - Support xdg-positioner requests to position child windows
 - Use updated protocol version
    - xdg_shell -> version 7
+   - tell clients that all edges are constrained
 - Debug options
    - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
 - Add IPC with messaging client

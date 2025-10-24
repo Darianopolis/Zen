@@ -756,7 +756,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 spawn("xeyes", {"xeyes"});
                 return true;
             case XKB_KEY_s:
-                surface_unfocus(get_focused_surface(server), false);
+                surface_unfocus(get_focused_surface(server));
                 return true;
             case XKB_KEY_q:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
@@ -881,7 +881,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
                 }
             }
         } else if (get_focused_surface(server)) {
-            surface_unfocus(get_focused_surface(server), false);
+            surface_unfocus(get_focused_surface(server));
         }
     }
 
