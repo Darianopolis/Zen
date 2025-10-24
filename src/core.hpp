@@ -41,7 +41,12 @@ static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
 // -----------------------------------------------------------------------------
 
-static constexpr const char* playerctl_player_name = "spotify";
+static constexpr std::string_view playerctl_player_name = "spotify";
+
+static const std::vector<std::string_view> startup_commands[] = {
+    {"waybar"},
+    {"swaybg", "-m", "fill", "-i", getenv("WALLPAPER") ?: ""},
+};
 
 // -----------------------------------------------------------------------------
 
@@ -134,6 +139,8 @@ struct Server
 
     wlr_xdg_shell* xdg_shell;
     wlr_layer_shell_v1* layer_shell;
+
+    wlr_xdg_activation_v1* activation;
 
     wlr_cursor*           cursor;
     wlr_xcursor_manager*  cursor_manager;
@@ -331,9 +338,9 @@ struct CursorSurface : Surface
 
 void set_interaction_mode(Server*, InteractionMode);
 
-void focus_cycle_begin(Server*, wlr_cursor*);
-void focus_cycle_step( Server*, wlr_cursor*, bool backwards);
-void focus_cycle_end(  Server*);
+void      focus_cycle_begin(Server*, wlr_cursor*);
+void      focus_cycle_step( Server*, wlr_cursor*, bool backwards);
+Toplevel* focus_cycle_end(Server* server);
 
 bool input_handle_key(   Server* server, const wlr_keyboard_key_event&   event, xkb_keysym_t sym);
 bool input_handle_button(Server* server, const wlr_pointer_button_event& event);
@@ -428,6 +435,8 @@ wlr_box surface_get_geometry(    Surface*);
 wlr_box surface_get_coord_system(Surface*);
 
 void surface_cleanup(Surface*);
+
+void server_request_activate(wl_listener*, void*);
 
 // ---- Surface.LayerSurface ---------------------------------------------------
 

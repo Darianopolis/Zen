@@ -60,6 +60,7 @@ extern "C" {
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
 #define namespace namespace_
 # include <wlr/types/wlr_layer_shell_v1.h>
 #undef namespace

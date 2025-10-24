@@ -780,7 +780,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 
     if (state == WL_KEYBOARD_KEY_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
         if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right) {
-            focus_cycle_end(server);
+            surface_focus(focus_cycle_end(server));
             return true;
         }
     }
@@ -812,26 +812,17 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     // Handle interrupt focus cycle
 
-    bool focus_cycle_interrupted = event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle;
-    if (focus_cycle_interrupted) {
-        focus_cycle_end(server);
-        focus_cycle_interrupted = true;
+    if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle) {
+        Toplevel* selected = focus_cycle_end(server);
+        if (wlr_box_contains_point(ptr(surface_get_bounds(selected)), server->cursor->x, server->cursor->y)) {
+            surface_focus(selected);
+        }
+        return true;
     }
 
     double sx, sy;
     wlr_surface* surface = nullptr;
     Surface* surface_under_cursor = get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-
-    if (focus_cycle_interrupted && surface_under_cursor != get_focused_surface(server)) {
-        // If we interrupted a focus cycle by clicking a previously hidden toplevel,
-        // don't transfer focus as it wouldn't have been visible to the user before the press
-        if (Toplevel::from(surface_under_cursor)) {
-            surface_unfocus(get_focused_surface(server), false);
-        } else {
-            surface_focus(surface_under_cursor);
-        }
-        return true;
-    }
 
     // Zone interaction
 

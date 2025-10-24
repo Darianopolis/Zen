@@ -4,13 +4,13 @@ project(zen)
 
 # ------------------------------------------------------------------------------
 
-add_subdirectory(3rdparty/wayland)
+add_subdirectory(3rdparty/wayland EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
 set(USE_GIT_WLROOTS OFF)
 if (USE_GIT_WLROOTS)
-    add_subdirectory(3rdparty/wlroots-install)
+    add_subdirectory(3rdparty/wlroots-install EXCLUDE_FROM_ALL)
 else()
     add_library(               wlroots INTERFACE)
     target_compile_definitions(wlroots INTERFACE WLR_USE_UNSTABLE)
@@ -31,11 +31,11 @@ target_include_directories(pixman INTERFACE /usr/include/pixman-1)
 
 # ------------------------------------------------------------------------------
 
-add_subdirectory(3rdparty/backward-cpp)
+add_subdirectory(3rdparty/backward-cpp EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
-add_subdirectory(3rdparty/magic-enum)
+add_subdirectory(3rdparty/magic-enum EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
@@ -52,6 +52,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-missing-designated-field-initializers
     -Wno-missing-field-initializers
     -Wno-unknown-pragmas
+    -Wno-gnu-conditional-omitted-operand
     -Wimplicit-fallthrough
     )
 target_include_directories(${PROJECT_NAME} PUBLIC src)
@@ -78,3 +79,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     Backward::Object
     magic_enum::magic_enum
     )
+
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin COMPONENT Runtime)
+install(FILES resources/default-portals.conf DESTINATION xdg-desktop-portal RENAME ${PROJECT_NAME}-portals.conf)

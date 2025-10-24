@@ -1,4 +1,4 @@
-### Core
+### Completed
 
 - ✅ Update build
    - ✅ Add wayland protocol generation python script
@@ -36,6 +36,19 @@
    - ✅ Add multiple strata levels
    - ✅ Add layer shell protocol
    - ✅ Ensure layer surface popups open on top/overlay surface
+- ✅ Tidy up border handling
+   - ✅ Pixel-perfect position/size calculations for zones (would be able to use `wlr_box` for zone calculations and drop custom `Box` type)
+- ✅ Track mouse button press state individually instead of using single global counter (which will become desynced on skipped input events)
+- ✅ Prevent clients from hiding the cursor unless they have keyboard focus
+- ✅ xdg-activation
+- ✅ Spawn child clients in center of parent
+- ✅ Compositor initiated fullscreen toggle
+- ✅ Throttle resize requests
+- ✅ Shortcut to grab all input back from any clients and ignore any constraints
+- ✅ Media control keybinds
+- ✅ Improved window list/search/cycling
+   - ✅ MOD + MouseScroll - Cycle through toplevels under mouse cursor
+- ✅ Screen casting
 
 ### Bugs
 
@@ -68,16 +81,19 @@
    - When steam and xeyes are open, can observe Steam top menu popups showing in xeyes (even when xeyes is in a completely different part of the screen)
 - First key input after `kalk` is opened is ignored
 - Occasionally a unexpected scene_tree_node with data pointing back to an existing Toplevel is created
+- Blender window size oscillates on resize
+   - Don't resend new resize request at end, simply override rendering behaviour to match surface geometry
+   - This would also allow us to use the physical surface size for misbehaving SDL applications without running into a similar oscillation issue
 
 ### Additional
 
-- Focus follows mouse
+- Support key repeat
+- Smoother resize behaviour
+   - Opposite corner/edge to resizing should remain pinned in place (E.g. currently if you resize from top-left, the bottom-right wobbles around)
+- Focus follows mouse?
 - Pseudo-fullscreen mode
    - Per-window mode to spoof permenant fullscreen state/size
       - Particularly useful for games that misbehave when resized
-- Tidy up border handling
-   - Pixel-perfect position/size calculations for zones (would be able to use `wlr_box` for zone calculations and drop custom `Box` type)
-- Track mouse button press state individually instead of using single global counter (which will become desynced on skipped input events)
 - Improved input and modfifier handling
    - Set default numlock state
    - Mask main modifier(s) from clients?
@@ -94,13 +110,11 @@
    - Use standard logging format with available log view/analysis tooling?
 - Support wlr-foreign-toplevel-management for rofi window mode
 - Surface positions should remain fixed relative to output position when resizing other outputs
-- ✅ Prevent clients from hiding the cursor unless they have keyboard focus
 - Compositor interaction state management
    - Newly spawned windows should not take focus when in the middle of an interaction (e.g. zone/move/size)
    - Unify input processing into single callback + state machine?
    - Interlocks to prevent invalid interaction interactions
       - While cursor is hidden, should be considered to not exist - add centralised way of querying cursor position/state
-- xdg-activation
 - Support xdg-positioner requests to position child windows
 - Use updated protocol version
    - xdg_shell -> version 7
@@ -108,41 +122,23 @@
    - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
 - Add IPC with messaging client
    - Spawn message
-- ✅ Spawn child clients in center of parent
 - xdg_foreign support
 - Idle protocol
-- ✅ Compositor initiated fullscreen toggle
-- ✅ Throttle resize requests
 - Consolidate interaction logic
-   - ✅ Rename `input.cpp` -> `seat.cpp`
-   - ✅ Replace `cursor_mode` with `interaction_state`
    - Move input binding logic to `interaction.cpp`
    - Separate zoning logic from zone interaction binds
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
    - Readjust all toplevel zone constraint on workspace/output configuration change
-- ✅ Shortcut to grab all input back from any clients and ignore any constraints
-- Media control keybinds
 - Numlock default state
-- ✅ Improved window list/search/cycling
-   - ✅ MOD + MouseScroll - Cycle through toplevels under mouse cursor
 - Output management
    - Dynamic output removal/creation/configuration
    - Output scaling
    - wlr_output_configuration_v1 protocol?
-- wlr_screencast
 
 ### Portals
 
-- File chooser
-- Screencast portal
-- Screenshotting
+- ✅ File chooser
+- ✅ Screencast portal
+- ✅ Screenshotting
 - Application Theming
-
-### Code cleanup
-
-- ✅ Use new/delete instead of calloc/free
-- ✅ Use dynamic wl_listener warpper
-- ✅ Rename structures and drop `struct` prefix?
-- ✅ Replace wl_list/wl_array with standard containers
-- ✅ Unified C++ format based logging

@@ -7,21 +7,30 @@ using namespace std::literals;
 struct startup_options
 {
     const char* xwayland_socket;
-    const char* startup_cmd;
     const char* log_file;
     uint32_t additional_outputs;
     bool ctrl_mod;
+    bool prefer_x11;
 };
+
+#define USE_SYNCOBJ 0
 
 static
 void init(Server* server, const startup_options& options)
 {
+    server->debug.original_cwd = std::filesystem::current_path();
+    chdir(getenv("HOME"));
+
+    // Core
+
     server->display = wl_display_create();
     server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), nullptr);
     if (!server->backend) {
         log_error("Failed to create wlr_backend");
         return;
     }
+
+    // Handler modifiers and nested detection
 
     server->main_modifier = WLR_MODIFIER_LOGO;
     server->main_modifier_keysym_left = XKB_KEY_Super_L;
@@ -48,23 +57,14 @@ void init(Server* server, const startup_options& options)
     };
     wlr_multi_for_each_backend(server->backend, [](wlr_backend* b, void* d) { (*static_cast<decltype(for_each_backend)*>(d))(b); }, &for_each_backend);
 
+    // Renderer
+
     server->renderer = wlr_renderer_autocreate(server->backend);
-    if (!server->renderer) {
-        log_error("Failed to create wlr_renderer");
-        return;
-    }
-
     wlr_renderer_init_wl_display(server->renderer, server->display);
-
     server->allocator = wlr_allocator_autocreate(server->backend, server->renderer);
-    if (server->allocator == nullptr) {
-        log_error("Failed to create wlr_allocator");
-        return;
-    }
 
-    // TODO: Split initialization of subsystems
+    // Hands-off wlroots interfaces
 
-    // Create some hands-off wlroots interfaces
     server->compositor = wlr_compositor_create(server->display, 5, server->renderer);
     server->subcompositor = wlr_subcompositor_create(server->display);
     wlr_data_device_manager_create(server->display);
@@ -76,17 +76,24 @@ void init(Server* server, const startup_options& options)
     wlr_fractional_scale_manager_v1_create(server->display, 1);
     wlr_presentation_create(server->display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->display);
+#if USE_SYNCOBJ
+    wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
+#endif
 
-    // NOTE: syncobj is not currently usuable due to driver/toolkit issues
-    //
-    //       wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
+    // XDG Activation
+
+    server->activation = wlr_xdg_activation_v1_create(server->display);
+    server->listeners.listen(&server->activation->events.request_activate, server, server_request_activate);
+
+    // Outputs
 
     server->output_layout = wlr_output_layout_create(server->display);
-    server->listeners.listen(&server->output_layout->events.change, server, output_layout_change);
-
-    server->listeners.listen(&server->backend->events.new_output, server, output_new);
+    server->listeners.listen(&server->output_layout->events.change,     server, output_layout_change);
+    server->listeners.listen(&      server->backend->events.new_output, server, output_new);
 
     wlr_xdg_output_manager_v1_create(server->display, server->output_layout);
+
+    // Scene
 
     server->scene = wlr_scene_create();
     for (Strata strata : server->layers.enum_values) {
@@ -96,21 +103,38 @@ void init(Server* server, const startup_options& options)
     server->scene_output_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
     server->drag_icon_parent = wlr_scene_tree_create(server->layers[Strata::overlay]);
 
+    // XDG Shell
+
     server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
     server->listeners.listen(&server->xdg_shell->events.new_toplevel, server, toplevel_new);
     server->listeners.listen(&server->xdg_shell->events.new_popup,    server, popup_new);
 
+    // Layer Shell
+
     server->layer_shell = wlr_layer_shell_v1_create(server->display, 3);
     server->listeners.listen(&server->layer_shell->events.new_surface, server, layer_surface_new);
 
-    // Decorations:
-    //  We enable enough decoration functionality to tell clients *not* to render their
-    //  own decorations but we'll render our border regardless of whether clients comply.
+    // Decorations
+
     wlr_server_decoration_manager_set_default_mode(
         wlr_server_decoration_manager_create(server->display),
         WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
     server->xdg_decoration_manager = wlr_xdg_decoration_manager_v1_create(server->display);
     server->listeners.listen(&server->xdg_decoration_manager->events.new_toplevel_decoration, server, decoration_new);
+
+    // Seat + Input
+
+    server->seat = wlr_seat_create(server->display, "seat0");
+    server->listeners.listen(&               server->seat->events.request_set_cursor,    server, seat_request_set_cursor);
+    server->listeners.listen(&server->seat->keyboard_state.events.focus_change,          server, seat_keyboard_focus_change);
+    server->listeners.listen(& server->seat->pointer_state.events.focus_change,          server, seat_pointer_focus_change);
+    server->listeners.listen(&               server->seat->events.request_set_selection, server, seat_request_set_selection);
+    server->listeners.listen(&               server->seat->events.request_start_drag,    server, seat_request_start_drag);
+    server->listeners.listen(&               server->seat->events.start_drag,            server, seat_start_drag);
+
+    server->listeners.listen(&server->backend->events.new_input, server, server_new_input);
+
+    // Pointer + Cursor
 
     server->pointer.pointer_constraints = wlr_pointer_constraints_v1_create(server->display);
     server->listeners.listen(&server->pointer.pointer_constraints->events.new_constraint, server, server_pointer_constraint_new);
@@ -130,23 +154,13 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->cursor->events.axis,            server, server_cursor_axis);
     server->listeners.listen(&server->cursor->events.frame,           server, server_cursor_frame);
 
-    server->listeners.listen(&server->backend->events.new_input, server, server_new_input);
-
-    server->seat = wlr_seat_create(server->display, "seat0");
-    server->listeners.listen(&              server->seat->events.request_set_cursor,    server, seat_request_set_cursor);
-    server->listeners.listen(&server->seat->keyboard_state.events.focus_change,         server, seat_keyboard_focus_change);
-    server->listeners.listen(&server->seat->pointer_state.events.focus_change,          server, seat_pointer_focus_change);
-    server->listeners.listen(&              server->seat->events.request_set_selection, server, seat_request_set_selection);
-    server->listeners.listen(&              server->seat->events.request_start_drag,    server, seat_request_start_drag);
-    server->listeners.listen(&              server->seat->events.start_drag,            server, seat_start_drag);
-
-    {
-        server->pointer.debug_visual_half_extent = 4;
-        server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
-        wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
-    }
+    server->pointer.debug_visual_half_extent = 4;
+    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
+    wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
     update_cursor_state(server);
+
+    // Zone window management
 
     zone_init(server);
 }
@@ -154,32 +168,55 @@ void init(Server* server, const startup_options& options)
 void run(Server* server, const startup_options& options)
 {
     const char* socket = wl_display_add_socket_auto(server->display);
-    if (!socket) {
-        wlr_backend_destroy(server->backend);
-        return;
+    wlr_backend_start(server->backend);
+
+    static constexpr const char* env_display = "DISPLAY";
+    static constexpr const char* env_wayland_display = "WAYLAND_DISPLAY";
+    static constexpr const char* env_xdg_current_desktop = "XDG_CURRENT_DESKTOP";
+    static constexpr const char* env_electron_ozone_platform_hint = "ELECTRON_OZONE_PLATFORM_HINT";
+    static constexpr const char* env_sdl_video_driver = "SDL_VIDEO_DRIVER";
+    static constexpr const char* env_sdl_videodriver = "SDL_VIDEODRIVER";
+
+    setenv(env_wayland_display, socket, true);
+    setenv(env_xdg_current_desktop, PROGRAM_NAME, true);
+
+    // Set application display server preferences
+
+    if (options.prefer_x11) {
+        unsetenv(env_electron_ozone_platform_hint);
+        setenv(env_sdl_video_driver, "x11", true);
+        setenv(env_sdl_videodriver,  "x11", true);
+    } else {
+        setenv(env_electron_ozone_platform_hint, "auto", true);
+        setenv(env_sdl_video_driver, "wayland,x11", true);
+        setenv(env_sdl_videodriver,  "wayland,x11", true);
     }
 
-    if (!wlr_backend_start(server->backend)) {
-        wlr_backend_destroy(server->backend);
-        wl_display_destroy(server->display);
-        return;
-    }
-
-    server->debug.original_cwd = std::filesystem::current_path();
-    chdir(getenv("HOME"));
-    setenv("WAYLAND_DISPLAY", socket, true);
-    setenv("XDG_CURRENT_DESKTOP", PROGRAM_NAME, true);
+    // Launch xwayland-satellite
 
     if (options.xwayland_socket) {
-        setenv("DISPLAY", options.xwayland_socket, true);
+        setenv(env_display, options.xwayland_socket, true);
         spawn("xwayland-satellite", {"xwayland-satellite", options.xwayland_socket});
     } else {
-        unsetenv("DISPLAY");
+        unsetenv(env_display);
     }
 
-    if (options.startup_cmd) {
-        spawn("/bin/sh", {"/bin/sh", "-c", options.startup_cmd});
+    // Export environment
+
+    if (!server->debug.is_nested) {
+        spawn("systemctl", {"systemctl", "--user", "import-environment",
+            env_display, env_wayland_display, env_xdg_current_desktop,
+            env_electron_ozone_platform_hint,
+            env_sdl_video_driver, env_sdl_videodriver});
     }
+
+    // Startup commands
+
+    for (auto& cmd : startup_commands) {
+        spawn(cmd.front(), cmd);
+    }
+
+    // Run
 
     log_info("Running Wayland compositor on WAYLAND_DISPLAY={}", socket);
     wl_display_run(server->display);
@@ -201,13 +238,13 @@ void cleanup(Server* server)
     wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
-constexpr const char* help_prompt = R"(Usage: %s [options]
-  --xwayland [socket]   Specify X11 socket
+constexpr const char* help_prompt = R"(Usage: {} [options]
+  --prefer-x11          Prefer certain applications (Electron, SDL) to use X11
+  --xwayland [socket]   Launch xwayland-satellite with given socket (E.g. :0, :1, ...)
   --log-file [path]     Log to file
   --startup  [cmd]      Startup command
-  --outputs  [count]    Number of outputs to spawn (in nested mode)
+  --outputs  [count]    Number of outputs to spawn in nested mode
   --ctrl-mod            Use CTRL instead of ALT in nested mode
-  --debug-cursor        Show cursor debug visual
 )";
 
 int main(int argc, char* argv[])
@@ -215,31 +252,35 @@ int main(int argc, char* argv[])
     startup_options options = {};
 
     auto print_usage = [&] {
-        printf(help_prompt, PROGRAM_NAME);
-        exit(0);
+        std::cout << std::format(help_prompt, PROGRAM_NAME);
+        std::exit(0);
     };
 
     for (int i = 1; i < argc; ++i) {
         const char* arg = {argv[i]};
-        auto param = [&] {
+        auto str_param = [&] {
             if (++i >= argc) print_usage();
             return argv[i];
         };
 
-        if        ("--log-file"sv == arg) {
-            options.log_file = param();
-        } else if ("--startup"sv == arg) {
-            options.startup_cmd = param();
-        } else if ("--xwayland"sv == arg) {
-            options.xwayland_socket = param();
-        } else if ("--ctrl-mod"sv == arg) {
-            options.ctrl_mod = true;
-        } else if ("--outputs"sv == arg) {
-            const char* p = param();
+        auto int_param = [&] {
+            const char* p = str_param();
             int v = 1;
             std::from_chars_result res = std::from_chars(p, p + strlen(p), v);
             if (!res) print_usage();
-            options.additional_outputs = std::max(1, v) - 1;
+            return v;
+        };
+
+        if        ("--log-file"sv == arg) {
+            options.log_file = str_param();
+        } else if ("--xwayland"sv == arg) {
+            options.xwayland_socket = str_param();
+        } else if ("--prefer-x11"sv == arg) {
+            options.prefer_x11 = true;
+        } else if ("--ctrl-mod"sv == arg) {
+            options.ctrl_mod = true;
+        } else if ("--outputs"sv == arg) {
+            options.additional_outputs = std::max(1, int_param()) - 1;
         } else {
             print_usage();
         }

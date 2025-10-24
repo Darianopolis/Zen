@@ -1,7 +1,7 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-void spawn(const char* file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions)
+void spawn(std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions)
 {
     std::vector<std::string> argv_str;
     for (std::string_view a : argv) argv_str.emplace_back(a);
@@ -20,7 +20,8 @@ void spawn(const char* file, std::span<const std::string_view> argv, std::span<c
                 unsetenv(env_action.name);
             }
         }
-        execvp(file, argv_cstr.data());
+        std::string file_str{file};
+        execvp(file_str.c_str(), argv_cstr.data());
     }
 }
 

@@ -205,13 +205,6 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
             wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), true);
             toplevel_set_bounds(toplevel, b);
             toplevel->prev_bounds = prev;
-            // TODO: With layers implemented, move output background rect to fullscreen layer
-            //       The xdg-protocol specifies:
-            //
-            //       If the fullscreened surface is not opaque, the compositor must make
-            //        sure that other screen content not part of the same surface tree (made
-            //        up of subsurfaces, popups or similarly coupled surfaces) are not
-            //        visible below the fullscreened surface.
         }
     } else {
         wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), false);
@@ -228,13 +221,19 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
 
 void toplevel_set_activated(Toplevel* toplevel, bool active)
 {
-    if (active) {
-        log_info("Activating toplevel:  {}", surface_to_string(toplevel));
-    } else {
-        log_info("Dectivating toplevel: {}", surface_to_string(toplevel));
-    }
+    log_info("{} toplevel: {}", active ? "Activating" : "Dectivating", surface_to_string(toplevel));
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel(), active);
     toplevel_update_border(toplevel);
+}
+
+void server_request_activate(wl_listener*, void* data)
+{
+    wlr_xdg_activation_v1_request_activate_event* event = static_cast<wlr_xdg_activation_v1_request_activate_event*>(data);
+
+    if (Toplevel* toplevel = Toplevel::from(event->surface)) {
+        log_debug("Activation request for {}, activating...", toplevel_to_string(toplevel));
+        surface_focus(toplevel);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -306,17 +305,15 @@ void focus_cycle_begin(Server* server, wlr_cursor* cursor)
     walk_toplevels_front_to_back(server, FUNC_REF(fn));
 }
 
-void focus_cycle_end(Server* server)
+Toplevel* focus_cycle_end(Server* server)
 {
-    if (server->interaction_mode != InteractionMode::focus_cycle) return;
+    if (server->interaction_mode != InteractionMode::focus_cycle) return nullptr;
     server->interaction_mode = InteractionMode::passthrough;
 
-    Toplevel* focused = nullptr;
+    Toplevel* selected = nullptr;
     auto fn = [&](Toplevel* toplevel) -> bool {
         if (focus_cycle_toplevel_is_enabled(toplevel)) {
-            if (!focused) {
-                focused = toplevel;
-            }
+            if (!selected) selected = toplevel;
         }
 
         focus_cycle_toplevel_set_enabled(toplevel, true);
@@ -324,7 +321,7 @@ void focus_cycle_end(Server* server)
     };
     walk_toplevels_front_to_back(server, FUNC_REF(fn));
 
-    surface_focus(focused);
+    return selected;
 }
 
 void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)

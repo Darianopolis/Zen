@@ -97,7 +97,7 @@ wlr_box constrain_box(wlr_box box, wlr_box bounds)
 // -----------------------------------------------------------------------------
 
 struct SpawnEnvAction { const char* name; const char* value; };
-void spawn(const char* file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {});
+void spawn(std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {});
 
 // -----------------------------------------------------------------------------
 

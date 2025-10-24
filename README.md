@@ -1,28 +1,36 @@
 # Zen
 
-A minimalistic stacking zone-based Wayland compositor built on wlroots.
+A minimalistic, opinionated, stacking zone-based Wayland compositor built on wlroots.
+
+### Why?
+
+This is a project to find a happy medium between the absolute limit of code minimalism and a reasonably functional forward-looking compositor that is most importantly as trivial as possible to maintain.
 
 ### Goals
 
-- Simple codebase
-    - Keep codebase as small and simple as possible without sacrificing clarity or functionality
+- Focused
+    - Handle only compositor related concerns
+    - Anything substantial that is orthogonal to the compositor should be handled in separate projects and compose together.
+- Simple
+    - The codebase should be as small and simple as possible without sacrificing clarity or functionality
     - Easily hackable (the good kind) and maintainable
 - Grid based window management
     - More scalable to larger format screens than being limited to half divides
-- Intuitive mouse-based interactions
+- Intuitive hybrid keyboard/mouse interactions
     - Learning a load of complex keybinds should not be a gateway to usability
-    - Most interactions can be done quickly with only a handful of keybinds
-- Input remapping
-    - Mouse acceleration
-    - Keyboard shortcuts and macros
-    - Joystick remapping?
+    - But neither should an interface be hampered by the requirement of usability by only a single category of input device
 
 ### Non-goals
 
 - Customization/configuration for everything
-- Fancy graphics: Animations, rounded corners, blurs
-- Multiple types of layout system
+    - To keep things simple, this is an opinionated compositor built around workflows I use. It would never be practical to write something configurable enough for everyone, and no one would use it even if it was.
+- Visual effects: Animations, rounded corners, blurs
+    - These add substantial complexity to the scene code, and more importantly - I don't use them.
+- Multiple layout systems
+    - There are already many quality tiling (and scrolling) wayland compositors out there, and I don't want to maintain a layout system that I'm not dogfooding myself.
 - Support every Wayland protocol
+- Support all (or even many) weird X11 interactions
+    - This is a forwards looking wayland compositor. Electron and even WINE/Proton applications now have Wayland support for the most part (with a few remaining issues to be ironed out). With `xwayland-satellite` working as well as it does for the remainder of applications, it doesn't make much sense to dedicate a large amount of technical effort to creating and maintaining special case paths just for the dwindling number of X11-only applications.
 
 # Running
 
@@ -33,7 +41,7 @@ Run with `--help` to see command line options
 - MOD + T - Launch `konsole`
 - MOD + G - Launch `dolphin`
 - MOD + H - Launch `kalk`
-- MOD + D - Launch `rofi` (shift for `run`, unshifted for `drun`)
+- MOD + D - Launch `rofi` (shift for `run` mode, unshifted for `drun`)
 - MOD + V - Launch `pavucontrol`
 - MOD + I - Launch `xeyes` (debug purposes)
 - MOD + Escape - Exit
@@ -65,22 +73,35 @@ Run with `--help` to see command line options
 
 - xwayland-satellite (if `--xwayland` flag passed)
 
-#### CMake Options
+#### Expected CMake options
 
- - `USE_GIT_WLROOTS=ON/OFF` (default `OFF`) - Enables latest development git version of wlroots
+These are the options that the project is normally built against. Other configurations may work but are not tested.
 
-#### Commands
+ - `CMAKE_C_COMPILER` = `clang`
+ - `CMAKE_CXX_COMPILER` = `clang++`
+ - `CMAKE_LINKER_TYPE` = `MOLD`
+ - Generator: `Ninja`
 
-```
-python configure.py
-cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_LINKER_TYPE=MOLD
-cmake --build build
-```
+#### Additional options
 
-# Additional recommended applications
+ - `USE_GIT_WLROOTS` = `ON`/`OFF` (default `OFF`) - Enables latest development git version of wlroots
 
-- `mako` - Notification client
-- `swaybg` - Background client
-- `waybar` - System bar
+#### Steps
+
+1. `python configure.py` (Grab dependencies and configure subprojects)
+2. Configure and build (and install) CMake project in root directory
+
+#### Additional installation steps (optional)
+
+1. Copy `${CMAKE_PREFIX_DIR}/xdg-desktop-portal` to `~/.config/xdg-desktop-portal`
+2. Edit portal selection as desired
+
+# Additional applications
+
+- `pavucontrol` - Audio
+- `blueman` - Bluetooth
+- `mako` - Notifications
+- `swaybg` - Background
+- `waybar` - Highly configurably system bar
 - `kanshi` - Dynamic output profile management (required protocol not hooked up yet)
-- `lxqt-sudo` - GUI `sudo` frontend
+- `lxqt-sudo` - GUI frontend for `sudo`

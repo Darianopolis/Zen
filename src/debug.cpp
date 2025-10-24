@@ -5,8 +5,8 @@ std::string toplevel_to_string(Toplevel* toplevel)
     return toplevel
         ? std::format("Toplevel<{}>({}, {})",
             (void*)toplevel,
-            toplevel->xdg_toplevel()->app_id ? toplevel->xdg_toplevel()->app_id : "?",
-            toplevel->xdg_toplevel()->title ? toplevel->xdg_toplevel()->title   : "?")
+            toplevel->xdg_toplevel()->app_id ?: "?",
+            toplevel->xdg_toplevel()->title ?: "?")
         : "nullptr";
 }
 
