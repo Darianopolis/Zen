@@ -193,7 +193,7 @@ void cursor_surface_destroy(wl_listener* listener, void*)
 
     log_info("Cursor destroyed: {}", cursor_surface_to_string(cursor_surface));
 
-    Surface* requestee_surface = Surface::from(cursor_surface->requestee_surface);
+    Surface* requestee_surface = cursor_surface->requestee_surface;
     if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
         requestee_surface->cursor.surface = nullptr;
         requestee_surface->cursor.surface_set = false;
@@ -268,7 +268,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
 
             cursor_surface = new CursorSurface {};
             cursor_surface->server = server;
-            cursor_surface->requestee_surface = requestee_surface->wlr_surface;
+            cursor_surface->requestee_surface = requestee_surface;
             cursor_surface->wlr_surface = event->surface;
             cursor_surface->listeners.listen(&event->surface->events.commit, cursor_surface, cursor_surface_commit);
             cursor_surface->listeners.listen(&event->surface->events.destroy, cursor_surface, cursor_surface_destroy);
@@ -445,12 +445,14 @@ void process_cursor_resize(Server* server)
     if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(left  + dx, right - 1);
     else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(right + dx, left  + 1);
 
+    wlr_edges locked_edges = wlr_edges(((movesize.resize_edges & WLR_EDGE_RIGHT)  ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT)
+                                     | ((movesize.resize_edges & WLR_EDGE_BOTTOM) ? WLR_EDGE_TOP  : WLR_EDGE_BOTTOM));
     toplevel_set_bounds(movesize.grabbed_toplevel, {
         .x = left,
         .y = top,
         .width  = right  - left,
         .height = bottom - top,
-    });
+    }, locked_edges);
 }
 
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, double dx, double dy, double rel_dx, double rel_dy, double dx_unaccel, double dy_unaccel)

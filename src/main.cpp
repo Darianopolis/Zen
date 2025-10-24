@@ -10,7 +10,6 @@ struct startup_options
     const char* log_file;
     uint32_t additional_outputs;
     bool ctrl_mod;
-    bool prefer_x11;
 };
 
 #define USE_SYNCOBJ 0
@@ -77,7 +76,7 @@ void init(Server* server, const startup_options& options)
     wlr_presentation_create(server->display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->display);
 #if USE_SYNCOBJ
-    wlr_linux_drm_syncobj_manager_v1_create(server->wl_display, 1, wlr_backend_get_drm_fd(server->backend));
+    wlr_linux_drm_syncobj_manager_v1_create(server->display, 1, wlr_backend_get_drm_fd(server->backend));
 #endif
 
     // XDG Activation
@@ -173,25 +172,11 @@ void run(Server* server, const startup_options& options)
     static constexpr const char* env_display = "DISPLAY";
     static constexpr const char* env_wayland_display = "WAYLAND_DISPLAY";
     static constexpr const char* env_xdg_current_desktop = "XDG_CURRENT_DESKTOP";
-    static constexpr const char* env_electron_ozone_platform_hint = "ELECTRON_OZONE_PLATFORM_HINT";
-    static constexpr const char* env_sdl_video_driver = "SDL_VIDEO_DRIVER";
-    static constexpr const char* env_sdl_videodriver = "SDL_VIDEODRIVER";
 
     setenv(env_wayland_display, socket, true);
     setenv(env_xdg_current_desktop, PROGRAM_NAME, true);
 
     // Set application display server preferences
-
-    if (options.prefer_x11) {
-        unsetenv(env_electron_ozone_platform_hint);
-        setenv(env_sdl_video_driver, "x11", true);
-        setenv(env_sdl_videodriver,  "x11", true);
-    } else {
-        setenv(env_electron_ozone_platform_hint, "auto", true);
-        setenv(env_sdl_video_driver, "wayland,x11", true);
-        setenv(env_sdl_videodriver,  "wayland,x11", true);
-    }
-
     // Launch xwayland-satellite
 
     if (options.xwayland_socket) {
@@ -204,10 +189,7 @@ void run(Server* server, const startup_options& options)
     // Export environment
 
     if (!server->debug.is_nested) {
-        spawn("systemctl", {"systemctl", "--user", "import-environment",
-            env_display, env_wayland_display, env_xdg_current_desktop,
-            env_electron_ozone_platform_hint,
-            env_sdl_video_driver, env_sdl_videodriver});
+        spawn("systemctl", {"systemctl", "--user", "import-environment", env_display, env_wayland_display, env_xdg_current_desktop});
     }
 
     // Startup commands
@@ -239,10 +221,8 @@ void cleanup(Server* server)
 }
 
 constexpr const char* help_prompt = R"(Usage: {} [options]
-  --prefer-x11          Prefer certain applications (Electron, SDL) to use X11
   --xwayland [socket]   Launch xwayland-satellite with given socket (E.g. :0, :1, ...)
   --log-file [path]     Log to file
-  --startup  [cmd]      Startup command
   --outputs  [count]    Number of outputs to spawn in nested mode
   --ctrl-mod            Use CTRL instead of ALT in nested mode
 )";
@@ -275,8 +255,6 @@ int main(int argc, char* argv[])
             options.log_file = str_param();
         } else if ("--xwayland"sv == arg) {
             options.xwayland_socket = str_param();
-        } else if ("--prefer-x11"sv == arg) {
-            options.prefer_x11 = true;
         } else if ("--ctrl-mod"sv == arg) {
             options.ctrl_mod = true;
         } else if ("--outputs"sv == arg) {

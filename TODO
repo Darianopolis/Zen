@@ -50,6 +50,7 @@
    - ✅ MOD + MouseScroll - Cycle through toplevels under mouse cursor
 - ✅ Screen casting
 - ✅ Bottom layer shell elements should be behind fullscreen applications when fullscreen app is on top and focused, but above otherwise
+- ✅ Position toplevels from anchor point - no juddering when resizing
 
 ### Bugs
 
@@ -80,23 +81,23 @@
    - Closing and reopening the Steam window does not fix it, the entire processh as to be completely restarted
 - Steam client popups appearing in other XWayland windows
    - When steam and xeyes are open, can observe Steam top menu popups showing in xeyes (even when xeyes is in a completely different part of the screen)
-- First key input after `kalk` is opened is ignored
 - Occasionally a unexpected scene_tree_node with data pointing back to an existing Toplevel is created
-- Blender window size oscillates on resize
-   - Don't resend new resize request at end, simply override rendering behaviour to match surface geometry
-   - This would also allow us to use the physical surface size for misbehaving SDL applications without running into a similar oscillation issue
+- Discord opening in Wayland mode has several issues:
+   - Sometimes produces massive amounts of nested JSON and may run out of memory on startup
+   - If launches successully size of window is 0,0 and does not select preferred geometry
+      - Closing and re-opening from system tray fixes this
+      - When launching in X11 mode, first commit also has invalid (0, 0) geometry
+- Steam popups sometimes appear in wrong location on screen
 
 ### Additional
 
 - Support key repeat for bindings (e.g. volume up/down)
-- Smoother resize behaviour
-   - Opposite corner/edge to resizing should remain pinned in place (E.g. currently if you resize from top-left, the bottom-right wobbles around)
 - Focus follows mouse?
    - Perhaps a mode that defers to key presses, E.g. focus only follows mouse when no keys are pressed
 - Pseudo-fullscreen mode
    - Per-window mode to spoof permenant fullscreen state/size
       - Particularly useful for games that misbehave when resized
-- Improved input and modfifier handling
+- Improved input and modfiier handling
    - Set default numlock state
    - Mask main modifier(s) from clients?
    - Mask all key/button inputs from clients when main modifier is down?
@@ -133,7 +134,6 @@
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
    - Readjust all toplevel zone constraint on workspace/output configuration change
-- Numlock default state
 - Output management
    - Dynamic output removal/creation/configuration
    - Output scaling

@@ -84,13 +84,14 @@ Point constrain_to_region(const pixman_region32_t* region, Point p1, Point p2, b
         pixman_box32_t rect = rects[i];
 
         Point inside = Point(
-            std::clamp(p2.x, double(rect.x1), double(rect.x2 - 1)),
-            std::clamp(p2.y, double(rect.y1), double(rect.y2 - 1))
+            std::clamp(p2.x, double(rect.x1), double(std::max(rect.x1, rect.x2 - 1))),
+            std::clamp(p2.y, double(rect.y1), double(std::max(rect.y1, rect.y2 - 1)))
         );
 
         double dist = distance_between(p2, inside);
         if (dist < best_dist) {
             best = inside;
+            best_dist = dist;
         }
     }
 

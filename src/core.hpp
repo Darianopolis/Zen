@@ -6,10 +6,6 @@
 
 // -----------------------------------------------------------------------------
 
-#define NOISY_RESIZE 0
-
-// -----------------------------------------------------------------------------
-
 static constexpr uint32_t cursor_size = 24;
 
 static constexpr int   border_width = 2;
@@ -44,6 +40,7 @@ static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 static constexpr std::string_view playerctl_player_name = "spotify";
 
 static const std::vector<std::string_view> startup_commands[] = {
+    {"mako"},
     {"waybar"},
     {"swaybg", "-m", "fill", "-i", getenv("WALLPAPER") ?: ""},
 };
@@ -251,12 +248,12 @@ struct Surface
         int32_t hotspot_y;
     } cursor;
 
-    static Surface* from(void* data) {
+    static Surface* from_data(void* data) {
         Surface* surface = static_cast<Surface*>(data);
         return (surface && surface->role != SurfaceRole::invalid) ? surface : nullptr;
     }
-    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from(surface->data) : nullptr; }
-    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from(node->data)    : nullptr; }
+    static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from_data(surface->data) : nullptr; }
+    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from_data(node->data)    : nullptr; }
 };
 
 struct Toplevel : Surface
@@ -279,6 +276,10 @@ struct Toplevel : Surface
     } decoration;
 
     wlr_box prev_bounds;
+
+    int anchor_x;
+    int anchor_y;
+    wlr_edges anchor_edges;
 
     struct {
         bool enable_throttle_resize = true;
@@ -331,8 +332,7 @@ struct CursorSurface : Surface
 
     ListenerSet listeners;
 
-    // TODO: Store Surface* and have Surface store CursorListener* to ensure lifetime safety
-    struct wlr_surface* requestee_surface;
+    Surface* requestee_surface;
 };
 
 // ---- Policy -----------------------------------------------------------------
@@ -449,8 +449,7 @@ void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
-void toplevel_resize(          Toplevel*, int width, int height);
-void toplevel_set_bounds(      Toplevel*, wlr_box);
+void toplevel_set_bounds(      Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(   Toplevel*, bool active);
 bool toplevel_is_fullscreen(   Toplevel*);
 void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);

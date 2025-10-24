@@ -18,16 +18,16 @@ void toplevel_update_border(Toplevel* toplevel)
     static constexpr uint32_t right = 2;
     static constexpr uint32_t bottom = 3;
 
-    wlr_box bounds = surface_get_bounds(toplevel);
+    wlr_box geom = surface_get_geometry(toplevel);
 
-    bool show = bounds.width && bounds.height;
+    bool show = geom.width && geom.height;
     show &= !toplevel_is_fullscreen(toplevel);
 
     wlr_box positions[4];
-    positions[left]   = { -border_width, -border_width,  border_width, bounds.height + border_width * 2 };
-    positions[right]  = {  bounds.width, -border_width,  border_width, bounds.height + border_width * 2 };
-    positions[top]    = {  0,            -border_width,  bounds.width, border_width                     };
-    positions[bottom] = {  0,             bounds.height, bounds.width, border_width                     };
+    positions[left]   = { -border_width, -border_width, border_width, geom.height + border_width * 2 };
+    positions[right]  = {  geom.width,   -border_width, border_width, geom.height + border_width * 2 };
+    positions[top]    = {  0,            -border_width, geom.width, border_width                     };
+    positions[bottom] = {  0,             geom.height,  geom.width, border_width                     };
 
     for (uint32_t i = 0; i < 4; ++i) {
         if (show) {
@@ -50,9 +50,22 @@ wlr_box surface_get_geometry(Surface* surface)
     if (wlr_xdg_surface* xdg_surface = wlr_xdg_surface_try_from_wlr_surface(surface->wlr_surface)) {
         geom = xdg_surface->current.geometry;
 
-        // Some clients (E.g. SDL3 + Vulkan) fail to report valid geometry. Fall back to surface dimensions.
-        if (geom.width == 0)  geom.width  = xdg_surface->surface->current.width  - geom.x;
-        if (geom.height == 0) geom.height = xdg_surface->surface->current.height - geom.y;
+        // wlroots does not seem to like geometry origins that falls outside of the surface
+        // TODO: This *seems* like a bug in wlroots scene system, but...
+        // TODO: This also may be dependent on subsurface bounds
+        // NOTE: This also *incidentally* works around a bug in GLFW where GLFW requests
+        //        additional space around the requested surface size...
+        geom.x = std::max(0, geom.x);
+        geom.y = std::max(0, geom.y);
+
+        // Some clients report geometry that is larger than the surface size, clamp
+        geom.width  = std::clamp(surface->wlr_surface->current.width  - geom.x, 0, geom.width);
+        geom.height = std::clamp(surface->wlr_surface->current.height - geom.y, 0, geom.height);
+
+        // Some clients fail to report valid geometry. Fall back to surface dimensions.
+        if (geom.width <= 0)  geom.width  = std::max(0, xdg_surface->surface->current.width  - geom.x);
+        if (geom.height <= 0) geom.height = std::max(0, xdg_surface->surface->current.height - geom.y);
+
     } else  if (wlr_layer_surface_v1* wlr_layer_surface = wlr_layer_surface_v1_try_from_wlr_surface(surface->wlr_surface)) {
         geom.width = wlr_layer_surface->current.actual_width;
         geom.height = wlr_layer_surface->current.actual_height;
@@ -95,17 +108,11 @@ wlr_box surface_get_bounds(Surface* surface)
     return box;
 }
 
-void toplevel_resize(Toplevel* toplevel, int width, int height)
+static
+void toplevel_resize(Toplevel* toplevel, int width, int height, bool force)
 {
     if (toplevel->resize.enable_throttle_resize && toplevel->resize.last_resize_serial > toplevel->resize.last_commited_serial) {
         if (!toplevel->resize.any_pending || width != toplevel->resize.pending_width || height != toplevel->resize.pending_height) {
-
-#if NOISY_RESIZE
-            log_debug("resize.pending[{} > {}] ({}, {}) -> ({}, {})",
-                toplevel->resize.last_resize_serial, toplevel->resize.last_commited_serial,
-                toplevel->resize.pending_width, toplevel->resize.pending_height, width, height);
-#endif
-
             toplevel->resize.any_pending = true;
             toplevel->resize.pending_width = width;
             toplevel->resize.pending_height = height;
@@ -113,13 +120,7 @@ void toplevel_resize(Toplevel* toplevel, int width, int height)
     } else {
         toplevel->resize.any_pending = false;
 
-        if (toplevel->xdg_toplevel()->pending.width != width || toplevel->xdg_toplevel()->pending.height != height) {
-#if NOISY_RESIZE
-            log_debug("resize.request[{}] ({}, {}) -> ({}, {})", toplevel->resize.last_resize_serial,
-                toplevel->xdg_toplevel->pending.width, toplevel->xdg_toplevel->pending.height,
-                width,                                 height);
-#endif
-
+        if (force || toplevel->xdg_toplevel()->pending.width != width || toplevel->xdg_toplevel()->pending.height != height) {
             toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), width, height);
         }
     }
@@ -137,46 +138,22 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
     // Update cursor focus if window under cursor has changed
     process_cursor_motion(toplevel->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
 
-#if NOISY_RESIZE
-    {
-        wlr_box box = surface_get_geometry(toplevel);
-        int buffer_width = toplevel->xdg_surface->surface->current.buffer_width;
-        int buffer_height = toplevel->xdg_surface->surface->current.buffer_height;
-
-        log_debug("resize_handle_commit geom = ({}, {}), toplevel = ({}, {}), buffer = ({}, {})",
-            box.width, box.height,
-            toplevel->xdg_toplevel->current.width, toplevel->xdg_toplevel->current.height,
-            buffer_width, buffer_height);
-    }
-#endif
-
-    wlr_box bounds = surface_get_bounds(toplevel);
-#if NOISY_RESIZE
-    log_debug("resize.commit[{}] ({}, {})", toplevel->resize.last_commited_serial, bounds.width, bounds.height);
-#endif
-
     if (toplevel->resize.any_pending) {
-#if NOISY_RESIZE
-        log_debug("  found pending resizes, sending new resize");
-#endif
         toplevel->resize.any_pending = false;
-        toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height);
-    } else {
-        if (bounds.width != toplevel->xdg_toplevel()->current.width || bounds.height != toplevel->xdg_toplevel()->current.height) {
-            // Client has committed geometry that doesn't match our requested size
-            // Resize toplevel to match committed geometry (client authoritative)
-#if NOISY_RESIZE
-            log_debug("  no pending resizes, new bounds don't match requested toplevel size, overriding toplevel size (client authoritative)");
-#else
-            log_warn("Overriding requested toplevel size ({}, {}) with surface size ({}, {})",
-                toplevel->xdg_toplevel()->current.width, toplevel->xdg_toplevel()->current.height, bounds.width, bounds.height);
-#endif
-            toplevel_resize(toplevel, bounds.width, bounds.height);
-        }
+        toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height, false);
     }
 }
 
-void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
+static
+void toplevel_update_position_for_anchor(Toplevel* toplevel)
+{
+    wlr_box geom = surface_get_geometry(toplevel);
+    int x = (toplevel->anchor_edges & WLR_EDGE_RIGHT)  ? toplevel->anchor_x - geom.width  : toplevel->anchor_x;
+    int y = (toplevel->anchor_edges & WLR_EDGE_BOTTOM) ? toplevel->anchor_y - geom.height : toplevel->anchor_y;
+    wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
+}
+
+void toplevel_set_bounds(Toplevel* toplevel, wlr_box box, wlr_edges locked_edges)
 {
     if (toplevel->xdg_toplevel()->current.maximized) {
         wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), false);
@@ -185,9 +162,13 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box)
     // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
     //       Thus you must be careful when setting/getting bounds with positioned parents
     // TODO: Tidy up this API and make it clear what is relative to what.
-    wlr_scene_node_set_position(&toplevel->scene_tree->node, box.x, box.y);
 
-    toplevel_resize(toplevel, box.width, box.height);
+    toplevel->anchor_edges = wlr_edges(locked_edges);
+    toplevel->anchor_x = (locked_edges & WLR_EDGE_RIGHT)  ? box.x + box.width  : box.x;
+    toplevel->anchor_y = (locked_edges & WLR_EDGE_BOTTOM) ? box.y + box.height : box.y;
+
+    toplevel_update_position_for_anchor(toplevel);
+    toplevel_resize(toplevel, box.width, box.height, false);
 }
 
 bool toplevel_is_fullscreen(Toplevel* toplevel)
@@ -550,7 +531,12 @@ void toplevel_commit(wl_listener* listener, void*)
             toplevel_set_bounds(toplevel, bounds);
         }
 
+        if (wlr_box geom = surface_get_geometry(toplevel); !geom.width || !geom.height) {
+            log_error("Invalid geometry ({}, {}) ({}, {}) committed by {}", geom.x, geom.y, geom.width, geom.height, toplevel_to_string(toplevel));
+        }
+
         toplevel_resize_handle_commit(toplevel);
+        toplevel_update_position_for_anchor(toplevel);
         toplevel_update_border(toplevel);
     }
 }
