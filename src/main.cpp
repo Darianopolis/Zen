@@ -13,7 +13,7 @@ struct startup_options
     bool use_vulkan;
 };
 
-#define USE_SYNCOBJ 1
+#define USE_SYNCOBJ 0
 
 static
 void init(Server* server, const startup_options& options)
@@ -81,8 +81,8 @@ void init(Server* server, const startup_options& options)
     wlr_presentation_create(server->display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->display);
 
-    wlr_tearing_control_manager_v1_create(server->display, 1);
 #if USE_SYNCOBJ
+    wlr_tearing_control_manager_v1_create(server->display, 1);
     wlr_linux_drm_syncobj_manager_v1_create(server->display, 1, wlr_backend_get_drm_fd(server->backend));
 #endif
 
@@ -90,6 +90,13 @@ void init(Server* server, const startup_options& options)
 
     server->activation = wlr_xdg_activation_v1_create(server->display);
     server->listeners.listen(&server->activation->events.request_activate, server, server_request_activate);
+
+    // XDG Foreign
+
+    server->foreign_registry = wlr_xdg_foreign_registry_create(server->display);
+    wlr_xdg_foreign_v2_create(server->display, server->foreign_registry);
+
+    server->foreign_toplevel_manager =  wlr_foreign_toplevel_manager_v1_create(server->display);
 
     // Outputs
 
@@ -273,7 +280,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    init_log(LogLevel::trace, WLR_SILENT, options.log_file);
+    init_log(LogLevel::trace, WLR_INFO, options.log_file);
 
     // Init
 

@@ -449,11 +449,28 @@ void surface_cleanup(Surface* surface)
 
 // -----------------------------------------------------------------------------
 
+static
+void toplevel_foreign_request_maximize(wl_listener* listener, void*)
+{
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+    log_warn("Foreign activation request for: {}", toplevel_to_string(toplevel));
+    surface_focus(toplevel);
+}
+
 void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     log_debug("Toplevel mapped:    {}", toplevel_to_string(toplevel));
+
+    // wlr foreign manager
+    toplevel->foreign_handle = wlr_foreign_toplevel_handle_v1_create(toplevel->server->foreign_toplevel_manager);
+    if (toplevel->xdg_toplevel()->app_id) wlr_foreign_toplevel_handle_v1_set_app_id(toplevel->foreign_handle, toplevel->xdg_toplevel()->app_id);
+    if (toplevel->xdg_toplevel()->title) wlr_foreign_toplevel_handle_v1_set_title(toplevel->foreign_handle, toplevel->xdg_toplevel()->title);
+    toplevel->foreign_listeners.listen(&toplevel->foreign_handle->events.request_activate, toplevel, toplevel_foreign_request_maximize);
+
+    // xdg foreign
+    wlr_xdg_foreign_exported_init(&toplevel->foreign_exported, toplevel->server->foreign_registry);
 
     surface_focus(toplevel);
 }
@@ -483,6 +500,14 @@ void toplevel_unmap(wl_listener* listener, void*)
         };
         walk_toplevels_front_to_back(unmapped_toplevel->server, FUNC_REF(fn));
     }
+
+    if (unmapped_toplevel->foreign_handle) {
+        unmapped_toplevel->foreign_listeners.clear();
+        wlr_foreign_toplevel_handle_v1_destroy(unmapped_toplevel->foreign_handle);
+        unmapped_toplevel->foreign_handle = nullptr;
+    }
+
+    wlr_xdg_foreign_exported_finish(&unmapped_toplevel->foreign_exported);
 }
 
 void toplevel_commit(wl_listener* listener, void*)

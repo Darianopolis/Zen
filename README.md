@@ -93,7 +93,7 @@ These are the options that the project is normally built against. Other configur
 
 #### Additional installation steps (optional)
 
-1. Copy `${CMAKE_PREFIX_DIR}/xdg-desktop-portal` to `~/.config/xdg-desktop-portal`
+1. Copy `${CMAKE_INSTALL_PREFIX}/xdg-desktop-portal` to `~/.config/xdg-desktop-portal`
 2. Edit portal selection as desired
 
 # Additional applications

@@ -65,6 +65,8 @@ extern "C" {
 #include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_tearing_control_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_xdg_foreign_v2.h>
 
 #undef namespace
 #undef static

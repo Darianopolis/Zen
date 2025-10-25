@@ -22,3 +22,5 @@
 #include <stdarg.h>
 
 #include <magic_enum/magic_enum.hpp>
+
+using namespace std::literals;

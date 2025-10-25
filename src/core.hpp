@@ -51,9 +51,6 @@ struct OutputRule { const char* name; int x, y; bool primary; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0, .primary = true },
     { .name = "DP-2", .x = -3840, .y = 0                  },
-
-    { .name = "DP-4", .x =     0, .y = 0, .primary = true },
-    { .name = "DP-3", .x = -3840, .y = 0                  },
 };
 
 // -----------------------------------------------------------------------------
@@ -134,6 +131,9 @@ struct Server
     wlr_compositor* compositor;
     wlr_subcompositor* subcompositor;
     wlr_xdg_decoration_manager_v1* xdg_decoration_manager;
+
+    wlr_xdg_foreign_registry* foreign_registry;
+    wlr_foreign_toplevel_manager_v1* foreign_toplevel_manager;
 
     wlr_xdg_shell* xdg_shell;
     wlr_layer_shell_v1* layer_shell;
@@ -293,6 +293,11 @@ struct Toplevel : Surface
     } resize;
 
     WindowQuirks quirks;
+
+    wlr_foreign_toplevel_handle_v1* foreign_handle;
+    ListenerSet foreign_listeners;
+
+    wlr_xdg_foreign_exported foreign_exported;
 };
 
 struct Popup : Surface

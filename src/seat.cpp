@@ -763,10 +763,14 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 spawn("kalk", {"kalk"});
                 return true;
             case XKB_KEY_d:
-                spawn("rofi", {"rofi", "-show", "drun"});
-                return true;
             case XKB_KEY_D:
-                spawn("rofi", {"rofi", "-show", "run"});
+                if (get_modifiers(server) & WLR_MODIFIER_SHIFT) {
+                    spawn("rofi", {"rofi", "-show", "run"});
+                } else if (get_modifiers(server) & WLR_MODIFIER_CTRL) {
+                    spawn("rofi", {"rofi", "-show", "window"});
+                } else {
+                    spawn("rofi", {"rofi", "-show", "drun"});
+                }
                 return true;
             case XKB_KEY_v:
                 spawn("pavucontrol", {"pavucontrol"});

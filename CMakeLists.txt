@@ -53,6 +53,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-missing-field-initializers
     -Wno-unknown-pragmas
     -Wno-gnu-conditional-omitted-operand
+    -Wno-zero-length-array
     -Wimplicit-fallthrough
     )
 target_include_directories(${PROJECT_NAME} PUBLIC src)
