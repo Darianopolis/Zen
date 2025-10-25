@@ -10,9 +10,10 @@ struct startup_options
     const char* log_file;
     uint32_t additional_outputs;
     bool ctrl_mod;
+    bool use_vulkan;
 };
 
-#define USE_SYNCOBJ 0
+#define USE_SYNCOBJ 1
 
 static
 void init(Server* server, const startup_options& options)
@@ -58,7 +59,11 @@ void init(Server* server, const startup_options& options)
 
     // Renderer
 
-    server->renderer = wlr_renderer_autocreate(server->backend);
+    if (options.use_vulkan) {
+        server->renderer = wlr_vk_renderer_create_with_drm_fd(wlr_backend_get_drm_fd(server->backend));
+    } else {
+        server->renderer = wlr_renderer_autocreate(server->backend);
+    }
     wlr_renderer_init_wl_display(server->renderer, server->display);
     server->allocator = wlr_allocator_autocreate(server->backend, server->renderer);
 
@@ -75,6 +80,8 @@ void init(Server* server, const startup_options& options)
     wlr_fractional_scale_manager_v1_create(server->display, 1);
     wlr_presentation_create(server->display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->display);
+
+    wlr_tearing_control_manager_v1_create(server->display, 1);
 #if USE_SYNCOBJ
     wlr_linux_drm_syncobj_manager_v1_create(server->display, 1, wlr_backend_get_drm_fd(server->backend));
 #endif
@@ -255,6 +262,8 @@ int main(int argc, char* argv[])
             options.log_file = str_param();
         } else if ("--xwayland"sv == arg) {
             options.xwayland_socket = str_param();
+        } else if ("--vulkan"sv == arg) {
+            options.use_vulkan = true;
         } else if ("--ctrl-mod"sv == arg) {
             options.ctrl_mod = true;
         } else if ("--outputs"sv == arg) {

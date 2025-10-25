@@ -13,6 +13,9 @@ extern "C" {
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #pragma clang diagnostic ignored "-Wkeyword-macro"
 
+#define static
+#define namespace namespace_
+
 // backends
 #include <wlr/backend.h>
 #include <wlr/backend/wayland.h>
@@ -23,6 +26,7 @@ extern "C" {
 // render
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
+#include <wlr/render/vulkan.h>
 
 // utils
 #include <wlr/util/edges.h>
@@ -38,9 +42,7 @@ extern "C" {
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
-#define static
-# include <wlr/types/wlr_scene.h> // [static X] array parameters are not valid C++
-#undef static
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -61,9 +63,11 @@ extern "C" {
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
-#define namespace namespace_
-# include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+
 #undef namespace
+#undef static
 
 #pragma clang diagnostic pop
 

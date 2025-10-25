@@ -1,6 +1,8 @@
 #include "pch.hpp"
 #include "core.hpp"
 
+#define NOISY_POINTERS 0
+
 static
 uint32_t get_modifiers(Server* server)
 {
@@ -191,7 +193,9 @@ void cursor_surface_destroy(wl_listener* listener, void*)
 {
     CursorSurface* cursor_surface = listener_userdata<CursorSurface*>(listener);
 
+#if NOISY_POINTERS
     log_info("Cursor destroyed: {}", cursor_surface_to_string(cursor_surface));
+#endif
 
     Surface* requestee_surface = cursor_surface->requestee_surface;
     if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
@@ -256,7 +260,9 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     Surface* requestee_surface = Surface::from(server->seat->pointer_state.focused_surface);
 
     if (server->seat->pointer_state.focused_client != event->seat_client || !requestee_surface) {
+#if NOISY_POINTERS
         log_warn("Cursor request from unfocused client {}, ignoring...", client_to_string(event->seat_client->client));
+#endif
         return;
     }
 
@@ -275,7 +281,9 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
 
             event->surface->data = cursor_surface;
 
+#if NOISY_POINTERS
             log_info("Cursor created:   {}", cursor_surface_to_string(cursor_surface));
+#endif
         }
     }
 
@@ -361,7 +369,9 @@ void server_pointer_constraint_destroy(wl_listener* listener, void*)
 {
     PointerConstraint* constraint = listener_userdata<PointerConstraint*>(listener);
 
+#if NOISY_POINTERS
     log_info("Pointer constraint destroyed: {}", pointer_constraint_to_string(constraint->constraint));
+#endif
 
     if (constraint->server->pointer.active_constraint == constraint->constraint) {
         constraint->server->pointer.active_constraint = nullptr;
@@ -382,7 +392,9 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
 
+#if NOISY_POINTERS
     log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), toplevel_to_string(Toplevel::from(constraint->surface)));
+#endif
 
     PointerConstraint* pointer_constraint = new PointerConstraint{};
     pointer_constraint->server = server;
@@ -512,7 +524,9 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         bool constraint_active = false;
         Defer _ = [&] {
             if (!constraint_active && server->pointer.active_constraint) {
+#if NOISY_POINTERS
                 log_info("Pointer constraint deactivated: {} (reason: no constraints active)", pointer_constraint_to_string(server->pointer.active_constraint));
+#endif
                 wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
                 server->pointer.active_constraint = nullptr;
             }
@@ -528,10 +542,14 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
                 constraint_active = true;
                 if (constraint != server->pointer.active_constraint) {
                     if (server->pointer.active_constraint) {
+#if NOISY_POINTERS
                         log_info("Pointer constraint deactivated: {} (reason: replacing with new constraint)", pointer_constraint_to_string(server->pointer.active_constraint));
                         wlr_pointer_constraint_v1_send_deactivated(server->pointer.active_constraint);
+#endif
                     }
+#if NOISY_POINTERS
                     log_info("Pointer constraint activated: {}", pointer_constraint_to_string(constraint));
+#endif
                     wlr_pointer_constraint_v1_send_activated(constraint);
                     server->pointer.active_constraint = constraint;
                 }
@@ -565,7 +583,9 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
                 dy = constrained.y - sy;
 
                 if (!was_inside) {
+#if NOISY_POINTERS
                     log_warn("Warping from ({}, {}) to ({}, {})", sx, sy, constrained.x, constrained.y);
+#endif
 
                     wlr_seat_pointer_clear_focus(server->seat);
                     wlr_cursor_warp(server->cursor, nullptr, constrained.x + bounds.x, constrained.y + bounds.y);
