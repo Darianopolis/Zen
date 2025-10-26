@@ -3,6 +3,7 @@
 #include "pch.hpp"
 #include "util.hpp"
 #include "log.hpp"
+#include "debug.hpp"
 
 // -----------------------------------------------------------------------------
 
@@ -47,7 +48,7 @@ static const std::vector<std::string_view> startup_commands[] = {
 
 // -----------------------------------------------------------------------------
 
-struct OutputRule { const char* name; int x, y; bool primary; };
+struct OutputRule { const char* name; int x, y; bool primary; bool disabled; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0, .primary = true },
     { .name = "DP-2", .x = -3840, .y = 0                  },
@@ -220,6 +221,9 @@ struct Output
     wlr_box workarea;
 
     EnumMap<std::vector<LayerSurface*>, zwlr_layer_shell_v1_layer> layers;
+
+    FrameTimeReporter frame_reporter;
+    bool report_stats;
 };
 
 // -----------------------------------------------------------------------------
@@ -230,11 +234,14 @@ enum class SurfaceRole
     toplevel,
     popup,
     layer_surface,
+    subsurface,
 };
 
 struct Surface
 {
     SurfaceRole role = SurfaceRole::invalid;
+
+    ListenerSet listeners;
 
     Server* server;
     wlr_scene_tree* scene_tree;
@@ -254,6 +261,22 @@ struct Surface
     }
     static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from_data(surface->data) : nullptr; }
     static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from_data(node->data)    : nullptr; }
+
+    FrameTimeReporter frame_commit_reporter;
+    bool report_stats;
+};
+
+struct Subsurface : Surface
+{
+    static Subsurface* from(Surface* surface)
+    {
+        return (surface && surface->role == SurfaceRole::subsurface) ? static_cast<Subsurface*>(surface) : nullptr;
+    }
+    static Subsurface* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
+    static Subsurface* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
+
+    wlr_subsurface* subsurface() const { return wlr_subsurface_try_from_wlr_surface(wlr_surface); }
+    Surface* parent() const { return Surface::from(subsurface()->parent); }
 };
 
 struct Toplevel : Surface
@@ -264,8 +287,6 @@ struct Toplevel : Surface
     }
     static Toplevel* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
     static Toplevel* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
-
-    ListenerSet listeners;
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
 
@@ -309,8 +330,6 @@ struct Popup : Surface
     static Popup* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
     static Popup* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
 
-    ListenerSet listeners;
-
     wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
 };
 
@@ -323,8 +342,6 @@ struct LayerSurface : Surface
     static LayerSurface* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
     static LayerSurface* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
 
-    ListenerSet listeners;
-
     wlr_layer_surface_v1* wlr_layer_surface() const { return wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface); }
 
     wlr_scene_layer_surface_v1* scene_layer_surface;
@@ -334,8 +351,6 @@ struct CursorSurface : Surface
 {
     // This listener inherits from Surface with an `invalid` role so that
     // Surface::from(struct wlr_surface*) calls are still always safe to make
-
-    ListenerSet listeners;
 
     Surface* requestee_surface;
 };
@@ -444,6 +459,12 @@ void surface_cleanup(Surface*);
 
 void server_request_activate(wl_listener*, void*);
 
+// ---- Surface.Subsurface -----------------------------------------------------
+
+void subsurface_new(wl_listener*, void*);
+void subsurface_commit(wl_listener*, void*);
+void subsurface_destroy(wl_listener*, void*);
+
 // ---- Surface.LayerSurface ---------------------------------------------------
 
 void layer_surface_commit( wl_listener* listener, void*);
@@ -488,7 +509,6 @@ void popup_new(    wl_listener*, void*);
 
 // ---- Debug ------------------------------------------------------------------
 
-std::string toplevel_to_string(Toplevel* toplevel);
 std::string surface_to_string(Surface* surface);
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
 std::string client_to_string(wl_client* client);

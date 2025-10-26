@@ -781,6 +781,18 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
             case XKB_KEY_i:
                 spawn("xeyes", {"xeyes"});
                 return true;
+            case XKB_KEY_u:
+                if (Toplevel* toplevel = Toplevel::from(get_focused_surface(server))) {
+                    toplevel->report_stats = !toplevel->report_stats;
+                    log_info("{} statistics for {}", toplevel->report_stats ? "Enabling" : "Disabling", surface_to_string(toplevel));
+                }
+                return true;
+            case XKB_KEY_y:
+                if (Output* output = get_nearest_output_to_point(server, {server->cursor->x, server->cursor->y})) {
+                    output->report_stats = !output->report_stats;
+                    log_info("{} statistics for {}", output->report_stats ? "Enabling" : "Disabling",  output->wlr_output->name);
+                }
+                return true;
             case XKB_KEY_s:
                 surface_unfocus(get_focused_surface(server));
                 return true;

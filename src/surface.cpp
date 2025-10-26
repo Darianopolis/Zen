@@ -212,7 +212,7 @@ void server_request_activate(wl_listener*, void* data)
     wlr_xdg_activation_v1_request_activate_event* event = static_cast<wlr_xdg_activation_v1_request_activate_event*>(data);
 
     if (Toplevel* toplevel = Toplevel::from(event->surface)) {
-        log_debug("Activation request for {}, activating...", toplevel_to_string(toplevel));
+        log_debug("Activation request for {}, activating...", surface_to_string(toplevel));
         surface_focus(toplevel);
     }
 }
@@ -227,7 +227,7 @@ void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for
             if (&toplevel->scene_tree->node != node) {
                 // TODO: Root cause this issue in wlroots
                 log_error("BUG - Unexpected wlr_scene_node referencing {} (expected {}, got {}), unlinking!",
-                    toplevel_to_string(toplevel),
+                    surface_to_string(toplevel),
                     (void*)&toplevel->scene_tree->node,
                     (void*)node);
                 node->data = nullptr;
@@ -453,7 +453,7 @@ static
 void toplevel_foreign_request_maximize(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
-    log_warn("Foreign activation request for: {}", toplevel_to_string(toplevel));
+    log_warn("Foreign activation request for: {}", surface_to_string(toplevel));
     surface_focus(toplevel);
 }
 
@@ -461,7 +461,7 @@ void toplevel_map(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel mapped:    {}", toplevel_to_string(toplevel));
+    log_debug("Toplevel mapped:    {}", surface_to_string(toplevel));
 
     // wlr foreign manager
     toplevel->foreign_handle = wlr_foreign_toplevel_handle_v1_create(toplevel->server->foreign_toplevel_manager);
@@ -479,7 +479,7 @@ void toplevel_unmap(wl_listener* listener, void*)
 {
     Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel unmapped:  {}", toplevel_to_string(unmapped_toplevel));
+    log_debug("Toplevel unmapped:  {}", surface_to_string(unmapped_toplevel));
 
     // Reset interaction mode if grabbed toplevel was unmapped
     if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
@@ -516,7 +516,7 @@ void toplevel_commit(wl_listener* listener, void*)
 
     if (toplevel->xdg_toplevel()->base->initial_commit) {
 
-        log_info("Toplevel committed: {}", toplevel_to_string(toplevel));
+        log_info("Toplevel committed: {}", surface_to_string(toplevel));
 
         for (const WindowRule& rule : window_rules) {
             if (rule.app_id && (!toplevel->xdg_toplevel()->app_id || !std::string_view(toplevel->xdg_toplevel()->app_id).starts_with(rule.app_id))) continue;
@@ -557,13 +557,15 @@ void toplevel_commit(wl_listener* listener, void*)
         }
 
         if (wlr_box geom = surface_get_geometry(toplevel); !geom.width || !geom.height) {
-            log_error("Invalid geometry ({}, {}) ({}, {}) committed by {}", geom.x, geom.y, geom.width, geom.height, toplevel_to_string(toplevel));
+            log_error("Invalid geometry ({}, {}) ({}, {}) committed by {}", geom.x, geom.y, geom.width, geom.height, surface_to_string(toplevel));
         }
 
         toplevel_resize_handle_commit(toplevel);
         toplevel_update_position_for_anchor(toplevel);
         toplevel_update_border(toplevel);
     }
+
+    surface_profiler_report_commit(toplevel);
 }
 
 void toplevel_destroy(wl_listener* listener, void*)
@@ -571,7 +573,7 @@ void toplevel_destroy(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     log_debug("Toplevel destroyed: {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
-        toplevel_to_string(toplevel),
+        surface_to_string(toplevel),
         (void*)toplevel->xdg_toplevel()->base->surface,
         (void*)toplevel->xdg_toplevel(),
         (void*)&toplevel->scene_tree->node);
@@ -677,7 +679,7 @@ void toplevel_new(wl_listener* listener, void* data)
     toplevel->scene_tree->node.data = toplevel;
 
     log_debug("Toplevel created:   {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})\n{}  for {}",
-        toplevel_to_string(toplevel),
+        surface_to_string(toplevel),
         (void*)xdg_toplevel->base->surface,
         (void*)xdg_toplevel,
         (void*)&toplevel->scene_tree->node,
@@ -694,9 +696,49 @@ void toplevel_new(wl_listener* listener, void* data)
     toplevel->listeners.listen(&xdg_toplevel->events.request_minimize,   toplevel, toplevel_request_minimize);
     toplevel->listeners.listen(&xdg_toplevel->events.request_fullscreen, toplevel, toplevel_request_fullscreen);
 
+    toplevel->listeners.listen(&xdg_toplevel->base->surface->events.new_subsurface, server, subsurface_new);
+
     for (int i = 0; i < 4; ++i) {
         toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, border_color_unfocused.values);
     }
+}
+
+// -----------------------------------------------------------------------------
+
+void subsurface_new(wl_listener* listener, void* data)
+{
+    Server* server = listener_userdata<Server*>(listener);
+    wlr_subsurface* surface = static_cast<wlr_subsurface*>(data);
+
+    Subsurface* subsurface = new Subsurface{};
+    subsurface->role = SurfaceRole::subsurface;
+    subsurface->server = server;
+    subsurface->wlr_surface = surface->surface;
+    subsurface->wlr_surface->data = subsurface;
+
+    log_debug("Subsurface created: {}", surface_to_string(subsurface));
+
+    subsurface->listeners.listen(&surface->surface->events.new_subsurface, server,     subsurface_new);
+    subsurface->listeners.listen(&surface->surface->events.commit,         subsurface, subsurface_commit);
+    subsurface->listeners.listen(&         surface->events.destroy,        subsurface, subsurface_destroy);
+}
+
+void subsurface_commit(wl_listener* listener, void*)
+{
+    Subsurface* subsurface = listener_userdata<Subsurface*>(listener);
+
+    surface_profiler_report_commit(subsurface);
+}
+
+void subsurface_destroy(wl_listener* listener, void*)
+{
+    Subsurface* subsurface = listener_userdata<Subsurface*>(listener);
+
+    log_debug("Subsurface destroyed: {}", surface_to_string(subsurface));
+
+    surface_cleanup(subsurface);
+
+    delete subsurface;
 }
 
 // -----------------------------------------------------------------------------

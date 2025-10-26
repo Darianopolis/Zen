@@ -73,6 +73,10 @@ void output_frame(wl_listener* listener, void*)
     timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
+
+    if (output->report_stats) {
+        output->frame_reporter.frame(output->wlr_output->name);
+    }
 }
 
 void output_request_state(wl_listener* listener, void* data)
@@ -106,6 +110,30 @@ void output_new(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_output* wlr_output = static_cast<struct wlr_output*>(data);
 
+    const OutputRule* matched_rule = nullptr;
+    for (const OutputRule& rule : output_rules) {
+        if (std::string_view(rule.name) == wlr_output->name) {
+            matched_rule = &rule;
+            break;
+        }
+    }
+
+    if (matched_rule) {
+        log_info("Output [{}] matched rule. x = {}, y = {}", wlr_output->name, matched_rule->x, matched_rule->y);
+    } else {
+        log_info("Output [{}] matches no rules, using auto layout", wlr_output->name);
+    }
+
+    if (matched_rule && matched_rule->disabled) {
+        log_warn("  disabling output...");
+        wlr_output_state state;
+        wlr_output_state_init(&state);
+        wlr_output_state_set_enabled(&state, false);
+        wlr_output_commit_state(wlr_output, &state);
+        wlr_output_state_finish(&state);
+        return;
+    }
+
     wlr_output_init_render(wlr_output, server->allocator, server->renderer);
 
     wlr_output_state state;
@@ -115,6 +143,13 @@ void output_new(wl_listener* listener, void* data)
     wlr_output_mode* mode = wlr_output_preferred_mode(wlr_output);
     if (mode != nullptr) {
         wlr_output_state_set_mode(&state, mode);
+    }
+
+    if (wlr_output->adaptive_sync_supported) {
+        log_trace("Requesting adaptive sync for {}", wlr_output->description);
+        wlr_output_state_set_adaptive_sync_enabled(&state, true);
+    } else {
+        log_trace("Adaptive sync not supported for {}", wlr_output->description);
     }
 
     wlr_output_commit_state(wlr_output, &state);
@@ -130,19 +165,7 @@ void output_new(wl_listener* listener, void* data)
     output->listeners.listen(&wlr_output->events.request_state, output, output_request_state);
     output->listeners.listen(&wlr_output->events.destroy,       output, output_destroy);
 
-    const OutputRule* matched_rule = nullptr;
-    for (const OutputRule& rule : output_rules) {
-        if (std::string_view(rule.name) == wlr_output->name) {
-            matched_rule = &rule;
-            break;
-        }
-    }
-
-    if (matched_rule) {
-        log_info("Output [{}] matched rule. x = {}, y = {}", wlr_output->name, matched_rule->x, matched_rule->y);
-    } else {
-        log_info("Output [{}] matches no rules, using auto layout", wlr_output->name);
-    }
+    log_warn("  Adaptive sync: {}", wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED);
 
     output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, background_color.values);
 
