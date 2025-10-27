@@ -9,6 +9,7 @@ struct startup_options
     std::string xwayland_socket;
     std::string log_file;
     std::span<const std::string_view> startup_command;
+    std::vector<std::string_view> startup_shell_commands;
     uint32_t additional_outputs;
     bool ctrl_mod;
     bool use_vulkan;
@@ -200,6 +201,10 @@ void run(Server* server, const startup_options& options)
 
     // Startup command
 
+    for (std::string_view shell_cmd : options.startup_shell_commands) {
+        spawn(server, "sh", {"sh", shell_cmd}, {}, server->debug.original_cwd.c_str());
+    }
+
     chdir(server->debug.original_cwd.c_str());
     command_execute(server, CommandParser{options.startup_command});
     chdir(getenv("HOME"));
@@ -216,6 +221,8 @@ void cleanup(Server* server)
     // TODO: Wait for clients to die properly
 
     server->listeners.clear();
+
+    ipc_server_cleanup(server);
 
     wlr_xcursor_manager_destroy(server->cursor_manager);
     wlr_cursor_destroy(server->cursor);
@@ -263,17 +270,14 @@ int main(int argc, char* argv[])
             options.ctrl_mod = true;
         } else if (cmd.match("--outputs")) {
             options.additional_outputs = std::max(1, cmd.get_int().value()) - 1;
+        } else if (cmd.match("-s")) {
+            options.startup_shell_commands.emplace_back(cmd.get_string());
         } else if (cmd.match("--")) {
             options.startup_command = cmd.peek_rest();
             break;
         } else {
             print_usage();
         }
-    }
-
-    if (options.startup_command.empty()) {
-        std::cout << "You must provide a startup command\n";
-        return 0;
     }
 
     init_log(LogLevel::trace, WLR_SILENT, options.log_file.empty() ? nullptr : options.log_file.c_str());

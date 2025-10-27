@@ -196,14 +196,11 @@ void cursor_surface_destroy(wl_listener* listener, void*)
     log_info("Cursor destroyed: {}", cursor_surface_to_string(cursor_surface));
 #endif
 
-    Surface* requestee_surface = cursor_surface->requestee_surface;
-    if (requestee_surface && requestee_surface->cursor.surface == cursor_surface) {
-        requestee_surface->cursor.surface = nullptr;
-        requestee_surface->cursor.surface_set = false;
-        update_cursor_state(cursor_surface->server);
-    }
+    Server* server = cursor_surface->server;
 
     delete cursor_surface;
+
+    update_cursor_state(server);
 }
 
 static
@@ -223,7 +220,7 @@ void update_cursor_state(Server* server)
 
     server->pointer.cursor_is_visible = true;
     if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
-        CursorSurface* cursor_surface = focused_surface->cursor.surface;
+        CursorSurface* cursor_surface = focused_surface->cursor.surface.get();
         bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
         if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
             // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
@@ -273,7 +270,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
 
             cursor_surface = new CursorSurface {};
             cursor_surface->server = server;
-            cursor_surface->requestee_surface = requestee_surface;
+
             cursor_surface->wlr_surface = event->surface;
             cursor_surface->listeners.listen(&event->surface->events.commit, cursor_surface, cursor_surface_commit);
             cursor_surface->listeners.listen(&event->surface->events.destroy, cursor_surface, cursor_surface_destroy);
@@ -286,8 +283,7 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
         }
     }
 
-    // log_info("Cursor request (surface = {:14}) for {}", (void*)event->surface, surface_to_string(requestee_surface));
-    requestee_surface->cursor.surface = cursor_surface;
+    requestee_surface->cursor.surface = weak_from(cursor_surface);
     requestee_surface->cursor.hotspot_x = event->hotspot_x;
     requestee_surface->cursor.hotspot_y = event->hotspot_y;
     requestee_surface->cursor.surface_set = true;
@@ -424,13 +420,17 @@ void set_interaction_mode(Server* server, InteractionMode mode)
     server->interaction_mode = mode;
 
     if (prev_mode == InteractionMode::move || prev_mode == InteractionMode::resize) {
-        server->movesize.grabbed_toplevel = nullptr;
+        server->movesize.grabbed_toplevel.reset();
     }
 }
 
 void process_cursor_move(Server* server)
 {
-    Toplevel* toplevel = server->movesize.grabbed_toplevel;
+    Toplevel* toplevel = server->movesize.grabbed_toplevel.get();
+    if (!toplevel) {
+        set_interaction_mode(server, InteractionMode::passthrough);
+        return;
+    }
 
     wlr_box bounds = surface_get_bounds(toplevel);
     bounds.x = server->movesize.grab_bounds.x + int(server->cursor->x - server->movesize.grab.x);
@@ -440,6 +440,12 @@ void process_cursor_move(Server* server)
 
 void process_cursor_resize(Server* server)
 {
+    Toplevel* toplevel = server->movesize.grabbed_toplevel.get();
+    if (!toplevel) {
+        set_interaction_mode(server, InteractionMode::passthrough);
+        return;
+    }
+
     auto& movesize = server->movesize;
 
     int dx = int(server->cursor->x - movesize.grab.x);
@@ -458,7 +464,7 @@ void process_cursor_resize(Server* server)
 
     wlr_edges locked_edges = wlr_edges(((movesize.resize_edges & WLR_EDGE_RIGHT)  ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT)
                                      | ((movesize.resize_edges & WLR_EDGE_BOTTOM) ? WLR_EDGE_TOP  : WLR_EDGE_BOTTOM));
-    toplevel_set_bounds(movesize.grabbed_toplevel, {
+    toplevel_set_bounds(toplevel, {
         .x = left,
         .y = top,
         .width  = right  - left,

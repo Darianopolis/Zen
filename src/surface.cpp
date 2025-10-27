@@ -439,11 +439,6 @@ Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_su
 
 void surface_cleanup(Surface* surface)
 {
-    if (surface->cursor.surface) {
-        // Unlink any cursor surface that might still be referencing this surface
-        surface->cursor.surface->requestee_surface = nullptr;
-    }
-
     surface->wlr_surface->data = nullptr;
 }
 
@@ -482,7 +477,7 @@ void toplevel_unmap(wl_listener* listener, void*)
     log_debug("Toplevel unmapped:  {}", surface_to_string(unmapped_toplevel));
 
     // Reset interaction mode if grabbed toplevel was unmapped
-    if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel) {
+    if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel.get()) {
         set_interaction_mode(unmapped_toplevel->server, InteractionMode::passthrough);
     }
 
@@ -612,7 +607,7 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
         if (!edges) mode = InteractionMode::move;
     }
 
-    server->movesize.grabbed_toplevel = toplevel;
+    server->movesize.grabbed_toplevel = weak_from(toplevel);
     set_interaction_mode(server, mode);
 
     if (mode == InteractionMode::move) {

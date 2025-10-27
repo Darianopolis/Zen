@@ -56,6 +56,9 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-zero-length-array
     -Wimplicit-fallthrough
     )
+if(USE_ASAN)
+    target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
+endif()
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_sources(            ${PROJECT_NAME} PUBLIC
     src/surface.cpp
@@ -69,6 +72,9 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/ipc.cpp
     src/commands.cpp
     )
+if(USE_ASAN)
+    target_link_libraries(${PROJECT_NAME} PUBLIC asan)
+endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC
     wayland-server
     wayland-header

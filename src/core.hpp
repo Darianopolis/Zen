@@ -175,6 +175,8 @@ struct Server
 
     std::vector<CommandBind> command_binds;
 
+    wl_event_source* ipc_connection_event_source;
+
     struct {
         wlr_pointer_constraints_v1* pointer_constraints;
         wlr_pointer_constraint_v1* active_constraint;
@@ -189,7 +191,7 @@ struct Server
 
     struct {
         // TODO: This needs to be cleaned up on Toplevel destroy to avoid dangling
-        Toplevel* grabbed_toplevel;
+        Weak<Toplevel> grabbed_toplevel;
         Point grab;
         wlr_box grab_bounds;
         uint32_t resize_edges;
@@ -264,7 +266,7 @@ enum class SurfaceRole
     subsurface,
 };
 
-struct Surface
+struct Surface : WeaklyReferenceable
 {
     SurfaceRole role = SurfaceRole::invalid;
 
@@ -277,12 +279,13 @@ struct Surface
 
     struct {
         bool surface_set;
-        CursorSurface* surface;
+        Weak<CursorSurface> surface;
         int32_t hotspot_x;
         int32_t hotspot_y;
     } cursor;
 
-    static Surface* from_data(void* data) {
+    static Surface* from_data(void* data)
+    {
         Surface* surface = static_cast<Surface*>(data);
         return (surface && surface->role != SurfaceRole::invalid) ? surface : nullptr;
     }
@@ -378,8 +381,6 @@ struct CursorSurface : Surface
 {
     // This listener inherits from Surface with an `invalid` role so that
     // Surface::from(struct wlr_surface*) calls are still always safe to make
-
-    Surface* requestee_surface;
 };
 
 // ---- Commands ---------------------------------------------------------------
@@ -390,6 +391,7 @@ bool command_execute_bind(Server*, Bind);
 // ---- Process / IPC ----------------------------------------------------------
 
 void ipc_server_init(Server*);
+void ipc_server_cleanup(Server*);
 void ipc_client_run(std::span<const std::string_view>);
 
 void env_set(Server*, std::string_view name, std::optional<std::string_view> value);

@@ -109,8 +109,13 @@ void ipc_server_init(Server* server)
     if (fd >= 0) {
         log_info("Opened IPC socket, setting {}={}", ipc_socket_env, name);
         env_set(server, ipc_socket_env, name);
-        wl_event_loop_add_fd(wl_display_get_event_loop(server->display), fd, WL_EVENT_READABLE, ipc_handle_socket_accept, server);
+        server->ipc_connection_event_source = wl_event_loop_add_fd(wl_display_get_event_loop(server->display), fd, WL_EVENT_READABLE, ipc_handle_socket_accept, server);
     }
+}
+
+void ipc_server_cleanup(Server* server)
+{
+    wl_event_source_remove(server->ipc_connection_event_source);
 }
 
 void ipc_client_run(std::span<const std::string_view> args)

@@ -196,6 +196,41 @@ Point constrain_to_region(const pixman_region32_t* region, Point p1, Point p2, b
 
 // -----------------------------------------------------------------------------
 
+struct WeakState
+{
+    void* value;
+};
+
+struct WeaklyReferenceable
+{
+    std::shared_ptr<WeakState> weak_state;
+
+    ~WeaklyReferenceable() { if (weak_state) weak_state->value = nullptr; }
+};
+
+template<typename T>
+struct Weak
+{
+    std::shared_ptr<WeakState> weak_state;
+
+    T*     get() { return weak_state ? static_cast<T*>(weak_state->value) : nullptr; }
+    void reset() { weak_state = {}; }
+
+    template<typename T2>
+        requires std::derived_from<std::remove_cvref_t<T>, std::remove_cvref_t<T2>>
+    operator Weak<T2>() { return Weak<T2>{weak_state}; }
+};
+
+template<typename T>
+Weak<T> weak_from(T* t)
+{
+    if (!t) return {};
+    if (!t->weak_state) t->weak_state.reset(new WeakState{t});
+    return Weak<T>{t->weak_state};
+}
+
+// -----------------------------------------------------------------------------
+
 struct CommandParser
 {
     std::span<const std::string_view> args;
