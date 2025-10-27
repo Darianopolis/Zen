@@ -6,8 +6,9 @@ using namespace std::literals;
 
 struct startup_options
 {
-    const char* xwayland_socket;
-    const char* log_file;
+    std::string xwayland_socket;
+    std::string log_file;
+    std::span<const std::string_view> startup_command;
     uint32_t additional_outputs;
     bool ctrl_mod;
     bool use_vulkan;
@@ -24,7 +25,7 @@ void init(Server* server, const startup_options& options)
     // Core
 
     server->display = wl_display_create();
-    server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), nullptr);
+    server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), &server->session);
     if (!server->backend) {
         log_error("Failed to create wlr_backend");
         return;
@@ -158,7 +159,7 @@ void init(Server* server, const startup_options& options)
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
     server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
-	setenv("XCURSOR_SIZE", std::to_string(cursor_size).c_str(), 1);
+	env_set(server, "XCURSOR_SIZE", std::to_string(cursor_size));
 
     server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, server_cursor_motion);
@@ -183,34 +184,25 @@ void run(Server* server, const startup_options& options)
     const char* socket = wl_display_add_socket_auto(server->display);
     wlr_backend_start(server->backend);
 
-    static constexpr const char* env_display = "DISPLAY";
-    static constexpr const char* env_wayland_display = "WAYLAND_DISPLAY";
-    static constexpr const char* env_xdg_current_desktop = "XDG_CURRENT_DESKTOP";
+    env_set(server, "WAYLAND_DISPLAY", socket);
+    env_set(server, "XDG_CURRENT_DESKTOP", PROGRAM_NAME);
 
-    setenv(env_wayland_display, socket, true);
-    setenv(env_xdg_current_desktop, PROGRAM_NAME, true);
-
-    // Set application display server preferences
-    // Launch xwayland-satellite
-
-    if (options.xwayland_socket) {
-        setenv(env_display, options.xwayland_socket, true);
-        spawn("xwayland-satellite", {"xwayland-satellite", options.xwayland_socket});
+    if (!options.xwayland_socket.empty()) {
+        env_set(server, "DISPLAY", options.xwayland_socket);
+        spawn(server, "xwayland-satellite", {"xwayland-satellite", options.xwayland_socket});
     } else {
-        unsetenv(env_display);
+        env_set(server, "DISPLAY", std::nullopt);
     }
 
-    // Export environment
+    // Config server
 
-    if (!server->debug.is_nested) {
-        spawn("systemctl", {"systemctl", "--user", "import-environment", env_display, env_wayland_display, env_xdg_current_desktop});
-    }
+    ipc_server_init(server);
 
-    // Startup commands
+    // Startup command
 
-    for (auto& cmd : startup_commands) {
-        spawn(cmd.front(), cmd);
-    }
+    chdir(server->debug.original_cwd.c_str());
+    command_execute(server, CommandParser{options.startup_command});
+    chdir(getenv("HOME"));
 
     // Run
 
@@ -234,7 +226,9 @@ void cleanup(Server* server)
     wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
-constexpr const char* help_prompt = R"(Usage: {} [options]
+constexpr const char* help_prompt = R"(Usage: {} [options] -- [initial command]
+
+Options:
   --xwayland [socket]   Launch xwayland-satellite with given socket (E.g. :0, :1, ...)
   --log-file [path]     Log to file
   --outputs  [count]    Number of outputs to spawn in nested mode
@@ -243,6 +237,14 @@ constexpr const char* help_prompt = R"(Usage: {} [options]
 
 int main(int argc, char* argv[])
 {
+    std::vector<std::string_view> args(argv + 1, argv + argc);
+    CommandParser cmd{args};
+
+    if (cmd.match("msg")) {
+        ipc_client_run(cmd.peek_rest());
+        return 0;
+    }
+
     startup_options options = {};
 
     auto print_usage = [&] {
@@ -250,37 +252,31 @@ int main(int argc, char* argv[])
         std::exit(0);
     };
 
-    for (int i = 1; i < argc; ++i) {
-        const char* arg = {argv[i]};
-        auto str_param = [&] {
-            if (++i >= argc) print_usage();
-            return argv[i];
-        };
-
-        auto int_param = [&] {
-            const char* p = str_param();
-            int v = 1;
-            std::from_chars_result res = std::from_chars(p, p + strlen(p), v);
-            if (!res) print_usage();
-            return v;
-        };
-
-        if        ("--log-file"sv == arg) {
-            options.log_file = str_param();
-        } else if ("--xwayland"sv == arg) {
-            options.xwayland_socket = str_param();
-        } else if ("--vulkan"sv == arg) {
+    while (cmd) {
+        if (cmd.match("--log-file")) {
+            options.log_file = cmd.get_string();
+        } else if (cmd.match("--xwayland")) {
+            options.xwayland_socket = cmd.get_string();
+        } else if (cmd.match("--vulkan")) {
             options.use_vulkan = true;
-        } else if ("--ctrl-mod"sv == arg) {
+        } else if (cmd.match("--ctrl-mod")) {
             options.ctrl_mod = true;
-        } else if ("--outputs"sv == arg) {
-            options.additional_outputs = std::max(1, int_param()) - 1;
+        } else if (cmd.match("--outputs")) {
+            options.additional_outputs = std::max(1, cmd.get_int().value()) - 1;
+        } else if (cmd.match("--")) {
+            options.startup_command = cmd.peek_rest();
+            break;
         } else {
             print_usage();
         }
     }
 
-    init_log(LogLevel::trace, WLR_INFO, options.log_file);
+    if (options.startup_command.empty()) {
+        std::cout << "You must provide a startup command\n";
+        return 0;
+    }
+
+    init_log(LogLevel::trace, WLR_SILENT, options.log_file.empty() ? nullptr : options.log_file.c_str());
 
     // Init
 

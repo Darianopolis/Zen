@@ -3,7 +3,6 @@
 
 #define NOISY_POINTERS 0
 
-static
 uint32_t get_modifiers(Server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
@@ -708,31 +707,29 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 
     // log_trace("Key {:#6x} -> {}", sym, magic_enum::enum_name(state));
 
+    Bind input_action = { get_modifiers(server), sym };
+
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        switch (sym) {
-            case XKB_KEY_XF86AudioLowerVolume:
-                spawn("wpctl", {"wpctl",  "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01-"});
-                return true;
-            case XKB_KEY_XF86AudioMute:
-                spawn("wpctl", {"wpctl",  "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"});
-                return true;
-            case XKB_KEY_XF86AudioRaiseVolume:
-                spawn("wpctl", {"wpctl",  "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01+"});
-                return true;
-            case XKB_KEY_XF86AudioPlay:
-                spawn("playerctl", {"playerctl", "-p", playerctl_player_name, "play-pause"});
-                return true;
-            case XKB_KEY_XF86AudioPrev:
-                spawn("playerctl", {"playerctl", "-p", playerctl_player_name, "prev"});
-                return true;
-            case XKB_KEY_XF86AudioNext:
-                spawn("playerctl", {"playerctl", "-p", playerctl_player_name, "next"});
-                return true;
-            break;
+
+        // VT Switching
+
+        if (server->session && sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
+            log_debug("Switching to TTY {}", 1 + sym - XKB_KEY_XF86Switch_VT_1);
+            wlr_session_change_vt(server->session, 1 + sym - XKB_KEY_XF86Switch_VT_1);
+            return true;
+        }
+
+        // User binds
+
+        if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+            if (command_execute_bind(server, input_action)) return true;
         }
     }
 
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
+
+        // Core binds
+
         switch (sym)
         {
             case XKB_KEY_Escape:
@@ -750,37 +747,6 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 }
                 return true;
             }
-            case XKB_KEY_t:
-                spawn("konsole", {"konsole"});
-                return true;
-            case XKB_KEY_T:
-                spawn("konsole", {"konsole", "--workdir", server->debug.original_cwd.c_str()});
-                return true;
-            case XKB_KEY_g:
-                spawn("dolphin", {"dolphin"});
-                return true;
-            case XKB_KEY_h:
-                spawn("kalk", {"kalk"});
-                return true;
-            case XKB_KEY_d:
-            case XKB_KEY_D:
-                if (get_modifiers(server) & WLR_MODIFIER_SHIFT) {
-                    spawn("rofi", {"rofi", "-show", "run"});
-                } else if (get_modifiers(server) & WLR_MODIFIER_CTRL) {
-                    spawn("rofi", {"rofi", "-show", "window"});
-                } else {
-                    spawn("rofi", {"rofi", "-show", "drun"});
-                }
-                return true;
-            case XKB_KEY_v:
-                spawn("pavucontrol", {"pavucontrol"});
-                return true;
-            case XKB_KEY_n:
-                spawn("systemctl", {"systemctl", "suspend"});
-                return true;
-            case XKB_KEY_i:
-                spawn("xeyes", {"xeyes"});
-                return true;
             case XKB_KEY_u:
                 if (Toplevel* toplevel = Toplevel::from(get_focused_surface(server))) {
                     toplevel->report_stats = !toplevel->report_stats;
@@ -829,6 +795,16 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
 {
     // log_trace("Axis {} -> {}", magic_enum::enum_name(event.orientation), event.delta);
+
+    {
+        ScrollDirection dir;
+        if (event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+            dir = event.delta > 0 ? ScrollDirection::Down : ScrollDirection::Up;
+        } else {
+            dir = event.delta >= 0 ? ScrollDirection::Left : ScrollDirection::Right;
+        }
+        if (command_execute_bind(server, Bind { get_modifiers(server), dir })) return true;
+    }
 
     if (is_main_mod_down(server) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         if (server->interaction_mode ==  InteractionMode::passthrough) {

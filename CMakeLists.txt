@@ -66,6 +66,8 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/util.cpp
     src/zone.cpp
     src/debug.cpp
+    src/ipc.cpp
+    src/commands.cpp
     )
 target_link_libraries(${PROJECT_NAME} PUBLIC
     wayland-server
@@ -82,4 +84,4 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     )
 
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin COMPONENT Runtime)
-install(FILES resources/default-portals.conf DESTINATION xdg-desktop-portal RENAME ${PROJECT_NAME}-portals.conf)
+install(FILES resources/portals.conf DESTINATION xdg-desktop-portal RENAME ${PROJECT_NAME}-portals.conf)

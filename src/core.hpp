@@ -38,16 +38,6 @@ static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
 // -----------------------------------------------------------------------------
 
-static constexpr std::string_view playerctl_player_name = "spotify";
-
-static const std::vector<std::string_view> startup_commands[] = {
-    {"mako"},
-    {"waybar"},
-    {"swaybg", "-m", "fill", "-i", getenv("WALLPAPER") ?: ""},
-};
-
-// -----------------------------------------------------------------------------
-
 struct OutputRule { const char* name; int x, y; bool primary; bool disabled; };
 static constexpr OutputRule output_rules[] = {
     { .name = "DP-1", .x =     0, .y = 0, .primary = true },
@@ -69,6 +59,40 @@ struct WindowRule
 static const WindowRule window_rules[] = {
     { .app_id = "Minecraft",  .quirks{.force_pointer_constraint = true} },
     { .app_id = "steam_app_", .quirks{.force_pointer_constraint = true} },
+};
+
+// -----------------------------------------------------------------------------
+
+enum class MouseButton {
+    Left    = BTN_LEFT,
+    Right   = BTN_RIGHT,
+    Middle  = BTN_MIDDLE,
+    Side    = BTN_SIDE,
+    Extra   = BTN_EXTRA,
+    Forward = BTN_FORWARD,
+    Back    = BTN_BACK,
+    Task    = BTN_TASK,
+};
+
+enum class ScrollDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+};
+
+struct Bind
+{
+    uint32_t modifiers;
+    std::variant<xkb_keysym_t, MouseButton, ScrollDirection> action;
+
+    constexpr bool operator==(const Bind&) const = default;
+};
+
+struct CommandBind
+{
+    Bind bind;
+    std::vector<std::string> command;
 };
 
 // -----------------------------------------------------------------------------
@@ -115,6 +139,7 @@ struct Server
     ListenerSet listeners;
 
     wl_display* display;
+    wlr_session* session;
     wlr_backend* backend;
     wlr_renderer* renderer;
     wlr_allocator* allocator;
@@ -147,6 +172,8 @@ struct Server
 
     wlr_seat* seat;
     std::vector<Keyboard*> keyboards;
+
+    std::vector<CommandBind> command_binds;
 
     struct {
         wlr_pointer_constraints_v1* pointer_constraints;
@@ -355,6 +382,21 @@ struct CursorSurface : Surface
     Surface* requestee_surface;
 };
 
+// ---- Commands ---------------------------------------------------------------
+
+void command_execute(Server*, CommandParser);
+bool command_execute_bind(Server*, Bind);
+
+// ---- Process / IPC ----------------------------------------------------------
+
+void ipc_server_init(Server*);
+void ipc_client_run(std::span<const std::string_view>);
+
+void env_set(Server*, std::string_view name, std::optional<std::string_view> value);
+
+struct SpawnEnvAction { const char* name; const char* value; };
+void spawn(Server*, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {}, const char* wd = nullptr);
+
 // ---- Policy -----------------------------------------------------------------
 
 void set_interaction_mode(Server*, InteractionMode);
@@ -367,8 +409,9 @@ bool input_handle_key(   Server* server, const wlr_keyboard_key_event&   event, 
 bool input_handle_button(Server* server, const wlr_pointer_button_event& event);
 bool input_handle_axis(  Server* server, const wlr_pointer_axis_event&   event);
 
-bool is_mod_down(     Server* server, wlr_keyboard_modifier modifiers);
-bool is_main_mod_down(Server*);
+bool is_mod_down(      Server* server, wlr_keyboard_modifier modifiers);
+bool is_main_mod_down( Server*);
+uint32_t get_modifiers(Server* server);
 
 // ---- Keyboard ---------------------------------------------------------------
 

@@ -36,14 +36,8 @@ This is a project to find a happy medium between the absolute limit of code mini
 
 Run with `--help` to see command line options
 
-### Default shortcuts
+### Core shortcuts
 
-- MOD + T - Launch `konsole`
-- MOD + G - Launch `dolphin`
-- MOD + H - Launch `kalk`
-- MOD + D - Launch `rofi` (shift for `run` mode, unshifted for `drun`)
-- MOD + V - Launch `pavucontrol`
-- MOD + I - Launch `xeyes` (debug purposes)
 - MOD + Escape - Exit
 - MOD + N - Sleep/Suspend
 - MOD + S - Clear focus
@@ -100,7 +94,7 @@ These are the options that the project is normally built against. Other configur
 
 - `pavucontrol` - Audio
 - `blueman` - Bluetooth
-- `mako` - Notifications
+- `swaync` - Notifications
 - `swaybg` - Background
 - `waybar` - Highly configurably system bar
 - `kanshi` - Dynamic output profile management (required protocol not hooked up yet)

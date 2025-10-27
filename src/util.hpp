@@ -96,11 +96,6 @@ wlr_box constrain_box(wlr_box box, wlr_box bounds)
 
 // -----------------------------------------------------------------------------
 
-struct SpawnEnvAction { const char* name; const char* value; };
-void spawn(std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {});
-
-// -----------------------------------------------------------------------------
-
 #define TYPE_CHECKED_LISTENERS 1
 
 struct Listener
@@ -198,3 +193,38 @@ bool walk_scene_tree_front_to_back(wlr_scene_node* node, double sx, double sy, b
 // -----------------------------------------------------------------------------
 
 Point constrain_to_region(const pixman_region32_t* region, Point p1, Point p2, bool* was_inside);
+
+// -----------------------------------------------------------------------------
+
+struct CommandParser
+{
+    std::span<const std::string_view> args;
+    uint32_t index;
+
+    operator bool() const { return index < args.size(); }
+
+    bool match(std::string_view arg)
+    {
+        if (index < args.size() && args[index] == arg) {
+            index++;
+            return true;
+        }
+        return false;
+    }
+
+    std::span<const std::string_view> peek_rest() { return args.subspan(index); }
+
+    std::string_view peek()       { return index < args.size() ? args[index]   : std::string_view{}; }
+    std::string_view get_string() { return index < args.size() ? args[index++] : std::string_view{}; }
+
+    std::optional<int> get_int()
+    {
+        if (index >= args.size()) return std::nullopt;
+
+        int value;
+        auto res = std::from_chars(args[index].begin(), args[index].end(), value);
+        if (!res) return std::nullopt;
+
+        return value;
+    }
+};
