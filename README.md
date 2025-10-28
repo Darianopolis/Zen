@@ -67,24 +67,11 @@ Run with `--help` to see command line options
 
 - xwayland-satellite (if `--xwayland` flag passed)
 
-#### Expected CMake options
+#### Quickstart
 
-These are the options that the project is normally built against. Other configurations may work but are not tested.
-
- - `CMAKE_C_COMPILER` = `clang`
- - `CMAKE_CXX_COMPILER` = `clang++`
- - `CMAKE_LINKER_TYPE` = `MOLD`
- - Generator: `Ninja`
-
-#### Steps
-
-1. `python configure.py` (Grab dependencies and configure subprojects)
-2. Configure and build (and install) CMake project in root directory
-
-#### Additional installation steps (optional)
-
-1. Copy `${CMAKE_INSTALL_PREFIX}/xdg-desktop-portal` to `~/.config/xdg-desktop-portal`
-2. Edit portal selection as desired
+```
+python build.py -I
+```
 
 # Additional applications
 

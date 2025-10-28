@@ -202,7 +202,7 @@ void run(Server* server, const startup_options& options)
     // Startup command
 
     for (std::string_view shell_cmd : options.startup_shell_commands) {
-        spawn(server, "sh", {"sh", shell_cmd}, {}, server->debug.original_cwd.c_str());
+        spawn(server, "sh", {"sh", shell_cmd, PROGRAM_NAME}, {}, server->debug.original_cwd.c_str());
     }
 
     chdir(server->debug.original_cwd.c_str());

@@ -1,4 +1,4 @@
-alias m='zen msg'
+alias m="$1 msg"
 
 source_dir=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 

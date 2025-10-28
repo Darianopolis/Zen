@@ -1,7 +1,7 @@
 #!/bin/python
 
 import os
-import sys
+import shutil
 from pathlib import Path
 import subprocess
 import argparse
@@ -14,7 +14,9 @@ parser.add_argument("-R", "--release", action="store_true", help="Release")
 parser.add_argument("-I", "--install", action="store_true", help="Install")
 args = parser.parse_args()
 
-install_prefix = "~/.local"
+# -----------------------------------------------------------------------------
+
+program_name = "zen"
 
 # -----------------------------------------------------------------------------
 
@@ -39,14 +41,15 @@ def git_fetch(dir, repo, branch):
 
 # -----------------------------------------------------------------------------
 
-backward_cpp_src_dir = vendor_dir / "backward-cpp"
-magic_enum_src_dir   = vendor_dir / "magic-enum"
-wlroots_src_dir = vendor_dir / "wlroots"
-
-git_fetch(backward_cpp_src_dir, "https://github.com/bombela/backward-cpp.git", "master")
-git_fetch(magic_enum_src_dir,   "https://github.com/Neargye/magic_enum.git",   "master")
+git_fetch(vendor_dir / "backward-cpp", "https://github.com/bombela/backward-cpp.git", "master")
 
 # -----------------------------------------------------------------------------
+
+git_fetch(vendor_dir / "magic-enum",   "https://github.com/Neargye/magic_enum.git",   "master")
+
+# -----------------------------------------------------------------------------
+
+wlroots_src_dir = vendor_dir / "wlroots"
 
 def build_wlroots():
     version = "0.20"
@@ -161,13 +164,18 @@ if ((args.build or args.install) and not cmake_dir.exists()) or args.configure:
     cmd  = ["cmake", "-B", cmake_dir, "-G", "Ninja", f"-DVENDOR_DIR={vendor_dir}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
     cmd += [f"-DCMAKE_C_COMPILER={c_compiler}", f"-DCMAKE_CXX_COMPILER={cxx_compiler}", f"-DCMAKE_LINKER_TYPE={linker_type}"]
     cmd += [f"-DCMAKE_BUILD_TYPE={build_type}"]
-    cmd += [f"-DCMAKE_INSTALL_PREFIX={install_prefix}", "-DCMAKE_INSTALL_MESSAGE=LAZY"]
+    cmd += [f"-DPROJECT_NAME={program_name}"]
 
     print(cmd)
     configure_ok = 0 == subprocess.run(cmd).returncode
 
 if configure_ok and (args.build or args.install):
-    cmd = ["cmake", "--build", cmake_dir]
-    if args.install:
-        cmd += ["--target", "install"]
-    subprocess.run(cmd)
+    subprocess.run(["cmake", "--build", cmake_dir])
+
+# -----------------------------------------------------------------------------
+
+if args.install:
+    local_bin_dir  = ensure_dir(os.path.expanduser("~/.local/bin"))
+    xdg_portal_dir = ensure_dir(os.path.expanduser("~/.config/xdg-desktop-portal"))
+    shutil.copyfile(cmake_dir / program_name, local_bin_dir / program_name)
+    shutil.copyfile("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.0)
 
-project(zen)
+project(${PROJECT_NAME})
 
 # ------------------------------------------------------------------------------
 
@@ -80,6 +80,3 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     Backward::Object
     magic_enum::magic_enum
     )
-
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin COMPONENT Runtime)
-install(FILES resources/portals.conf DESTINATION xdg-desktop-portal RENAME ${PROJECT_NAME}-portals.conf)

@@ -51,6 +51,7 @@
 - ✅ Screen casting
 - ✅ Bottom layer shell elements should be behind fullscreen applications when fullscreen app is on top and focused, but above otherwise
 - ✅ Position toplevels from anchor point - no juddering when resizing
+- ✅ Support wlr-foreign-toplevel-management and xdg-foreign
 
 ### Bugs
 
@@ -111,7 +112,6 @@
       - Spawn option to either ignore, log, or pipe to separate file
    - Track log message origins
    - Use standard logging format with available log view/analysis tooling?
-- Support wlr-foreign-toplevel-management for rofi window mode
 - Surface positions should remain fixed relative to output position when resizing other outputs
 - Compositor interaction state management
    - Newly spawned windows should not take focus when in the middle of an interaction (e.g. zone/move/size)
@@ -126,7 +126,6 @@
    - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
 - Add IPC with messaging client
    - Spawn message
-- xdg_foreign support
 - Idle protocol
 - Consolidate interaction logic
    - Move input binding logic to `interaction.cpp`
