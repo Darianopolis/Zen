@@ -32,7 +32,7 @@ m bind "Mod+h"       spawn kalk
 
 m bind "Mod+v" spawn pavucontrol
 m bind "Mod+b" spawn blueman-manager
-m bind "Mod+g" spawn swaync-client --toggle-panel
+m bind "Mod+j" spawn swaync-client --toggle-panel
 
 # capture
 

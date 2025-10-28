@@ -889,8 +889,8 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
     if (get_num_pointer_buttons_down(server) == 1 || !get_focused_surface(server)) {
         if (surface_under_cursor) {
             Surface* prev_focus = get_focused_surface(server);
-            surface_focus(surface_under_cursor);
-            if (prev_focus != get_focused_surface(server)) {
+            if (prev_focus != surface_under_cursor && server->seat->pointer_state.grab == server->seat->pointer_state.default_grab) {
+                surface_focus(surface_under_cursor);
                 if (!is_cursor_visible(server)) {
                     log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
                     return true;
