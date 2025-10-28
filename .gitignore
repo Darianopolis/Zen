@@ -2,8 +2,7 @@
 .vscode/
 .idea/
 
-3rdparty/*
-build
+.build/
 
 *.log
 *.log.conf

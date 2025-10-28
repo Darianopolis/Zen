@@ -12,10 +12,10 @@ struct startup_options
     std::vector<std::string_view> startup_shell_commands;
     uint32_t additional_outputs;
     bool ctrl_mod;
-    bool use_vulkan;
 };
 
 #define USE_SYNCOBJ 0
+#define USE_VULKAN 1
 
 static
 void init(Server* server, const startup_options& options)
@@ -61,11 +61,11 @@ void init(Server* server, const startup_options& options)
 
     // Renderer
 
-    if (options.use_vulkan) {
-        server->renderer = wlr_vk_renderer_create_with_drm_fd(wlr_backend_get_drm_fd(server->backend));
-    } else {
-        server->renderer = wlr_renderer_autocreate(server->backend);
-    }
+#if USE_VULKAN
+    server->renderer = wlr_vk_renderer_create_with_drm_fd(wlr_backend_get_drm_fd(server->backend));
+#else
+    server->renderer = wlr_renderer_autocreate(server->backend);
+#endif
     wlr_renderer_init_wl_display(server->renderer, server->display);
     server->allocator = wlr_allocator_autocreate(server->backend, server->renderer);
 
@@ -264,8 +264,6 @@ int main(int argc, char* argv[])
             options.log_file = cmd.get_string();
         } else if (cmd.match("--xwayland")) {
             options.xwayland_socket = cmd.get_string();
-        } else if (cmd.match("--vulkan")) {
-            options.use_vulkan = true;
         } else if (cmd.match("--ctrl-mod")) {
             options.ctrl_mod = true;
         } else if (cmd.match("--outputs")) {

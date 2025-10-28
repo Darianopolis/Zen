@@ -1,6 +1,7 @@
 CompileFlags:
     Remove: [-fmodules-ts, -fmodule-mapper=*, -fdeps-format=*]
     Add:    [-Wno-unused-function]
+    CompilationDatabase: .build/debug
 
 Diagnostics:
     Suppress: unused-includes

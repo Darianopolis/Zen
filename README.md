@@ -76,10 +76,6 @@ These are the options that the project is normally built against. Other configur
  - `CMAKE_LINKER_TYPE` = `MOLD`
  - Generator: `Ninja`
 
-#### Additional options
-
- - `USE_GIT_WLROOTS` = `ON`/`OFF` (default `OFF`) - Enables latest development git version of wlroots
-
 #### Steps
 
 1. `python configure.py` (Grab dependencies and configure subprojects)

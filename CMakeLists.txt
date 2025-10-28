@@ -4,19 +4,11 @@ project(zen)
 
 # ------------------------------------------------------------------------------
 
-add_subdirectory(3rdparty/wayland EXCLUDE_FROM_ALL)
+add_subdirectory(${VENDOR_DIR}/wayland EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
-set(USE_GIT_WLROOTS OFF)
-if (USE_GIT_WLROOTS)
-    add_subdirectory(3rdparty/wlroots-install EXCLUDE_FROM_ALL)
-else()
-    add_library(               wlroots INTERFACE)
-    target_compile_definitions(wlroots INTERFACE WLR_USE_UNSTABLE)
-    target_link_libraries(     wlroots INTERFACE wlroots-0.19)
-    target_include_directories(wlroots INTERFACE /usr/include/wlroots-0.19)
-endif()
+add_subdirectory(${VENDOR_DIR}/wlroots-install EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
@@ -31,11 +23,11 @@ target_include_directories(pixman INTERFACE /usr/include/pixman-1)
 
 # ------------------------------------------------------------------------------
 
-add_subdirectory(3rdparty/backward-cpp EXCLUDE_FROM_ALL)
+add_subdirectory(${VENDOR_DIR}/backward-cpp EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
-add_subdirectory(3rdparty/magic-enum EXCLUDE_FROM_ALL)
+add_subdirectory(${VENDOR_DIR}/magic-enum EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
