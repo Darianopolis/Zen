@@ -1,10 +1,37 @@
 #pragma
 
 #include "pch.hpp"
+#include "log.hpp"
 
 // -----------------------------------------------------------------------------
 
 std::string duration_to_string(std::chrono::duration<double, std::nano> dur);
+
+// -----------------------------------------------------------------------------
+
+struct FunctionTrace
+{
+    std::chrono::steady_clock::time_point enter_time;
+    const char* name;
+
+    static thread_local int depth;
+
+    FunctionTrace(const char* extra = nullptr, std::source_location loc = std::source_location::current())
+        : enter_time(std::chrono::steady_clock::now())
+        , name(extra ? extra : loc.function_name())
+    {
+        depth++;
+    }
+
+    ~FunctionTrace()
+    {
+        depth--;
+        auto leave_time = std::chrono::steady_clock::now();
+        if (leave_time - enter_time > 1ms) {
+            log_warn("{}{} - {}", std::string(depth * 2, ' '), name ?: "", duration_to_string(leave_time - enter_time));
+        }
+    }
+};
 
 // -----------------------------------------------------------------------------
 

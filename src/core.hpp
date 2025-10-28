@@ -417,6 +417,8 @@ uint32_t get_modifiers(Server* server);
 
 // ---- Keyboard ---------------------------------------------------------------
 
+void keyboard_new(Server*, wlr_input_device*);
+
 void seat_keyboard_focus_change(wl_listener*, void*);
 
 void keyboard_handle_modifiers(wl_listener*, void*);
@@ -439,25 +441,24 @@ void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, doub
 void seat_request_set_cursor(      wl_listener*, void*);
 void seat_pointer_focus_change(    wl_listener*, void*);
 
-void server_cursor_motion(         wl_listener*, void*);
-void server_cursor_motion_absolute(wl_listener*, void*);
-void server_cursor_button(         wl_listener*, void*);
-void server_cursor_axis(           wl_listener*, void*);
-void server_cursor_frame(          wl_listener*, void*);
+void cursor_motion(         wl_listener*, void*);
+void cursor_motion_absolute(wl_listener*, void*);
+void cursor_button(         wl_listener*, void*);
+void cursor_axis(           wl_listener*, void*);
+void cursor_frame(          wl_listener*, void*);
+
+void pointer_new(Server*, wlr_input_device*);
 
 void pointer_destroy(wl_listener*, void*);
 
 // ---- Pointer.Constraints ----------------------------------------------------
 
-void server_pointer_constraint_new(wl_listener*, void*);
-void server_pointer_constraint_destroy(wl_listener*, void*);
+void pointer_constraint_new(    wl_listener*, void*);
+void pointer_constraint_destroy(wl_listener*, void*);
 
 // ---- Input ------------------------------------------------------------------
 
-void server_new_keyboard(Server*, wlr_input_device*);
-void server_new_pointer( Server*, wlr_input_device*);
-
-void server_new_input(          wl_listener*, void*);
+void input_new(                 wl_listener*, void*);
 void seat_request_set_selection(wl_listener*, void*);
 void seat_request_start_drag(   wl_listener*, void*);
 void seat_start_drag(           wl_listener*, void*);
@@ -502,30 +503,31 @@ wlr_box surface_get_coord_system(Surface*);
 
 void surface_cleanup(Surface*);
 
-void server_request_activate(wl_listener*, void*);
+void request_activate(wl_listener*, void*);
 
 // ---- Surface.Subsurface -----------------------------------------------------
 
-void subsurface_new(wl_listener*, void*);
-void subsurface_commit(wl_listener*, void*);
+void subsurface_new(    wl_listener*, void*);
+void subsurface_commit( wl_listener*, void*);
 void subsurface_destroy(wl_listener*, void*);
 
 // ---- Surface.LayerSurface ---------------------------------------------------
 
+void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
+
 void layer_surface_commit( wl_listener* listener, void*);
 void layer_surface_unmap(  wl_listener*, void*);
 void layer_surface_destroy(wl_listener* listener, void*);
-void layer_surface_new(wl_listener*, void*);
-void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
+void layer_surface_new(    wl_listener*, void*);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
-void toplevel_set_bounds(      Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
-void toplevel_set_activated(   Toplevel*, bool active);
-bool toplevel_is_fullscreen(   Toplevel*);
-void toplevel_set_fullscreen(  Toplevel*, bool fullscreen);
-void toplevel_update_border(   Toplevel*);
-bool toplevel_is_interactable( Toplevel*);
+void toplevel_set_bounds(       Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
+void toplevel_set_activated(    Toplevel*, bool active);
+bool toplevel_is_fullscreen(    Toplevel*);
+void toplevel_set_fullscreen(   Toplevel*, bool fullscreen);
+void toplevel_update_border(    Toplevel*);
+bool toplevel_is_interactable(  Toplevel*);
 void toplevel_begin_interactive(Toplevel*, InteractionMode);
 void toplevel_close(            Toplevel*);
 

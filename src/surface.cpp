@@ -207,7 +207,7 @@ void toplevel_set_activated(Toplevel* toplevel, bool active)
     toplevel_update_border(toplevel);
 }
 
-void server_request_activate(wl_listener*, void* data)
+void request_activate(wl_listener*, void* data)
 {
     wlr_xdg_activation_v1_request_activate_event* event = static_cast<wlr_xdg_activation_v1_request_activate_event*>(data);
 

@@ -47,7 +47,7 @@ Run with `--help` to see command line options
 - MOD + Tab - Cycle focus (shift to cycle backwards)
 - MOD + Scroll - Cycle focus under cursor
 - MOD + LeftClick - Start zone placement
-- MOD + Shift + LeftCLick - Start move
+- MOD + Shift + LeftClick - Start move
 - MOD + RightClick - Start move/size
 
 # Building
@@ -96,6 +96,10 @@ These are the options that the project is normally built against. Other configur
 - `blueman` - Bluetooth
 - `swaync` - Notifications
 - `swaybg` - Background
-- `waybar` - Highly configurably system bar
+- `waybar` - System bar
 - `kanshi` - Dynamic output profile management (required protocol not hooked up yet)
 - `lxqt-sudo` - GUI frontend for `sudo`
+- `grim` - Screenshot
+- `slurp` - Region selection
+- `xdg-desktop-portal-wlr` - Screenshare
+- `gnome-keyring` - Secret Service

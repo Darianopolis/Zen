@@ -1,5 +1,7 @@
 alias m='zen msg'
 
+source_dir=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
+
 # audio control
 
 m bind "XF86AudioLowerVolume" spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.01-
@@ -31,6 +33,10 @@ m bind "Mod+h"       spawn kalk
 m bind "Mod+v" spawn pavucontrol
 m bind "Mod+b" spawn blueman-manager
 m bind "Mod+g" spawn swaync-client --toggle-panel
+
+# capture
+
+m bind "Print" spawn sh $source_dir/screenshot.sh
 
 # system
 

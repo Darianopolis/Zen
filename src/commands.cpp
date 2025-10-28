@@ -2,6 +2,28 @@
 
 // -----------------------------------------------------------------------------
 
+static
+std::filesystem::path find_on_path(std::string_view in)
+{
+    std::string_view path = getenv("PATH");
+
+    size_t b = 0;
+    for (;;) {
+        size_t n = path.find_first_of(":", b);
+        auto part = path.substr(b, n - b);
+
+        auto path = std::filesystem::path(part) / in;
+        if (std::filesystem::exists(path)) {
+            return path;
+        }
+
+        if (n == std::string::npos) break;
+        b = n + 1;
+    }
+
+    return {};
+}
+
 void spawn(Server*, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions, const char* wd)
 {
     std::vector<std::string> argv_str;
@@ -12,6 +34,19 @@ void spawn(Server*, std::string_view file, std::span<const std::string_view> arg
     argv_cstr.emplace_back(nullptr);
 
     log_info("Spawning process [{}] args {}", file, argv);
+
+    auto path = find_on_path(file);
+    if (path.empty()) {
+        log_error("  Could not find on path");
+        return;
+    }
+
+    log_debug("  Full path: {}", path.c_str());
+
+    if (access(path.c_str(), X_OK) != 0) {
+        log_error("  File is not executable");
+        return;
+    }
 
     if (fork() == 0) {
         if (wd) {
@@ -24,8 +59,8 @@ void spawn(Server*, std::string_view file, std::span<const std::string_view> arg
                 unsetenv(env_action.name);
             }
         }
-        std::string file_str{file};
-        execvp(file_str.c_str(), argv_cstr.data());
+        execv(path.c_str(), argv_cstr.data());
+        _Exit(0);
     }
 }
 
@@ -45,6 +80,18 @@ void env_set(Server* server, std::string_view name, std::optional<std::string_vi
 // -----------------------------------------------------------------------------
 
 static
+wlr_keyboard_modifier mod_from_string(Server* server, std::string_view name)
+{
+    if      (name == "Mod")   { return wlr_keyboard_modifier(server->main_modifier); }
+    else if (name == "Ctrl")  { return WLR_MODIFIER_CTRL;  }
+    else if (name == "Shift") { return WLR_MODIFIER_SHIFT; }
+    else if (name == "Alt")   { return WLR_MODIFIER_ALT;   }
+    else if (name == "Super") { return WLR_MODIFIER_LOGO;  }
+
+    return {};
+}
+
+static
 Bind bind_from_string(Server* server, std::string_view bind_string)
 {
     Bind bind = {};
@@ -54,11 +101,9 @@ Bind bind_from_string(Server* server, std::string_view bind_string)
         size_t n = bind_string.find_first_of('+', b);
         auto part = std::string(bind_string.substr(b, n - b));
         if (!part.empty()) {
-            if      (part == "Mod")         { bind.modifiers |= server->main_modifier; }
-            else if (part == "Ctrl")        { bind.modifiers |= WLR_MODIFIER_CTRL;     }
-            else if (part == "Shift")       { bind.modifiers |= WLR_MODIFIER_SHIFT;    }
-            else if (part == "Alt")         { bind.modifiers |= WLR_MODIFIER_ALT;      }
-            else if (part == "Super")       { bind.modifiers |= WLR_MODIFIER_LOGO;     }
+            if (wlr_keyboard_modifier mod = mod_from_string(server, part)) {
+                bind.modifiers |= mod;
+            }
             else if (part == "ScrollUp")    { bind.action = ScrollDirection::Up;       }
             else if (part == "ScrollDown")  { bind.action = ScrollDirection::Down;     }
             else if (part == "ScrollLeft")  { bind.action = ScrollDirection::Left;     }

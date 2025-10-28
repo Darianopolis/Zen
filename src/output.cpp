@@ -61,8 +61,6 @@ wlr_box output_get_bounds(Output* output)
 
 void output_frame(wl_listener* listener, void*)
 {
-    // This function is called every time an output is ready to display a frame, generally at the output's refresh rate (e.g. 60Hz)
-
     Output* output = listener_userdata<Output*>(listener);
     wlr_scene* scene = output->server->scene;
 
@@ -82,7 +80,6 @@ void output_frame(wl_listener* listener, void*)
 void output_request_state(wl_listener* listener, void* data)
 {
     // This function is called when the backend requests a new state for the output.
-    // For example, wayland and X11 backends request a new mode when the output window is resized
 
     Output* output = listener_userdata<Output*>(listener);
     const wlr_output_event_request_state* event = static_cast<wlr_output_event_request_state*>(data);
@@ -211,9 +208,4 @@ void output_reconfigure(Output* output)
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         output_layout_layer(output, layer);
     }
-
-    wlr_output_state state;
-    wlr_output_state_init(&state);
-    wlr_output_commit_state(output->wlr_output, &state);
-    wlr_output_state_finish(&state);
 }

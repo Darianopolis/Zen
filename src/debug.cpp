@@ -103,6 +103,10 @@ std::string duration_to_string(std::chrono::duration<double, std::nano> dur)
 
 // -----------------------------------------------------------------------------
 
+int thread_local FunctionTrace::depth = 0;
+
+// -----------------------------------------------------------------------------
+
 void FrameTimeReporter::frame(std::string_view name)
 {
     auto now = std::chrono::steady_clock::now();

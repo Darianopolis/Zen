@@ -81,7 +81,7 @@ void seat_keyboard_focus_change(wl_listener*, void* data)
     if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_border(toplevel);
 }
 
-void server_new_keyboard(Server* server, wlr_input_device* device)
+void keyboard_new(Server* server, wlr_input_device* device)
 {
     wlr_keyboard* wlr_keyboard = wlr_keyboard_from_input_device(device);
 
@@ -128,7 +128,7 @@ uint32_t get_num_pointer_buttons_down(Server* server)
     return count;
 }
 
-void server_new_pointer(Server* server, wlr_input_device* device)
+void pointer_new(Server* server, wlr_input_device* device)
 {
     Pointer* pointer = new Pointer{};
     pointer->server = server;
@@ -152,16 +152,16 @@ void server_new_pointer(Server* server, wlr_input_device* device)
     wlr_cursor_attach_input_device(server->cursor, device);
 }
 
-void server_new_input(wl_listener* listener, void* data)
+void input_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_input_device* device = static_cast<wlr_input_device*>(data);
     switch (device->type) {
         case WLR_INPUT_DEVICE_KEYBOARD:
-            server_new_keyboard(server, device);
+            keyboard_new(server, device);
             break;
         case WLR_INPUT_DEVICE_POINTER:
-            server_new_pointer(server, device);
+            pointer_new(server, device);
             break;
         default:
             break;
@@ -360,7 +360,7 @@ struct PointerConstraint
     ListenerSet listeners;
 };
 
-void server_pointer_constraint_destroy(wl_listener* listener, void*)
+void pointer_constraint_destroy(wl_listener* listener, void*)
 {
     PointerConstraint* constraint = listener_userdata<PointerConstraint*>(listener);
 
@@ -382,7 +382,7 @@ void server_pointer_constraint_set_region(wl_listener* listener, void*)
     process_cursor_motion(pointer_constriant->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
 }
 
-void server_pointer_constraint_new(wl_listener* listener, void* data)
+void pointer_constraint_new(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
@@ -395,7 +395,7 @@ void server_pointer_constraint_new(wl_listener* listener, void* data)
     pointer_constraint->server = server;
     pointer_constraint->constraint = constraint;
 
-    pointer_constraint->listeners.listen(&constraint->events.destroy,    pointer_constraint, server_pointer_constraint_destroy);
+    pointer_constraint->listeners.listen(&constraint->events.destroy,    pointer_constraint, pointer_constraint_destroy);
     pointer_constraint->listeners.listen(&constraint->events.set_region, pointer_constraint, server_pointer_constraint_set_region);
 }
 
@@ -630,7 +630,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     seat_drag_update_position(server);
 }
 
-void server_cursor_motion(wl_listener* listener, void* data)
+void cursor_motion(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_event* event = static_cast<wlr_pointer_motion_event*>(data);
@@ -640,7 +640,7 @@ void server_cursor_motion(wl_listener* listener, void* data)
     process_cursor_motion(server, event->time_msec, &event->pointer->base, event->delta_x, event->delta_y, event->delta_x, event->delta_y, event->unaccel_dx, event->unaccel_dy);
 }
 
-void server_cursor_motion_absolute(wl_listener* listener, void* data)
+void cursor_motion_absolute(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_absolute_event* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
@@ -671,7 +671,7 @@ void server_cursor_motion_absolute(wl_listener* listener, void* data)
     process_cursor_motion(server, event->time_msec, &event->pointer->base, dx, dy, rel_dx, rel_dy, rel_dx, rel_dy);
 }
 
-void server_cursor_button(wl_listener* listener, void* data)
+void cursor_button(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_button_event* event = static_cast<wlr_pointer_button_event*>(data);
@@ -683,7 +683,7 @@ void server_cursor_button(wl_listener* listener, void* data)
     wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 }
 
-void server_cursor_axis(wl_listener* listener, void* data)
+void cursor_axis(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_axis_event* event = static_cast<wlr_pointer_axis_event*>(data);
@@ -693,7 +693,7 @@ void server_cursor_axis(wl_listener* listener, void* data)
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source, event->relative_direction);
 }
 
-void server_cursor_frame(wl_listener* listener, void*)
+void cursor_frame(wl_listener* listener, void*)
 {
     Server* server = listener_userdata<Server*>(listener);
 

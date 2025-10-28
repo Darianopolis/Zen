@@ -91,7 +91,7 @@ void init(Server* server, const startup_options& options)
     // XDG Activation
 
     server->activation = wlr_xdg_activation_v1_create(server->display);
-    server->listeners.listen(&server->activation->events.request_activate, server, server_request_activate);
+    server->listeners.listen(&server->activation->events.request_activate, server, request_activate);
 
     // XDG Foreign
 
@@ -147,12 +147,12 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&               server->seat->events.request_start_drag,    server, seat_request_start_drag);
     server->listeners.listen(&               server->seat->events.start_drag,            server, seat_start_drag);
 
-    server->listeners.listen(&server->backend->events.new_input, server, server_new_input);
+    server->listeners.listen(&server->backend->events.new_input, server, input_new);
 
     // Pointer + Cursor
 
     server->pointer.pointer_constraints = wlr_pointer_constraints_v1_create(server->display);
-    server->listeners.listen(&server->pointer.pointer_constraints->events.new_constraint, server, server_pointer_constraint_new);
+    server->listeners.listen(&server->pointer.pointer_constraints->events.new_constraint, server, pointer_constraint_new);
 
     server->pointer.relative_pointer_manager = wlr_relative_pointer_manager_v1_create(server->display);
 
@@ -163,11 +163,11 @@ void init(Server* server, const startup_options& options)
 	env_set(server, "XCURSOR_SIZE", std::to_string(cursor_size));
 
     server->interaction_mode = InteractionMode::passthrough;
-    server->listeners.listen(&server->cursor->events.motion,          server, server_cursor_motion);
-    server->listeners.listen(&server->cursor->events.motion_absolute, server, server_cursor_motion_absolute);
-    server->listeners.listen(&server->cursor->events.button,          server, server_cursor_button);
-    server->listeners.listen(&server->cursor->events.axis,            server, server_cursor_axis);
-    server->listeners.listen(&server->cursor->events.frame,           server, server_cursor_frame);
+    server->listeners.listen(&server->cursor->events.motion,          server, cursor_motion);
+    server->listeners.listen(&server->cursor->events.motion_absolute, server, cursor_motion_absolute);
+    server->listeners.listen(&server->cursor->events.button,          server, cursor_button);
+    server->listeners.listen(&server->cursor->events.axis,            server, cursor_axis);
+    server->listeners.listen(&server->cursor->events.frame,           server, cursor_frame);
 
     server->pointer.debug_visual_half_extent = 4;
     server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
