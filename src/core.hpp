@@ -85,8 +85,12 @@ struct Bind
 {
     uint32_t modifiers;
     std::variant<xkb_keysym_t, MouseButton, ScrollDirection> action;
+    bool release = false;
 
-    constexpr bool operator==(const Bind&) const = default;
+    constexpr bool operator==(const Bind& o) const
+    {
+        return modifiers == o.modifiers && action == o.action;
+    }
 };
 
 struct CommandBind
@@ -147,6 +151,7 @@ struct Server
     struct {
         std::filesystem::path original_cwd;
         bool is_nested;
+        wlr_backend* window_backend;
     } debug;
 
     wlr_scene* scene;

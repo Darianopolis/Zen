@@ -39,7 +39,6 @@ Run with `--help` to see command line options
 ### Core shortcuts
 
 - MOD + Escape - Exit
-- MOD + N - Sleep/Suspend
 - MOD + S - Clear focus
 - MOD + F - Toggle fullscreen
 - MOD + Q - Close focused window

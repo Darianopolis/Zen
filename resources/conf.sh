@@ -44,4 +44,8 @@ m bind "Mod+n" spawn systemctl suspend
 
 # debug
 
-m bind "Mod+i" spawn xeyes
+m bind "Mod+i"  spawn xeyes
+m bind "Mod+k"  debug cursor toggle
+m bind "Mod+o^" debug output new
+m bind "Mod+u"  debug stats window toggle
+m bind "Mod+y"  debug stats output toggle

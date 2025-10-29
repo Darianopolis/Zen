@@ -10,7 +10,6 @@ struct startup_options
     std::string log_file;
     std::span<const std::string_view> startup_command;
     std::vector<std::string_view> startup_shell_commands;
-    uint32_t additional_outputs;
     bool ctrl_mod;
 };
 
@@ -42,6 +41,7 @@ void init(Server* server, const startup_options& options)
         if (!wlr_backend_is_wl(backend) && !wlr_backend_is_x11(backend)) return;
 
         server->debug.is_nested = true;
+        server->debug.window_backend = backend;
 
         if (options.ctrl_mod) {
             server->main_modifier = WLR_MODIFIER_CTRL;
@@ -51,10 +51,6 @@ void init(Server* server, const startup_options& options)
             server->main_modifier = WLR_MODIFIER_ALT;
             server->main_modifier_keysym_left = XKB_KEY_Alt_L;
             server->main_modifier_keysym_right = XKB_KEY_Alt_R;
-        }
-
-        for (uint32_t i = 0; i < options.additional_outputs; ++i) {
-            wlr_wl_output_create(backend);
         }
     };
     wlr_multi_for_each_backend(server->backend, [](wlr_backend* b, void* d) { (*static_cast<decltype(for_each_backend)*>(d))(b); }, &for_each_backend);
@@ -233,12 +229,11 @@ void cleanup(Server* server)
     wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
-constexpr const char* help_prompt = R"(Usage: {} [options] -- [initial command]
+constexpr const char* help_prompt = R"(Usage: {} [options] [-- [initial command]]
 
 Options:
   --xwayland [socket]   Launch xwayland-satellite with given socket (E.g. :0, :1, ...)
   --log-file [path]     Log to file
-  --outputs  [count]    Number of outputs to spawn in nested mode
   --ctrl-mod            Use CTRL instead of ALT in nested mode
 )";
 
@@ -266,8 +261,6 @@ int main(int argc, char* argv[])
             options.xwayland_socket = cmd.get_string();
         } else if (cmd.match("--ctrl-mod")) {
             options.ctrl_mod = true;
-        } else if (cmd.match("--outputs")) {
-            options.additional_outputs = std::max(1, cmd.get_int().value()) - 1;
         } else if (cmd.match("-s")) {
             options.startup_shell_commands.emplace_back(cmd.get_string());
         } else if (cmd.match("--")) {

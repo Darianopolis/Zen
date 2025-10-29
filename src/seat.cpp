@@ -713,23 +713,20 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 
     // log_trace("Key {:#6x} -> {}", sym, magic_enum::enum_name(state));
 
-    Bind input_action = { get_modifiers(server), sym };
+    Bind input_action = { get_modifiers(server), sym, event.state == WL_KEYBOARD_KEY_STATE_RELEASED };
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    // VT Switching
 
-        // VT Switching
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && server->session && sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
+        log_debug("Switching to TTY {}", 1 + sym - XKB_KEY_XF86Switch_VT_1);
+        wlr_session_change_vt(server->session, 1 + sym - XKB_KEY_XF86Switch_VT_1);
+        return true;
+    }
 
-        if (server->session && sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
-            log_debug("Switching to TTY {}", 1 + sym - XKB_KEY_XF86Switch_VT_1);
-            wlr_session_change_vt(server->session, 1 + sym - XKB_KEY_XF86Switch_VT_1);
-            return true;
-        }
+    // User binds
 
-        // User binds
-
-        if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-            if (command_execute_bind(server, input_action)) return true;
-        }
+    if (command_execute_bind(server, input_action)) {
+        return state == WL_KEYBOARD_KEY_STATE_PRESSED;
     }
 
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
@@ -753,18 +750,6 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 }
                 return true;
             }
-            case XKB_KEY_u:
-                if (Toplevel* toplevel = Toplevel::from(get_focused_surface(server))) {
-                    toplevel->report_stats = !toplevel->report_stats;
-                    log_info("{} statistics for {}", toplevel->report_stats ? "Enabling" : "Disabling", surface_to_string(toplevel));
-                }
-                return true;
-            case XKB_KEY_y:
-                if (Output* output = get_nearest_output_to_point(server, {server->cursor->x, server->cursor->y})) {
-                    output->report_stats = !output->report_stats;
-                    log_info("{} statistics for {}", output->report_stats ? "Enabling" : "Disabling",  output->wlr_output->name);
-                }
-                return true;
             case XKB_KEY_s:
                 surface_unfocus(get_focused_surface(server));
                 return true;
@@ -777,11 +762,6 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
                     toplevel_set_fullscreen(focused, !toplevel_is_fullscreen(focused));
                 }
-                return true;
-            case XKB_KEY_j:
-                server->pointer.debug_visual_enabled = !server->pointer.debug_visual_enabled;
-                log_info("Debug cursor visual: {}", server->pointer.debug_visual_enabled ? "enabled" : "disabled");
-                update_cursor_state(server);
                 return true;
             default:
                 ;

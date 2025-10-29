@@ -177,5 +177,6 @@ if configure_ok and (args.build or args.install):
 if args.install:
     local_bin_dir  = ensure_dir(os.path.expanduser("~/.local/bin"))
     xdg_portal_dir = ensure_dir(os.path.expanduser("~/.config/xdg-desktop-portal"))
-    shutil.copyfile(cmake_dir / program_name, local_bin_dir / program_name)
-    shutil.copyfile("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
+    os.remove(local_bin_dir / program_name)
+    shutil.copy2(cmake_dir / program_name, local_bin_dir / program_name)
+    shutil.copy2("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")

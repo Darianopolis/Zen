@@ -1,3 +1,8 @@
+## Resources
+
+- <https://wayland.app/protocols/>
+- <https://absurdlysuspicious.github.io/wayland-protocols-table/>
+
 ## Surfaces
 
 - `geometry`: the region of the surface (in surface local coordinates) that corresponds to logical client geometry, excluding border effects such as drop shadows
