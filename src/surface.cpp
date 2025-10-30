@@ -36,8 +36,8 @@ void toplevel_update_border(Toplevel* toplevel)
             wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
             wlr_scene_rect_set_color(toplevel->border[i],
                 get_focused_surface(toplevel->server) == toplevel
-                    ? border_color_focused.values
-                    : border_color_unfocused.values);
+                    ? glm::value_ptr(border_color_focused)
+                    : glm::value_ptr(border_color_unfocused));
         } else {
             wlr_scene_node_set_enabled(&toplevel->border[i]->node, false);
         }
@@ -136,7 +136,7 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
     toplevel->resize.last_resize_serial = toplevel->resize.last_commited_serial;
 
     // Update cursor focus if window under cursor has changed
-    process_cursor_motion(toplevel->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    process_cursor_motion(toplevel->server, 0, nullptr, {}, {}, {});
 
     if (toplevel->resize.any_pending) {
         toplevel->resize.any_pending = false;
@@ -222,7 +222,7 @@ void request_activate(wl_listener*, void* data)
 static
 void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data, bool backward)
 {
-    auto fn = [&](wlr_scene_node* node, double, double) -> bool {
+    auto fn = [&](wlr_scene_node* node, ivec2) -> bool {
         if (Toplevel* toplevel = Toplevel::from(node)) {
             if (&toplevel->scene_tree->node != node) {
                 // TODO: Root cause this issue in wlroots
@@ -238,9 +238,9 @@ void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for
         return true;
     };
     if (backward) {
-        walk_scene_tree_back_to_front(&server->scene->tree.node, 0, 0, FUNC_REF(fn), false);
+        walk_scene_tree_back_to_front(&server->scene->tree.node, {}, FUNC_REF(fn), false);
     } else {
-        walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn), false);
+        walk_scene_tree_front_to_back(&server->scene->tree.node, {}, FUNC_REF(fn), false);
     }
 }
 
@@ -380,7 +380,7 @@ void surface_focus(Surface* surface)
     }
 
     // TODO: Tidy up and consolidate API for handling (re)focus
-    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    process_cursor_motion(server, 0, nullptr, {}, {}, {});
     update_cursor_state(server);
 }
 
@@ -402,26 +402,26 @@ void surface_unfocus(Surface* surface)
 
     wlr_seat_keyboard_clear_focus(surface->server->seat);
 
-    process_cursor_motion(surface->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    process_cursor_motion(surface->server, 0, nullptr, {}, {}, {});
     update_cursor_state(surface->server);
 }
 
-Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy)
+Surface* get_surface_accepting_input_at(Server* server, vec2 layout_pos, wlr_surface** p_surface, vec2* surface_pos)
 {
     Surface* surface = nullptr;
-    auto fn = [&](wlr_scene_node* node, double node_x, double node_y) {
+    auto fn = [&](wlr_scene_node* node, ivec2 node_pos) {
         if (node->type != WLR_SCENE_NODE_BUFFER) return true;
 
         wlr_scene_buffer* scene_buffer = wlr_scene_buffer_from_node(node);
         wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(scene_buffer);
         if (!scene_surface) return true;
-        if (lx < node_x || ly < node_y || lx - node_x >= scene_buffer->dst_width || ly - node_y >= scene_buffer->dst_height) return true;
+        wlr_box box = { node_pos.x, node_pos.y, scene_buffer->dst_width, scene_buffer->dst_height };
+        if (!wlr_box_contains_point(&box, layout_pos.x, layout_pos.y)) return true;
 
         *p_surface = scene_surface->surface;
-        *p_sx = lx - node_x;
-        *p_sy = ly - node_y;
+        *surface_pos = layout_pos - vec2(node_pos);
 
-        if (scene_buffer->point_accepts_input && !scene_buffer->point_accepts_input(scene_buffer, p_sx, p_sy)) {
+        if (scene_buffer->point_accepts_input && !scene_buffer->point_accepts_input(scene_buffer, &surface_pos->x, &surface_pos->y)) {
             return true;
         }
 
@@ -432,7 +432,7 @@ Surface* get_surface_at(Server* server, double lx, double ly, wlr_surface** p_su
 
         return !tree;
     };
-    walk_scene_tree_front_to_back(&server->scene->tree.node, 0, 0, FUNC_REF(fn), true);
+    walk_scene_tree_front_to_back(&server->scene->tree.node, {}, FUNC_REF(fn), true);
 
     return surface;
 }
@@ -533,12 +533,12 @@ void toplevel_commit(wl_listener* listener, void*)
                 // Child, position at center of parent.
                 // TODO: Use xdg_positioner requests to position child windwos
                 wlr_box parent_bounds = surface_get_bounds(Surface::from(toplevel->xdg_toplevel()->parent->base->surface));
-                bounds.x = parent_bounds.x + (parent_bounds.width - bounds.width)   / 2;
+                bounds.x = parent_bounds.x + (parent_bounds.width  - bounds.width)  / 2;
                 bounds.y = parent_bounds.y + (parent_bounds.height - bounds.height) / 2;
             } else {
                 // Non-child, spawn under mouse
-                bounds.x = toplevel->server->cursor->x - bounds.width  / 2.0;
-                bounds.y = toplevel->server->cursor->y - bounds.height / 2.0;
+                bounds.x = get_cursor_pos(toplevel->server).x - bounds.width  / 2.0;
+                bounds.y = get_cursor_pos(toplevel->server).y - bounds.height / 2.0;
             }
 
             // Constrain to output (respecting external padding)
@@ -594,8 +594,8 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
     uint32_t edges = 0;
     if (mode == InteractionMode::resize) {
         wlr_box bounds = surface_get_bounds(toplevel);
-        int nine_slice_x = ((server->cursor->x - bounds.x) * 3) / bounds.width;
-        int nine_slice_y = ((server->cursor->y - bounds.y) * 3) / bounds.height;
+        int nine_slice_x = ((get_cursor_pos(server).x - bounds.x) * 3) / bounds.width;
+        int nine_slice_y = ((get_cursor_pos(server).y - bounds.y) * 3) / bounds.height;
 
         if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
         else if (nine_slice_x > 1) edges |= WLR_EDGE_RIGHT;
@@ -611,10 +611,10 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
     set_interaction_mode(server, mode);
 
     if (mode == InteractionMode::move) {
-        server->movesize.grab = Point{server->cursor->x, server->cursor->y};
+        server->movesize.grab = get_cursor_pos(server);
         server->movesize.grab_bounds = surface_get_bounds(toplevel);
     } else {
-        server->movesize.grab = Point{server->cursor->x, server->cursor->y};
+        server->movesize.grab = get_cursor_pos(server);
         server->movesize.grab_bounds = surface_get_bounds(toplevel);
         server->movesize.resize_edges = edges;
     }
@@ -694,7 +694,7 @@ void toplevel_new(wl_listener* listener, void* data)
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.new_subsurface, server, subsurface_new);
 
     for (int i = 0; i < 4; ++i) {
-        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, border_color_unfocused.values);
+        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, glm::value_ptr(border_color_unfocused));
     }
 }
 
@@ -840,7 +840,7 @@ void layer_surface_new(wl_listener* listener, void* data)
     wlr_scene_tree* scene_layer = server->layers[strata_from_wlr(wlr_layer_surface->pending.layer)];
 
     Output* output = Output::from(wlr_layer_surface->output);
-    if (!output) output = get_nearest_output_to_point(server, Point{server->cursor->x, server->cursor->y});
+    if (!output) output = get_nearest_output_to_point(server, get_cursor_pos(server));
     if (!output) {
         wlr_layer_surface_v1_destroy(wlr_layer_surface);
         return;
@@ -885,7 +885,7 @@ void popup_commit(wl_listener* listener, void*)
     popup->popup_tree = popup->scene_tree;
     popup->scene_tree->node.data = parent;
 
-    Output* output = get_nearest_output_to_point(popup->server, {popup->server->cursor->x, popup->server->cursor->y});
+    Output* output = get_nearest_output_to_point(popup->server, get_cursor_pos(popup->server));
     if (output) {
         wlr_box output_bounds = output_get_bounds(output);
 

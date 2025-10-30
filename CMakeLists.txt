@@ -31,6 +31,10 @@ add_subdirectory(${VENDOR_DIR}/magic-enum EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
+add_subdirectory(${VENDOR_DIR}/glm EXCLUDE_FROM_ALL)
+
+# ------------------------------------------------------------------------------
+
 add_executable(            ${PROJECT_NAME})
 target_precompile_headers( ${PROJECT_NAME} PUBLIC src/pch.hpp)
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PROGRAM_NAME=\"${PROJECT_NAME}\"")

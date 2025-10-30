@@ -45,7 +45,11 @@ git_fetch(vendor_dir / "backward-cpp", "https://github.com/bombela/backward-cpp.
 
 # -----------------------------------------------------------------------------
 
-git_fetch(vendor_dir / "magic-enum",   "https://github.com/Neargye/magic_enum.git",   "master")
+git_fetch(vendor_dir / "magic-enum", "https://github.com/Neargye/magic_enum.git", "master")
+
+# -----------------------------------------------------------------------------
+
+git_fetch(vendor_dir / "glm", "https://github.com/g-truc/glm.git", "master")
 
 # -----------------------------------------------------------------------------
 
@@ -177,6 +181,10 @@ if configure_ok and (args.build or args.install):
 if args.install:
     local_bin_dir  = ensure_dir(os.path.expanduser("~/.local/bin"))
     xdg_portal_dir = ensure_dir(os.path.expanduser("~/.config/xdg-desktop-portal"))
-    os.remove(local_bin_dir / program_name)
-    shutil.copy2(cmake_dir / program_name, local_bin_dir / program_name)
+
+    exe_dst = local_bin_dir / program_name
+    if exe_dst.exists():
+        os.remove(exe_dst)
+    shutil.copy2(cmake_dir / program_name, exe_dst)
+
     shutil.copy2("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")

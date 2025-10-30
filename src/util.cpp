@@ -3,18 +3,17 @@
 
 // -----------------------------------------------------------------------------
 
-bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data, bool filter_disabled)
+bool walk_scene_tree_back_to_front(wlr_scene_node* node, ivec2 node_pos, bool(*for_each)(void*, wlr_scene_node*, ivec2), void* for_each_data, bool filter_disabled)
 {
     if (filter_disabled && !node->enabled) return true;
-    if (!for_each(for_each_data, node, sx, sy)) return false;
+    if (!for_each(for_each_data, node, node_pos)) return false;
 
     if (node->type == WLR_SCENE_NODE_TREE) {
         wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
         wlr_scene_node* child;
         wl_list_for_each(child, &tree->children, link) {
-            double nx = sx + child->x;
-            double ny = sy + child->y;
-            if (!walk_scene_tree_back_to_front(child, nx, ny, for_each, for_each_data, filter_disabled)) {
+            ivec2 np = node_pos + ivec2{child->x, child->y};
+            if (!walk_scene_tree_back_to_front(child, np, for_each, for_each_data, filter_disabled)) {
                 return false;
             }
         }
@@ -23,7 +22,7 @@ bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, b
     return true;
 }
 
-bool walk_scene_tree_front_to_back(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data, bool filter_disabled)
+bool walk_scene_tree_front_to_back(wlr_scene_node* node, ivec2 node_pos, bool(*for_each)(void*, wlr_scene_node*, ivec2), void* for_each_data, bool filter_disabled)
 {
     if (filter_disabled && !node->enabled) return true;
 
@@ -31,22 +30,21 @@ bool walk_scene_tree_front_to_back(wlr_scene_node* node, double sx, double sy, b
         wlr_scene_tree* tree = wlr_scene_tree_from_node(node);
         wlr_scene_node* child;
         wl_list_for_each_reverse(child, &tree->children, link) {
-            double nx = sx + child->x;
-            double ny = sy + child->y;
-            if (!walk_scene_tree_front_to_back(child, nx, ny, for_each, for_each_data, filter_disabled)) {
+            ivec2 np = node_pos + ivec2{child->x, child->y};
+            if (!walk_scene_tree_front_to_back(child, np, for_each, for_each_data, filter_disabled)) {
                 return false;
             }
         }
     }
 
-    return for_each(for_each_data, node, sx, sy);
+    return for_each(for_each_data, node, node_pos);
 }
 
 // -----------------------------------------------------------------------------
 
-Point constrain_to_region(const pixman_region32_t* region, Point p1, Point p2, bool* was_inside)
+vec2 constrain_to_region(const pixman_region32_t* region, vec2 p1, vec2 p2, bool* was_inside)
 {
-    if (Point constrained; (*was_inside = wlr_region_confine(region, p1.x, p1.y, p2.x, p2.y, &constrained.x, &constrained.y))) {
+    if (vec2 constrained; (*was_inside = wlr_region_confine(region, p1.x, p1.y, p2.x, p2.y, &constrained.x, &constrained.y))) {
         return constrained;
     }
 
@@ -54,17 +52,17 @@ Point constrain_to_region(const pixman_region32_t* region, Point p1, Point p2, b
     const pixman_box32_t* rects = pixman_region32_rectangles(region, &nrects);
 
     double best_dist = INFINITY;
-    Point best = p2;
+    vec2 best = p2;
 
     for (int i = 0; i < nrects; ++i) {
         pixman_box32_t rect = rects[i];
 
-        Point inside = Point(
+        vec2 inside = vec2(
             std::clamp(p2.x, double(rect.x1), double(std::max(rect.x1, rect.x2 - 1))),
             std::clamp(p2.y, double(rect.y1), double(std::max(rect.y1, rect.y2 - 1)))
         );
 
-        double dist = distance_between(p2, inside);
+        double dist = glm::distance(p2, inside);
         if (dist < best_dist) {
             best = inside;
             best_dist = dist;

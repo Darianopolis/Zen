@@ -18,7 +18,7 @@ wlr_box zone_apply_external_padding(wlr_box box)
 
 void zone_init(Server* server)
 {
-    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, zone_color_inital.values);
+    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, glm::value_ptr(zone_color_inital));
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 
@@ -31,13 +31,13 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     if (event.button == BTN_LEFT) {
         if (pressed && is_main_mod_down(server) && !is_mod_down(server, WLR_MODIFIER_SHIFT)) {
             if (is_cursor_visible(server)) {
-                double sx, sy;
+                vec2 surface_pos;
                 wlr_surface* surface = nullptr;
-                if (Toplevel* toplevel = Toplevel::from(get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy))) {
+                if (Toplevel* toplevel = Toplevel::from(get_surface_accepting_input_at(server, get_cursor_pos(server), &surface, &surface_pos))) {
                     surface_focus(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
-                        wlr_scene_rect_set_color(server->zone.selector, zone_color_inital.values);
+                        wlr_scene_rect_set_color(server->zone.selector, glm::value_ptr(zone_color_inital));
                         wlr_scene_node_set_enabled(&server->zone.selector->node, true);
                         server->zone.selecting = false;
                         server->zone.moving = true;
@@ -65,8 +65,8 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
         if (pressed) {
             server->zone.selecting = !server->zone.selecting;
             wlr_scene_rect_set_color(server->zone.selector, server->zone.selecting
-                                                                ? zone_color_select.values
-                                                                : zone_color_inital.values);
+                                                                ? glm::value_ptr(zone_color_select)
+                                                                : glm::value_ptr(zone_color_inital));
         }
         return true;
     }
@@ -93,10 +93,9 @@ wlr_box get_zone_box(wlr_box workarea, int zone_x, int zone_y)
 
 void zone_process_cursor_motion(Server* server)
 {
-    Output* output = get_output_at(server, {server->cursor->x, server->cursor->y});
+    vec2 point = get_cursor_pos(server);
+    Output* output = get_output_at(server, point);
     wlr_box workarea = output->workarea;
-
-    Point point { server->cursor->x, server->cursor->y };
 
     wlr_box pointer_zone = {};
     bool any_zones = false;
@@ -105,10 +104,10 @@ void zone_process_cursor_motion(Server* server)
         for (uint32_t zone_y = 0; zone_y < zone_vertical_zones; ++zone_y) {
             wlr_box rect = get_zone_box(workarea, zone_x, zone_y);
             wlr_box check_rect {
-                .x      = rect.x      - zone_selection_leeway[0],
-                .y      = rect.y      - zone_selection_leeway[1],
-                .width  = rect.width  + zone_selection_leeway[0] * 2,
-                .height = rect.height + zone_selection_leeway[1] * 2,
+                .x      = rect.x      - zone_selection_leeway.x,
+                .y      = rect.y      - zone_selection_leeway.y,
+                .width  = rect.width  + zone_selection_leeway.x * 2,
+                .height = rect.height + zone_selection_leeway.y * 2,
             };
 
             if (wlr_box_contains_point(&check_rect, point.x, point.y)) {

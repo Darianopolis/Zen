@@ -10,17 +10,17 @@
 static constexpr uint32_t cursor_size = 24;
 
 static constexpr int   border_width = 2;
-static constexpr Color border_color_unfocused = { 0.3f, 0.3f, 0.3f, 1.0f };
-static constexpr Color border_color_focused   = { 0.4f, 0.4f, 1.0f, 1.0f };
+static constexpr fvec4 border_color_unfocused = premultiply({ 0.3f, 0.3f, 0.3f, 1.0f });
+static constexpr fvec4 border_color_focused   = premultiply({ 0.4f, 0.4f, 1.0f, 1.0f });
 
-static constexpr Color background_color = { 0.1f, 0.1f, 0.1f, 1.f };
+static constexpr fvec4 background_color = premultiply({ 0.1f, 0.1f, 0.1f, 1.f });
 
-static constexpr Color zone_color_inital = { 0.6f, 0.6f, 0.6f, 0.4f };
-static constexpr Color zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
+static constexpr fvec4 zone_color_inital = premultiply({ 0.6f, 0.6f, 0.6f, 0.4f });
+static constexpr fvec4 zone_color_select = premultiply({ 0.4f, 0.4f, 1.0f, 0.4f });
 
 static constexpr uint32_t zone_horizontal_zones = 6;
 static constexpr uint32_t zone_vertical_zones   = 2;
-static constexpr int      zone_selection_leeway[] = { 200, 200 };
+static constexpr ivec2    zone_selection_leeway = { 200, 200 };
 static constexpr struct {
     int left   = 7 + border_width;
     int top    = 7 + border_width;
@@ -197,7 +197,7 @@ struct Server
     struct {
         // TODO: This needs to be cleaned up on Toplevel destroy to avoid dangling
         Weak<Toplevel> grabbed_toplevel;
-        Point grab;
+        vec2 grab;
         wlr_box grab_bounds;
         uint32_t resize_edges;
     } movesize;
@@ -234,8 +234,7 @@ struct Pointer
 
     struct wlr_pointer* wlr_pointer;
 
-    double last_abs_x;
-    double last_abs_y;
+    vec2 last_abs_pos;
 
     static Pointer* from(struct wlr_pointer* pointer) { return pointer ? static_cast<Pointer*>(pointer->data) : nullptr; }
 };
@@ -410,15 +409,15 @@ void set_interaction_mode(Server*, InteractionMode);
 
 void      focus_cycle_begin(Server*, wlr_cursor*);
 void      focus_cycle_step( Server*, wlr_cursor*, bool backwards);
-Toplevel* focus_cycle_end(Server* server);
+Toplevel* focus_cycle_end(  Server*);
 
-bool input_handle_key(   Server* server, const wlr_keyboard_key_event&   event, xkb_keysym_t sym);
-bool input_handle_button(Server* server, const wlr_pointer_button_event& event);
-bool input_handle_axis(  Server* server, const wlr_pointer_axis_event&   event);
+bool input_handle_key(   Server*, const wlr_keyboard_key_event&, xkb_keysym_t sym);
+bool input_handle_button(Server*, const wlr_pointer_button_event&);
+bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 
-bool is_mod_down(      Server* server, wlr_keyboard_modifier modifiers);
+bool is_mod_down(      Server*, wlr_keyboard_modifier modifiers);
 bool is_main_mod_down( Server*);
-uint32_t get_modifiers(Server* server);
+uint32_t get_modifiers(Server*);
 
 // ---- Keyboard ---------------------------------------------------------------
 
@@ -438,10 +437,12 @@ void cursor_surface_commit(wl_listener*, void*);
 void cursor_surface_destroy(wl_listener*, void*);
 bool cursor_surface_is_visible(CursorSurface*);
 
+vec2 get_cursor_pos(Server*);
+
 uint32_t get_num_pointer_buttons_down(Server*);
 
 void process_cursor_resize(Server*);
-void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, double dx, double dy, double rel_dx, double rel_dy, double dx_unaccel, double dy_unaccel);
+void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, vec2 delta, vec2 rel, vec2 rel_unaccel);
 
 void seat_request_set_cursor(      wl_listener*, void*);
 void seat_pointer_focus_change(    wl_listener*, void*);
@@ -480,8 +481,8 @@ wlr_box zone_apply_external_padding(wlr_box);
 
 // ---- Output -----------------------------------------------------------------
 
-Output* get_output_at(              Server*, Point);
-Output* get_nearest_output_to_point(Server*, Point);
+Output* get_output_at(              Server*, vec2);
+Output* get_nearest_output_to_point(Server*, vec2);
 Output* get_nearest_output_to_box(  Server*, wlr_box);
 Output* get_output_for_surface(     Surface*);
 
@@ -496,8 +497,8 @@ void output_layout_change(wl_listener*, void*);
 
 // ---- Surface ----------------------------------------------------------------
 
-Surface* get_surface_at(     Server* server, double lx, double ly, wlr_surface** p_surface, double *p_sx, double *p_sy);
-Surface* get_focused_surface(Server*);
+Surface* get_surface_accepting_input_at(Server*, vec2 layout_pos, wlr_surface** p_surface, vec2* surface_pos);
+Surface* get_focused_surface(           Server*);
 
 void surface_focus(  Surface*);
 void surface_unfocus(Surface*);
@@ -520,9 +521,9 @@ void subsurface_destroy(wl_listener*, void*);
 
 void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 
-void layer_surface_commit( wl_listener* listener, void*);
+void layer_surface_commit( wl_listener*, void*);
 void layer_surface_unmap(  wl_listener*, void*);
-void layer_surface_destroy(wl_listener* listener, void*);
+void layer_surface_destroy(wl_listener*, void*);
 void layer_surface_new(    wl_listener*, void*);
 
 // ---- Surface.Toplevel -------------------------------------------------------
@@ -561,8 +562,8 @@ void popup_new(    wl_listener*, void*);
 
 // ---- Debug ------------------------------------------------------------------
 
-std::string surface_to_string(Surface* surface);
-std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint);
-std::string client_to_string(wl_client* client);
+std::string surface_to_string(Surface*);
+std::string pointer_constraint_to_string(wlr_pointer_constraint_v1*);
+std::string client_to_string(wl_client*);
 std::string cursor_surface_to_string(CursorSurface*);
-std::string pointer_to_string(Pointer* pointer);
+std::string pointer_to_string(Pointer*);

@@ -254,7 +254,7 @@ void command_execute(Server* server, CommandParser cmd)
                 }
 
             } else if (cmd.match("output")) {
-                if (Output* output = get_nearest_output_to_point(server, {server->cursor->x, server->cursor->y})) {
+                if (Output* output = get_nearest_output_to_point(server, get_cursor_pos(server))) {
                     output->report_stats = command_new_boolean_state(output->report_stats, cmd.get_string());
                     log_info("{} statistics for {}", output->report_stats ? "Enabling" : "Disabling",  output->wlr_output->name);
                 }

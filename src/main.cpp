@@ -166,7 +166,7 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->cursor->events.frame,           server, cursor_frame);
 
     server->pointer.debug_visual_half_extent = 4;
-    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, Color{}.values);
+    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, glm::value_ptr(fvec4{}));
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
     update_cursor_state(server);

@@ -3,6 +3,11 @@
 
 #define NOISY_POINTERS 0
 
+vec2 get_cursor_pos(Server* server)
+{
+    return { server->cursor->x, server->cursor->y };
+}
+
 uint32_t get_modifiers(Server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
@@ -210,13 +215,13 @@ void update_cursor_debug_visual_position(Server* server)
 
     int32_t he = server->pointer.debug_visual_half_extent;
     wlr_scene_node_set_position(&server->pointer.debug_visual->node,
-        server->cursor->x + (server->debug.is_nested ? 0 : -he*2),
-        server->cursor->y - he*2);
+        get_cursor_pos(server).x + (server->debug.is_nested ? 0 : -he*2),
+        get_cursor_pos(server).y - he*2);
 }
 
 void update_cursor_state(Server* server)
 {
-    Color debug_visual_color;
+    fvec4 debug_visual_color;
 
     server->pointer.cursor_is_visible = true;
     if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
@@ -227,23 +232,23 @@ void update_cursor_state(Server* server)
             server->pointer.cursor_is_visible = visible;
 
             wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
-            debug_visual_color = visible ? Color{0, 1, 0, 0.5} : Color{1, 0, 0, 0.5};
+            debug_visual_color = visible ? premultiply({0, 1, 0, 0.5}) : premultiply({1, 0, 0, 0.5});
         } else {
             // log_debug("Cursor state: Client not allowed to hide cursor, using default");
             wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-            debug_visual_color = Color{1, 1, 0, 0.5};
+            debug_visual_color = premultiply({1, 1, 0, 0.5});
         }
     } else {
         // log_debug("Cursor state: No surface focus or surface cursor unset, using default");
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-        debug_visual_color = Color{1, 0, 1, 0.5};
+        debug_visual_color = premultiply({1, 0, 1, 0.5});
     }
 
     // Update debug visual
 
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, server->pointer.debug_visual_enabled);
     if (server->pointer.debug_visual_enabled) {
-        wlr_scene_rect_set_color(server->pointer.debug_visual, debug_visual_color.values);
+        wlr_scene_rect_set_color(server->pointer.debug_visual, glm::value_ptr(debug_visual_color));
         update_cursor_debug_visual_position(server);
     }
 }
@@ -329,7 +334,7 @@ void seat_drag_icon_destroy(wl_listener* listener, void*)
 
     // TODO: Refocus last focused toplevel
 
-    process_cursor_motion(server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    process_cursor_motion(server, 0, nullptr, {}, {}, {});
 
     unlisten(listener_from(listener));
 }
@@ -347,7 +352,7 @@ void seat_start_drag(wl_listener* listener, void* data)
 static
 void seat_drag_update_position(Server* server)
 {
-    wlr_scene_node_set_position(&server->drag_icon_parent->node, int(std::round(server->cursor->x)), int(std::round(server->cursor->y)));
+    wlr_scene_node_set_position(&server->drag_icon_parent->node, get_cursor_pos(server).x, get_cursor_pos(server).y);
 }
 
 // -----------------------------------------------------------------------------
@@ -379,7 +384,7 @@ void server_pointer_constraint_set_region(wl_listener* listener, void*)
 {
     PointerConstraint* pointer_constriant = listener_userdata<PointerConstraint*>(listener);
 
-    process_cursor_motion(pointer_constriant->server, 0, nullptr, 0, 0, 0, 0, 0, 0);
+    process_cursor_motion(pointer_constriant->server, 0, nullptr, {}, {}, {});
 }
 
 void pointer_constraint_new(wl_listener* listener, void* data)
@@ -433,8 +438,8 @@ void process_cursor_move(Server* server)
     }
 
     wlr_box bounds = surface_get_bounds(toplevel);
-    bounds.x = server->movesize.grab_bounds.x + int(server->cursor->x - server->movesize.grab.x);
-    bounds.y = server->movesize.grab_bounds.y + int(server->cursor->y - server->movesize.grab.y);
+    bounds.x = server->movesize.grab_bounds.x + int(get_cursor_pos(server).x - server->movesize.grab.x);
+    bounds.y = server->movesize.grab_bounds.y + int(get_cursor_pos(server).y - server->movesize.grab.y);
     toplevel_set_bounds(toplevel, bounds);
 }
 
@@ -448,19 +453,18 @@ void process_cursor_resize(Server* server)
 
     auto& movesize = server->movesize;
 
-    int dx = int(server->cursor->x - movesize.grab.x);
-    int dy = int(server->cursor->y - movesize.grab.y);
+    ivec2 delta = vec2(get_cursor_pos(server)) - movesize.grab;
 
     int left   = movesize.grab_bounds.x;
     int top    = movesize.grab_bounds.y;
     int right  = movesize.grab_bounds.x + movesize.grab_bounds.width;
     int bottom = movesize.grab_bounds.y + movesize.grab_bounds.height;
 
-    if      (movesize.resize_edges & WLR_EDGE_TOP)    top    = std::min(top    + dy, bottom - 1);
-    else if (movesize.resize_edges & WLR_EDGE_BOTTOM) bottom = std::max(bottom + dy, top    + 1);
+    if      (movesize.resize_edges & WLR_EDGE_TOP)    top    = std::min(top    + delta.y, bottom - 1);
+    else if (movesize.resize_edges & WLR_EDGE_BOTTOM) bottom = std::max(bottom + delta.y, top    + 1);
 
-    if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(left  + dx, right - 1);
-    else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(right + dx, left  + 1);
+    if      (movesize.resize_edges & WLR_EDGE_LEFT)  left  = std::min(left  + delta.x, right - 1);
+    else if (movesize.resize_edges & WLR_EDGE_RIGHT) right = std::max(right + delta.x, left  + 1);
 
     wlr_edges locked_edges = wlr_edges(((movesize.resize_edges & WLR_EDGE_RIGHT)  ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT)
                                      | ((movesize.resize_edges & WLR_EDGE_BOTTOM) ? WLR_EDGE_TOP  : WLR_EDGE_BOTTOM));
@@ -472,7 +476,7 @@ void process_cursor_resize(Server* server)
     }, locked_edges);
 }
 
-void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, double dx, double dy, double rel_dx, double rel_dy, double dx_unaccel, double dy_unaccel)
+void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, vec2 delta, vec2 rel, vec2 rel_unaccel)
 {
     Defer _ = [&] {
         update_cursor_debug_visual_position(server);
@@ -482,15 +486,15 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
     if (time_msecs) {
         if (server->interaction_mode == InteractionMode::move) {
-            wlr_cursor_move(server->cursor, device, dx, dy);
+            wlr_cursor_move(server->cursor, device, delta.x, delta.y);
             process_cursor_move(server);
             return;
         } else if (server->interaction_mode == InteractionMode::resize) {
-            wlr_cursor_move(server->cursor, device, dx, dy);
+            wlr_cursor_move(server->cursor, device, delta.x, delta.y);
             process_cursor_resize(server);
             return;
         } else if (server->interaction_mode == InteractionMode::zone) {
-            wlr_cursor_move(server->cursor, device, dx, dy);
+            wlr_cursor_move(server->cursor, device, delta.x, delta.y);
             zone_process_cursor_motion(server);
             return;
         }
@@ -498,19 +502,18 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
     // Get focused surface
 
-    double sx = 0, sy = 0;
+    vec2 surface_pos = {};
     wlr_seat* seat = server->seat;
     Surface* surface = nullptr;
     struct wlr_surface* wlr_surface = nullptr;
     if (get_num_pointer_buttons_down(server) > 0 && (surface = Surface::from(seat->pointer_state.focused_surface))) {
         wlr_surface = surface->wlr_surface;
         wlr_box coord_system = surface_get_coord_system(surface);
-        sx = server->cursor->x - coord_system.x;
-        sy = server->cursor->y - coord_system.y;
+        surface_pos = get_cursor_pos(server) - vec2(box_origin(coord_system));
     }
 
     if (!wlr_surface) {
-        surface = get_surface_at(server, server->cursor->x, server->cursor->y, &wlr_surface, &sx, &sy);
+        surface = get_surface_accepting_input_at(server, get_cursor_pos(server), &wlr_surface, &surface_pos);
     }
 
     // Handle constraints and update mouse
@@ -522,8 +525,8 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         //     log_indent, surface_to_string(Surface::from(server->seat->pointer_state.focused_surface)),
         //     log_indent, surface_to_string(Surface::from(server->seat->keyboard_state.focused_surface)));
 
-        if (rel_dx || rel_dy || dx_unaccel || dy_unaccel) {
-            wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel_dx, rel_dy, dx_unaccel, dy_unaccel);
+        if (rel != vec2{} || rel_unaccel != vec2{}) {
+            wlr_relative_pointer_manager_v1_send_relative_motion(server->pointer.relative_pointer_manager, server->seat, uint64_t(time_msecs) * 1000, rel.x, rel.y, rel_unaccel.x, rel_unaccel.y);
         }
 
         bool constraint_active = false;
@@ -568,14 +571,13 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
             if (region) {
                 wlr_box bounds = surface_get_bounds(focused_surface);
-                sx = server->cursor->x - bounds.x;
-                sy = server->cursor->y - bounds.y;
+                surface_pos = get_cursor_pos(server) - vec2(box_origin(bounds));
 
                 bool was_inside;
-                Point constrained = constrain_to_region(region, Point(sx, sy), Point(sx + dx, sy + dy), &was_inside);
+                vec2 constrained = constrain_to_region(region, surface_pos, surface_pos + delta, &was_inside);
 
                 // log_warn("constraining ({:.1f}, {:.1f}) to ({}, {}) ({}, {}) = ({:.1f}, {:.1f}), was_inside = {}",
-                //     sx, sy,
+                //     surface_pos.x, surface_pos.y,
                 //     bounds.x, bounds.y,
                 //     bounds.x + bounds.width, bounds.y + bounds.height,
                 //     constrained.x + bounds.x, constrained.y + bounds.y,
@@ -584,8 +586,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
                 surface = focused_surface;
                 wlr_surface = surface->wlr_surface;
 
-                dx = constrained.x - sx;
-                dy = constrained.y - sy;
+                delta = constrained - surface_pos;
 
                 if (!was_inside) {
 #if NOISY_POINTERS
@@ -594,10 +595,8 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
                     wlr_seat_pointer_clear_focus(server->seat);
                     wlr_cursor_warp(server->cursor, nullptr, constrained.x + bounds.x, constrained.y + bounds.y);
-                    sx = constrained.x;
-                    sy = constrained.y;
-                    dx = 0;
-                    dy = 0;
+                    surface_pos = constrained;
+                    delta = {};
                 }
 
                 if (type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
@@ -607,7 +606,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
             }
         }
 
-        wlr_cursor_move(server->cursor, device, dx, dy);
+        wlr_cursor_move(server->cursor, device, delta.x, delta.y);
     }
 
     // Notify
@@ -619,8 +618,8 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
             time_msecs = now.tv_sec * 1000 + now.tv_nsec / 1000'000;
         }
 
-        wlr_seat_pointer_notify_enter(seat, wlr_surface, sx, sy);
-        wlr_seat_pointer_notify_motion(seat, time_msecs, sx, sy);
+        wlr_seat_pointer_notify_enter(seat, wlr_surface, surface_pos.x, surface_pos.y);
+        wlr_seat_pointer_notify_motion(seat, time_msecs, surface_pos.x, surface_pos.y);
     } else {
         wlr_seat_pointer_notify_clear_focus(seat);
     }
@@ -637,7 +636,7 @@ void cursor_motion(wl_listener* listener, void* data)
 
     // TODO: Handle custom acceleration here
 
-    process_cursor_motion(server, event->time_msec, &event->pointer->base, event->delta_x, event->delta_y, event->delta_x, event->delta_y, event->unaccel_dx, event->unaccel_dy);
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, {event->delta_x, event->delta_y}, {event->delta_x, event->delta_y}, {event->unaccel_dx, event->unaccel_dy});
 }
 
 void cursor_motion_absolute(wl_listener* listener, void* data)
@@ -645,30 +644,26 @@ void cursor_motion_absolute(wl_listener* listener, void* data)
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_absolute_event* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
 
-    double lx, ly;
+    vec2 layout_pos;
     if (event->pointer->output_name) {
         wlr_output_layout_output* layout_output;
         wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
             if (strcmp(layout_output->output->name, event->pointer->output_name) == 0) {
-                lx = layout_output->x + layout_output->output->width * event->x;
-                ly = layout_output->y + layout_output->output->height * event->y;
+                layout_pos = vec2{layout_output->x, layout_output->y} + vec2{layout_output->output->width, layout_output->output->height} * vec2{event->x, event->y};
                 break;
             }
         }
     } else {
         // TODO: *can* output_name be null?
-        wlr_cursor_absolute_to_layout_coords(server->cursor, &event->pointer->base, event->x, event->y, &lx, &ly);
+        wlr_cursor_absolute_to_layout_coords(server->cursor, &event->pointer->base, event->x, event->y, &layout_pos.x, &layout_pos.y);
     }
 
     Pointer* pointer = Pointer::from(event->pointer);
 
-    double dx = lx - server->cursor->x;
-    double dy = ly - server->cursor->y;
-    double rel_dx = (lx - pointer->last_abs_x) * pointer_abs_to_rel_speed_multiplier;
-    double rel_dy = (ly - pointer->last_abs_y) * pointer_abs_to_rel_speed_multiplier;
-    pointer->last_abs_x = lx;
-    pointer->last_abs_y = ly;
-    process_cursor_motion(server, event->time_msec, &event->pointer->base, dx, dy, rel_dx, rel_dy, rel_dx, rel_dy);
+    vec2 delta = layout_pos - get_cursor_pos(server);
+    vec2 rel = (layout_pos - pointer->last_abs_pos) * pointer_abs_to_rel_speed_multiplier;
+    pointer->last_abs_pos = layout_pos;
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, delta, rel, rel);
 }
 
 void cursor_button(wl_listener* listener, void* data)
@@ -814,15 +809,15 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle) {
         Toplevel* selected = focus_cycle_end(server);
-        if (wlr_box_contains_point(ptr(surface_get_bounds(selected)), server->cursor->x, server->cursor->y)) {
+        if (wlr_box_contains_point(ptr(surface_get_bounds(selected)), get_cursor_pos(server).x, get_cursor_pos(server).y)) {
             surface_focus(selected);
         }
         return true;
     }
 
-    double sx, sy;
+    vec2 surface_pos;
     wlr_surface* surface = nullptr;
-    Surface* surface_under_cursor = get_surface_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    Surface* surface_under_cursor = get_surface_accepting_input_at(server, get_cursor_pos(server), &surface, &surface_pos);
 
     // Zone interaction
 

@@ -37,60 +37,41 @@ struct EnumMap
 
 // -----------------------------------------------------------------------------
 
-struct Color
-{
-    float values[4];
-
-    constexpr Color() = default;
-    constexpr Color(float r, float g, float b, float a): values{ r * a, g * a, b * a, a } {}
-};
+using fvec4 = glm:: vec4;
+using  vec2 = glm::dvec2;
+using ivec2 = glm::ivec2;
 
 // -----------------------------------------------------------------------------
 
-struct Point
-{
-    double x, y;
-};
-
-constexpr
-double distance_between(Point a, Point b)
-{
-    double dx = a.x - b.x;
-    double dy = a.y - b.y;
-    return std::sqrt(dx * dx + dy * dy);
-}
+constexpr fvec4 premultiply(fvec4 v) { return {glm::fvec3{v} * v.w, v.w}; }
 
 // -----------------------------------------------------------------------------
+
+constexpr ivec2 box_origin(  const wlr_box& b) { return {b.x, b.y}; }
+constexpr ivec2 box_extent(  const wlr_box& b) { return {b.width, b.height}; }
+constexpr ivec2 box_opposite(const wlr_box& b) { return box_origin(b) + box_extent(b); };
 
 constexpr
 wlr_box box_outer(wlr_box a, wlr_box b)
 {
-    int left   = std::min(a.x,            b.x);
-    int top    = std::min(a.y,            b.y);
-    int right  = std::max(a.x + a.width,  b.x + b.width);
-    int bottom = std::max(a.y + a.height, b.y + b.height);
-    return { left, top, right - left, bottom - top };
+    ivec2 origin = glm::min(box_origin(  a), box_origin(  b));
+    ivec2 extent = glm::max(box_opposite(a), box_opposite(b)) - origin;
+    return {origin.x, origin.y, extent.x, extent.y};
 };
 
 constexpr
 wlr_box constrain_box(wlr_box box, wlr_box bounds)
 {
-    if (box.width >= bounds.width) {
-        box.x = bounds.x;
-        box.width = bounds.width;
-    } else {
-        if (int overlap_x = (box.x + box.width) - (bounds.x + bounds.width);  overlap_x > 0) box.x -= overlap_x;
-        box.x = std::max(box.x, bounds.x);
-    }
-
-    if (box.height >= bounds.height) {
-        box.y = bounds.y;
-        box.height = bounds.height;
-    } else {
-        if (int overlap_y = (box.y + box.height) - (bounds.y + bounds.height); overlap_y > 0) box.y -= overlap_y;
-        box.y = std::max(box.y, bounds.y);
-    }
-
+    static constexpr auto constrain_axis = [](int start, int length, int& origin, int& extent) {
+        if (extent > length) {
+            origin = start;
+            extent = length;
+        } else {
+            origin = std::max(origin, start) - std::max(0, (origin + extent) - (start + length));
+        }
+    };
+    constrain_axis(bounds.x, bounds.width,  box.x, box.width);
+    constrain_axis(bounds.y, bounds.height, box.y, box.height);
     return box;
 }
 
@@ -187,12 +168,12 @@ struct ListenerSet
 
 // -----------------------------------------------------------------------------
 
-bool walk_scene_tree_back_to_front(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data, bool filter_disabled);
-bool walk_scene_tree_front_to_back(wlr_scene_node* node, double sx, double sy, bool(*for_each)(void*, wlr_scene_node*, double, double), void* for_each_data, bool filter_disabled);
+bool walk_scene_tree_back_to_front(wlr_scene_node* node, ivec2 node_pos, bool(*for_each)(void*, wlr_scene_node*, ivec2), void* for_each_data, bool filter_disabled);
+bool walk_scene_tree_front_to_back(wlr_scene_node* node, ivec2 node_pos, bool(*for_each)(void*, wlr_scene_node*, ivec2), void* for_each_data, bool filter_disabled);
 
 // -----------------------------------------------------------------------------
 
-Point constrain_to_region(const pixman_region32_t* region, Point p1, Point p2, bool* was_inside);
+vec2 constrain_to_region(const pixman_region32_t* region, vec2 p1, vec2 p2, bool* was_inside);
 
 // -----------------------------------------------------------------------------
 
@@ -252,14 +233,20 @@ struct CommandParser
     std::string_view peek()       { return index < args.size() ? args[index]   : std::string_view{}; }
     std::string_view get_string() { return index < args.size() ? args[index++] : std::string_view{}; }
 
-    std::optional<int> get_int()
+    template<typename T>
+    std::optional<T> get_from_chars()
     {
         if (index >= args.size()) return std::nullopt;
 
-        int value;
+        T value;
         auto res = std::from_chars(args[index].begin(), args[index].end(), value);
         if (!res) return std::nullopt;
 
+        index++;
+
         return value;
     }
+
+    std::optional<int> get_int()    { return get_from_chars<int>(); }
+    std::optional<int> get_double() { return get_from_chars<double>(); }
 };

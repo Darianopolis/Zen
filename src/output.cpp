@@ -1,12 +1,12 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-Output* get_output_at(Server* server, Point point)
+Output* get_output_at(Server* server, vec2 point)
 {
     return Output::from(wlr_output_layout_output_at(server->output_layout, point.x, point.y));
 }
 
-Output* get_nearest_output_to_point(Server* server, Point point)
+Output* get_nearest_output_to_point(Server* server, vec2 point)
 {
     double closest_distance = INFINITY;
     wlr_output* closest = nullptr;
@@ -15,10 +15,10 @@ Output* get_nearest_output_to_point(Server* server, Point point)
     wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
         wlr_box box;
         wlr_output_layout_get_box(server->output_layout, layout_output->output, &box);
-        Point on_output;
+        vec2 on_output;
         wlr_box_closest_point(&box, point.x, point.y, &on_output.x, &on_output.y);
 
-        double distance = distance_between(point, on_output);
+        double distance = glm::distance(point, on_output);
         if (distance < closest_distance) {
             closest_distance = distance;
             closest = layout_output->output;
@@ -164,7 +164,7 @@ void output_new(wl_listener* listener, void* data)
 
     log_warn("  Adaptive sync: {}", wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED);
 
-    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, background_color.values);
+    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, glm::value_ptr(background_color));
 
     wlr_output_layout_output* l_output = matched_rule
         ? wlr_output_layout_add(server->output_layout, wlr_output, matched_rule->x, matched_rule->y)
@@ -175,10 +175,9 @@ void output_new(wl_listener* listener, void* data)
 
     if (matched_rule && matched_rule->primary && !server->debug.is_nested) {
         wlr_box bounds = output_get_bounds(output);
-        double x = bounds.x + bounds.width / 2.0;
-        double y = bounds.y + bounds.height / 2.0;
-        log_info("Output is primary, warping cursor to center ({}, {})", x, y);
-        wlr_cursor_warp(server->cursor, nullptr, x, y);
+        vec2 pos = vec2(box_origin(bounds)) + vec2(box_extent(bounds)) / 2.0;
+        log_info("Output is primary, warping cursor to center ({}, {})", pos.x, pos.y);
+        wlr_cursor_warp(server->cursor, nullptr, pos.x, pos.y);
     }
 }
 
