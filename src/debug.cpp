@@ -31,21 +31,11 @@ std::string pointer_constraint_to_string(wlr_pointer_constraint_v1* constraint)
         : "nullptr";
 }
 
-std::string client_to_string(wl_client* client)
+std::string client_to_string(Client* client)
 {
     if (!client) return "nullptr";
 
-    pid_t pid;
-    uid_t uid;
-    gid_t gid;
-    wl_client_get_credentials(client, &pid, &uid, &gid);
-
-    std::ifstream file{std::format("/proc/{}/comm", pid), std::ios::binary};
-
-    std::string name;
-    std::getline(file, name);
-
-    return std::format("Client<{}>(pid = {}, name = {})", (void*)client, pid, name);
+    return std::format("Client<{}>(pid = {}, name = {}, path = {})", (void*)client, client->pid, client->process_name, client->path.c_str());
 }
 
 std::string cursor_surface_to_string(CursorSurface* cursor_surface)
@@ -58,6 +48,22 @@ std::string cursor_surface_to_string(CursorSurface* cursor_surface)
 std::string pointer_to_string(Pointer* pointer)
 {
     return pointer ? std::format("Pointer<{}>", (void*)pointer) : "nullptr";
+}
+
+std::string output_to_string(Output* output)
+{
+    if (!output) return "nullptr";
+
+    return std::format("Output<{}>(name = {}, desc = {}, pos = ({}, {}), size = ({}, {}), refresh = {:.2f}Hz, primary = {})",
+        (void*)output,
+        output->wlr_output->name,
+        output->wlr_output->description,
+        output->scene_output ? output->scene_output->x : output->config.pos.value_or({-1, -1}).x,
+        output->scene_output ? output->scene_output->y : output->config.pos.value_or({-1, -1}).y,
+        output->wlr_output->width,
+        output->wlr_output->height,
+        output->wlr_output->refresh / 1000.0,
+        output->config.primary);
 }
 
 // -----------------------------------------------------------------------------

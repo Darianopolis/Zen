@@ -755,7 +755,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 return true;
             case XKB_KEY_f:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    toplevel_set_fullscreen(focused, !toplevel_is_fullscreen(focused));
+                    toplevel_set_fullscreen(focused, !toplevel_is_fullscreen(focused), nullptr);
                 }
                 return true;
             default:

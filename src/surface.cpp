@@ -176,11 +176,11 @@ bool toplevel_is_fullscreen(Toplevel* toplevel)
     return toplevel->xdg_toplevel()->current.fullscreen;
 }
 
-void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen)
+void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen, Output* output)
 {
     if (fullscreen) {
         wlr_box prev = surface_get_bounds(toplevel);
-        Output* output = get_output_for_surface(toplevel);
+        if (!output) output = get_output_for_surface(toplevel);
         if (output) {
             wlr_box b = output_get_bounds(output);
             wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), true);
@@ -233,6 +233,7 @@ void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for
                 node->data = nullptr;
                 return true;
             }
+            if (!toplevel->xdg_toplevel()->base->initialized) return true;
             return for_each(for_each_data, toplevel);
         }
         return true;
@@ -655,7 +656,10 @@ void toplevel_request_fullscreen(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel()->base->initialized) {
-        toplevel_set_fullscreen(toplevel, toplevel->xdg_toplevel()->requested.fullscreen);
+        if (toplevel->xdg_toplevel()->requested.fullscreen) {
+            log_debug("Toplevel {} requested fullscreen on {}", surface_to_string(toplevel), output_to_string(Output::from(toplevel->xdg_toplevel()->requested.fullscreen_output)));
+        }
+        toplevel_set_fullscreen(toplevel, toplevel->xdg_toplevel()->requested.fullscreen, nullptr);
     }
 }
 
@@ -678,7 +682,7 @@ void toplevel_new(wl_listener* listener, void* data)
         (void*)xdg_toplevel->base->surface,
         (void*)xdg_toplevel,
         (void*)&toplevel->scene_tree->node,
-        log_indent, client_to_string(xdg_toplevel->base->client->client));
+        log_indent, client_to_string(Client::from(server, xdg_toplevel->base->client->client)));
 
     toplevel->popup_tree = toplevel->scene_tree;
 

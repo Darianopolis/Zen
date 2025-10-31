@@ -38,10 +38,23 @@ static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
 // -----------------------------------------------------------------------------
 
-struct OutputRule { const char* name; int x, y; bool primary; bool disabled; };
+struct OutputConfig
+{
+    std::optional<ivec2> pos;
+    bool primary;
+    bool disabled;
+};
+
+struct OutputRule { const char* name; OutputConfig config; };
 static constexpr OutputRule output_rules[] = {
-    { .name = "DP-1", .x =     0, .y = 0, .primary = true },
-    { .name = "DP-2", .x = -3840, .y = 0                  },
+    { .name = "DP-1", .config = { .pos = ivec2{    0, 0}, .primary = true } },
+    { .name = "DP-2", .config = { .pos = ivec2{-3840, 0}                  } },
+};
+
+// -----------------------------------------------------------------------------
+
+static constexpr std::string_view output_unaware_clients[] = {
+    "xwayland-satellite",
 };
 
 // -----------------------------------------------------------------------------
@@ -137,6 +150,7 @@ struct CursorSurface;
 struct Output;
 struct Keyboard;
 struct Pointer;
+struct Client;
 
 struct Server
 {
@@ -148,6 +162,8 @@ struct Server
     wlr_renderer* renderer;
     wlr_allocator* allocator;
 
+    std::vector<Client*> clients;
+
     struct {
         std::filesystem::path original_cwd;
         bool is_nested;
@@ -158,6 +174,7 @@ struct Server
     EnumMap<wlr_scene_tree*, Strata> layers;
     wlr_output_layout* output_layout;
     wlr_scene_output_layout* scene_output_layout;
+    std::vector<Output*> outputs;
 
     wlr_compositor* compositor;
     wlr_subcompositor* subcompositor;
@@ -218,6 +235,26 @@ struct Server
     } zone;
 };
 
+struct Client
+{
+    Server* server;
+    struct wl_client* wl_client;
+
+    ListenerSet listeners;
+
+    pid_t pid;
+    uid_t uid;
+    gid_t gid;
+
+    std::filesystem::path path;
+    std::vector<std::string> cmdline;
+    std::string process_name;
+
+    bool is_output_aware = false;
+
+    static Client* from(Server* server, const struct wl_client*);
+};
+
 struct Keyboard
 {
     ListenerSet listeners;
@@ -247,6 +284,7 @@ struct Output
 
     Server* server;
     struct wlr_output* wlr_output;
+    wlr_output_layout_output* layout_output;
     wlr_scene_output* scene_output;
 
     wlr_scene_rect* background;
@@ -257,6 +295,8 @@ struct Output
 
     FrameTimeReporter frame_reporter;
     bool report_stats;
+
+    OutputConfig config;
 };
 
 // -----------------------------------------------------------------------------
@@ -419,6 +459,12 @@ bool is_mod_down(      Server*, wlr_keyboard_modifier modifiers);
 bool is_main_mod_down( Server*);
 uint32_t get_modifiers(Server*);
 
+// ---- Client -----------------------------------------------------------------
+
+void client_new(wl_listener*, void*);
+void client_destroy(wl_listener*, void*);
+bool client_filter_globals(const wl_client*, const wl_global*, void*);
+
 // ---- Keyboard ---------------------------------------------------------------
 
 void keyboard_new(Server*, wlr_input_device*);
@@ -481,6 +527,10 @@ wlr_box zone_apply_external_padding(wlr_box);
 
 // ---- Output -----------------------------------------------------------------
 
+Output* get_primary_output(Server*);
+bool output_filter_global(Server*, Client*, const wl_global*);
+void update_output_states(Server* server);
+
 Output* get_output_at(              Server*, vec2);
 Output* get_nearest_output_to_point(Server*, vec2);
 Output* get_nearest_output_to_box(  Server*, wlr_box);
@@ -531,7 +581,7 @@ void layer_surface_new(    wl_listener*, void*);
 void toplevel_set_bounds(       Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);
 bool toplevel_is_fullscreen(    Toplevel*);
-void toplevel_set_fullscreen(   Toplevel*, bool fullscreen);
+void toplevel_set_fullscreen(   Toplevel*, bool fullscreen, Output* output);
 void toplevel_update_border(    Toplevel*);
 bool toplevel_is_interactable(  Toplevel*);
 void toplevel_begin_interactive(Toplevel*, InteractionMode);
@@ -564,6 +614,7 @@ void popup_new(    wl_listener*, void*);
 
 std::string surface_to_string(Surface*);
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1*);
-std::string client_to_string(wl_client*);
+std::string client_to_string(Client*);
 std::string cursor_surface_to_string(CursorSurface*);
 std::string pointer_to_string(Pointer*);
+std::string output_to_string(Output*);

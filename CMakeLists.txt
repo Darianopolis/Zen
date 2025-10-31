@@ -67,6 +67,7 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/debug.cpp
     src/ipc.cpp
     src/commands.cpp
+    src/client.cpp
     )
 if(USE_ASAN)
     target_link_libraries(${PROJECT_NAME} PUBLIC asan)

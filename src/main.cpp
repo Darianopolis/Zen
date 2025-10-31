@@ -31,6 +31,10 @@ void init(Server* server, const startup_options& options)
         return;
     }
 
+    wl_display_set_global_filter(server->display, client_filter_globals, server);
+
+    wl_display_add_client_created_listener(server->display, &server->listeners.listen(nullptr, server, client_new)->listener);
+
     // Handler modifiers and nested detection
 
     server->main_modifier = WLR_MODIFIER_LOGO;

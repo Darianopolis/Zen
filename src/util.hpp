@@ -101,7 +101,7 @@ Listener* listen(wl_signal* signal, T userdata, void(*notify_func)(wl_listener*,
 #endif
     std::memcpy(&l->userdata, &userdata, sizeof(T));
     l->listener.notify = notify_func;
-    wl_signal_add(signal, &l->listener);
+    if (signal) wl_signal_add(signal, &l->listener);
     return l;
 }
 
@@ -153,16 +153,17 @@ struct ListenerSet
         first = nullptr;
     }
 
-    void add(Listener* l)
+    Listener* add(Listener* l)
     {
         l->next = first;
         first = l;
+        return l;
     }
 
     template<typename T>
-    void listen(wl_signal* signal, T userdata, void(*notify_func)(wl_listener*, void*))
+    Listener* listen(wl_signal* signal, T userdata, void(*notify_func)(wl_listener*, void*))
     {
-        add(::listen(signal, userdata, notify_func));
+        return add(::listen(signal, userdata, notify_func));
     }
 };
 
