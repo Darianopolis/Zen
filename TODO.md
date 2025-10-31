@@ -99,7 +99,7 @@
    - Per-window mode to spoof permenant fullscreen state/size
       - Particularly useful for games that misbehave when resized
 - Improved input and modfiier handling
-   - Set default numlock state
+   - ✅ Set default numlock state
    - Mask main modifier(s) from clients?
    - Mask all key/button inputs from clients when main modifier is down?
    - Support non-modifier keys as modifiers (E.g. mouse side buttons)

@@ -29,6 +29,10 @@ static constexpr struct {
 } zone_external_padding;
 static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 
+// -----------------------------------------------------------------------------
+
+static constexpr bool keyboard_default_numlock_state = true;
+
 static constexpr const char* keyboard_layout       = "gb";
 static constexpr int32_t     keyboard_repeat_rate  = 25;
 static constexpr int32_t     keyboard_repeat_delay = 600;

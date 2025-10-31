@@ -3,9 +3,15 @@
 
 #define NOISY_POINTERS 0
 
-vec2 get_cursor_pos(Server* server)
+static
+void update_seat_caps(Server* server)
 {
-    return { server->cursor->x, server->cursor->y };
+    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+    if (!server->keyboards.empty()) {
+        caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    }
+
+    wlr_seat_set_capabilities(server->seat, caps);
 }
 
 uint32_t get_modifiers(Server* server)
@@ -25,10 +31,7 @@ bool is_main_mod_down(Server* server)
     return get_modifiers(server) & server->main_modifier;
 }
 
-bool is_cursor_visible(Server* server)
-{
-    return server->pointer.cursor_is_visible;
-}
+// -----------------------------------------------------------------------------
 
 void keyboard_handle_modifiers(wl_listener* listener, void*)
 {
@@ -73,6 +76,9 @@ void keyboard_handle_destroy(wl_listener* listener, void*)
     Keyboard* keyboard = listener_userdata<Keyboard*>(listener);
 
     std::erase(keyboard->server->keyboards, keyboard);
+
+    update_seat_caps(keyboard->server);
+
     delete keyboard;
 
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
@@ -111,6 +117,15 @@ void keyboard_new(Server* server, wlr_input_device* device)
     wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
 
     server->keyboards.emplace_back(keyboard);
+
+    {
+        // Set default numlock state
+
+        xkb_mod_index_t numlock_idx = xkb_keymap_mod_get_index(wlr_keyboard->keymap, XKB_MOD_NAME_NUM);
+        wlr_keyboard_modifiers mods = wlr_keyboard->modifiers;
+        mods.locked = (mods.locked & ~(1 << numlock_idx)) | (keyboard_default_numlock_state << numlock_idx);
+        wlr_keyboard_notify_modifiers(wlr_keyboard, mods.depressed, mods.latched, mods.locked, mods.group);
+    }
 }
 
 void pointer_destroy(wl_listener* listener, void*)
@@ -172,15 +187,20 @@ void input_new(wl_listener* listener, void* data)
             break;
     }
 
-    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-    if (!server->keyboards.empty()) {
-        caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    }
-
-    wlr_seat_set_capabilities(server->seat, caps);
+    update_seat_caps(server);
 }
 
 // -----------------------------------------------------------------------------
+
+vec2 get_cursor_pos(Server* server)
+{
+    return { server->cursor->x, server->cursor->y };
+}
+
+bool is_cursor_visible(Server* server)
+{
+    return server->pointer.cursor_is_visible;
+}
 
 bool cursor_surface_is_visible(CursorSurface* cursor_surface)
 {

@@ -68,6 +68,9 @@ extern "C" {
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
 
+// interface
+#include <wlr/interfaces/wlr_keyboard.h>
+
 #undef namespace
 #undef static
 
