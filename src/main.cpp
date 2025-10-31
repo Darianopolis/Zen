@@ -14,7 +14,7 @@ struct startup_options
 };
 
 #define USE_SYNCOBJ 0
-#define USE_VULKAN 1
+#define USE_VULKAN 0
 
 static
 void init(Server* server, const startup_options& options)

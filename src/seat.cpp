@@ -118,7 +118,8 @@ void keyboard_new(Server* server, wlr_input_device* device)
 
     server->keyboards.emplace_back(keyboard);
 
-    {
+    if (wlr_input_device_is_libinput(device)) {
+
         // Set default numlock state
 
         xkb_mod_index_t numlock_idx = xkb_keymap_mod_get_index(wlr_keyboard->keymap, XKB_MOD_NAME_NUM);
@@ -163,7 +164,7 @@ void pointer_new(Server* server, wlr_input_device* device)
     if (wlr_input_device_is_libinput(device) && (libinput_device = wlr_libinput_get_device_handle(device))) {
         if (libinput_device_config_accel_is_available(libinput_device)) {
             libinput_device_config_accel_set_profile(libinput_device, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
-            libinput_device_config_accel_set_speed(  libinput_device, libinput_mouse_speed);
+            libinput_device_config_accel_set_speed(  libinput_device, 0);
         }
     }
 
@@ -649,14 +650,38 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     seat_drag_update_position(server);
 }
 
+static
+vec2 pointer_acceleration_apply(Pointer* pointer, const PointerAccelConfig& config, vec2* remainder, vec2 delta)
+{
+    double speed = glm::length(delta);
+    vec2 sens = vec2(config.multiplier * (1 + (std::max(speed, config.offset) - config.offset) * config.rate));
+
+    vec2 new_delta = sens * delta;
+
+    *remainder += new_delta;
+    vec2 integer_delta = round_to_zero(*remainder);
+    *remainder -= integer_delta;
+
+    if (pointer->server->pointer.debug_accel_rate) {
+        log_trace("speed ({:7.2f}, {:7.2f}) ({:7.2f}) -> ({:7.2f}, {:7.2f}) | output ({:7.2f}, {:7.2f}), rem = ({:7.2f}, {:7.2f})",
+            delta.x, delta.y, speed, sens.x, sens.y, integer_delta.x, integer_delta.y, remainder->x, remainder->y);
+    }
+
+    return integer_delta;
+}
+
 void cursor_motion(wl_listener* listener, void* data)
 {
     Server* server = listener_userdata<Server*>(listener);
     wlr_pointer_motion_event* event = static_cast<wlr_pointer_motion_event*>(data);
 
-    // TODO: Handle custom acceleration here
+    Pointer* pointer = Pointer::from(event->pointer);
 
-    process_cursor_motion(server, event->time_msec, &event->pointer->base, {event->delta_x, event->delta_y}, {event->delta_x, event->delta_y}, {event->unaccel_dx, event->unaccel_dy});
+    vec2 base = { event->delta_x, event->delta_y };
+    vec2 accel     = pointer_acceleration_apply(pointer, pointer_accel,     &pointer->accel_remainder,     base);
+    vec2 rel_accel = pointer_acceleration_apply(pointer, pointer_rel_accel, &pointer->rel_accel_remainder, base);
+
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, accel, rel_accel, rel_accel);
 }
 
 void cursor_motion_absolute(wl_listener* listener, void* data)

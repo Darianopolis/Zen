@@ -43,6 +43,11 @@ using ivec2 = glm::ivec2;
 
 // -----------------------------------------------------------------------------
 
+constexpr vec2 copysign(vec2 v, vec2 s) { return vec2(std::copysign(v.x, s.x), std::copysign(v.y, s.y)); }
+constexpr vec2 round_to_zero(vec2 v)    { return copysign(glm::floor(glm::abs(v)), v); }
+
+// -----------------------------------------------------------------------------
+
 constexpr fvec4 premultiply(fvec4 v) { return {glm::fvec3{v} * v.w, v.w}; }
 
 // -----------------------------------------------------------------------------

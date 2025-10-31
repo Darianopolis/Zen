@@ -238,6 +238,12 @@ void command_execute(Server* server, CommandParser cmd)
             log_info("Debug cursor visual: {}", server->pointer.debug_visual_enabled ? "enabled" : "disabled");
             update_cursor_state(server);
 
+        } else if (cmd.match("pointer")) {
+            if (cmd.match("accel")) {
+                server->pointer.debug_accel_rate = command_new_boolean_state(server->pointer.debug_accel_rate, cmd.get_string());
+                log_info("Debug pointer accel: {}", server->pointer.debug_accel_rate);
+            }
+
         } else if (cmd.match("output")) {
             if (cmd.match("new")) {
                 if (server->debug.window_backend) {

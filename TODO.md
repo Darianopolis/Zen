@@ -52,6 +52,7 @@
 - ✅ Bottom layer shell elements should be behind fullscreen applications when fullscreen app is on top and focused, but above otherwise
 - ✅ Position toplevels from anchor point - no juddering when resizing
 - ✅ Support wlr-foreign-toplevel-management and xdg-foreign
+- ✅ Simple offset linear mouse acceleration (separate config for normal and relative mouse acceleration)
 
 ### Bugs
 

@@ -37,7 +37,16 @@ static constexpr const char* keyboard_layout       = "gb";
 static constexpr int32_t     keyboard_repeat_rate  = 25;
 static constexpr int32_t     keyboard_repeat_delay = 600;
 
-static constexpr double libinput_mouse_speed = -0.66;
+struct PointerAccelConfig
+{
+    double offset;
+    double rate;
+    double multiplier;
+};
+
+static constexpr PointerAccelConfig pointer_accel     = { 2.0, 0.05, 0.3 };
+static constexpr PointerAccelConfig pointer_rel_accel = { 2.0, 0.05, 1.0 };
+
 static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
 // -----------------------------------------------------------------------------
@@ -211,6 +220,7 @@ struct Server
         wlr_scene_rect* debug_visual;
         uint32_t        debug_visual_half_extent;
         bool            cursor_is_visible;
+        bool            debug_accel_rate = false;
     } pointer;
 
     InteractionMode interaction_mode;
@@ -276,6 +286,8 @@ struct Pointer
     struct wlr_pointer* wlr_pointer;
 
     vec2 last_abs_pos;
+    vec2 accel_remainder = {};
+    vec2 rel_accel_remainder = {};
 
     static Pointer* from(struct wlr_pointer* pointer) { return pointer ? static_cast<Pointer*>(pointer->data) : nullptr; }
 };
