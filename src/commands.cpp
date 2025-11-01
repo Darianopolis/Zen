@@ -80,19 +80,19 @@ void env_set(Server* server, std::string_view name, std::optional<std::string_vi
 // -----------------------------------------------------------------------------
 
 static
-wlr_keyboard_modifier mod_from_string(Server* server, std::string_view name)
+Modifiers mod_from_string(std::string_view name)
 {
-    if      (name == "Mod")   { return wlr_keyboard_modifier(server->main_modifier); }
-    else if (name == "Ctrl")  { return WLR_MODIFIER_CTRL;  }
-    else if (name == "Shift") { return WLR_MODIFIER_SHIFT; }
-    else if (name == "Alt")   { return WLR_MODIFIER_ALT;   }
-    else if (name == "Super") { return WLR_MODIFIER_LOGO;  }
+    if      (name == "Mod")   { return Modifiers::Mod;   }
+    else if (name == "Ctrl")  { return Modifiers::Ctrl;  }
+    else if (name == "Shift") { return Modifiers::Shift; }
+    else if (name == "Alt")   { return Modifiers::Alt;   }
+    else if (name == "Super") { return Modifiers::Super; }
 
     return {};
 }
 
 static
-std::optional<Bind> bind_from_string(Server* server, std::string_view bind_string)
+std::optional<Bind> bind_from_string(Server*, std::string_view bind_string)
 {
     Bind bind = {};
 
@@ -103,7 +103,7 @@ std::optional<Bind> bind_from_string(Server* server, std::string_view bind_strin
         size_t n = bind_string.find_first_of('+', b);
         auto part = std::string(bind_string.substr(b, n - b));
         if (!part.empty()) {
-            if (wlr_keyboard_modifier mod = mod_from_string(server, part)) {
+            if (Modifiers mod = mod_from_string(part); bool(mod)) {
                 bind.modifiers |= mod;
             }
             else if (part == "ScrollUp")    { bind.action = ScrollDirection::Up;       }
@@ -182,7 +182,7 @@ void command_bind(Server* server, CommandParser cmd)
     server->command_binds.emplace_back(bind_command);
 
     std::sort(server->command_binds.begin(), server->command_binds.end(), [](const CommandBind& l, const CommandBind& r) -> bool {
-        return std::popcount(l.bind.modifiers) > std::popcount(r.bind.modifiers);
+        return std::popcount(std::to_underlying(l.bind.modifiers)) > std::popcount(std::to_underlying(r.bind.modifiers));
     });
 }
 

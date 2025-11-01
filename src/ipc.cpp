@@ -115,7 +115,8 @@ void ipc_server_init(Server* server)
 
 void ipc_server_cleanup(Server* server)
 {
-    wl_event_source_remove(server->ipc_connection_event_source);
+    if (server->ipc_connection_event_source)
+        wl_event_source_remove(server->ipc_connection_event_source);
 }
 
 void ipc_client_run(std::span<const std::string_view> args)

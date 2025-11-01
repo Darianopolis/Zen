@@ -29,7 +29,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     // Consolidate all interaction state
 
     if (event.button == BTN_LEFT) {
-        if (pressed && is_main_mod_down(server) && !is_mod_down(server, WLR_MODIFIER_SHIFT)) {
+        if (pressed && check_mods(server, Modifiers::Mod) && !check_mods(server, Modifiers::Shift)) {
             if (is_cursor_visible(server)) {
                 vec2 surface_pos;
                 wlr_surface* surface = nullptr;

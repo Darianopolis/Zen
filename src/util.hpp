@@ -24,6 +24,16 @@ constexpr auto ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------
 
+#define DECORATE_FLAG_ENUM(EnumType) \
+    inline constexpr EnumType operator| (EnumType  l, EnumType r) { return EnumType(std::to_underlying(l) | std::to_underlying(r));                  } \
+    inline constexpr EnumType operator|=(EnumType& l, EnumType r) { return l = l | r;                                                                } \
+    inline constexpr bool     operator>=(EnumType  l, EnumType r) { return std::to_underlying(r) == (std::to_underlying(l) & std::to_underlying(r)); } \
+    inline constexpr bool     operator< (EnumType  l, EnumType r) { return !(l >= r);                                                                } \
+    inline constexpr EnumType operator& (EnumType  l, EnumType r) { return EnumType(std::to_underlying(l) & std::to_underlying(r));                  } \
+    inline constexpr EnumType operator~ (EnumType  v)             { return EnumType(~std::to_underlying(v));                                         }
+
+// -----------------------------------------------------------------------------
+
 template<typename T, typename E>
 struct EnumMap
 {
@@ -43,8 +53,8 @@ using ivec2 = glm::ivec2;
 
 // -----------------------------------------------------------------------------
 
-constexpr vec2 copysign(vec2 v, vec2 s) { return vec2(std::copysign(v.x, s.x), std::copysign(v.y, s.y)); }
-constexpr vec2 round_to_zero(vec2 v)    { return copysign(glm::floor(glm::abs(v)), v); }
+constexpr vec2 copysign(     vec2 v, vec2 s) { return vec2(std::copysign(v.x, s.x), std::copysign(v.y, s.y)); }
+constexpr vec2 round_to_zero(vec2 v)         { return copysign(glm::floor(glm::abs(v)), v);                   }
 
 // -----------------------------------------------------------------------------
 

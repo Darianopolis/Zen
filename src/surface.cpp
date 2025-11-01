@@ -148,8 +148,8 @@ static
 void toplevel_update_position_for_anchor(Toplevel* toplevel)
 {
     wlr_box geom = surface_get_geometry(toplevel);
-    int x = (toplevel->anchor_edges & WLR_EDGE_RIGHT)  ? toplevel->anchor_x - geom.width  : toplevel->anchor_x;
-    int y = (toplevel->anchor_edges & WLR_EDGE_BOTTOM) ? toplevel->anchor_y - geom.height : toplevel->anchor_y;
+    int x = (toplevel->anchor_edges & WLR_EDGE_RIGHT)  ? toplevel->anchor.x - geom.width  : toplevel->anchor.x;
+    int y = (toplevel->anchor_edges & WLR_EDGE_BOTTOM) ? toplevel->anchor.y - geom.height : toplevel->anchor.y;
     wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
 }
 
@@ -164,8 +164,8 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box, wlr_edges locked_edges
     // TODO: Tidy up this API and make it clear what is relative to what.
 
     toplevel->anchor_edges = wlr_edges(locked_edges);
-    toplevel->anchor_x = (locked_edges & WLR_EDGE_RIGHT)  ? box.x + box.width  : box.x;
-    toplevel->anchor_y = (locked_edges & WLR_EDGE_BOTTOM) ? box.y + box.height : box.y;
+    toplevel->anchor.x = (locked_edges & WLR_EDGE_RIGHT)  ? box.x + box.width  : box.x;
+    toplevel->anchor.y = (locked_edges & WLR_EDGE_BOTTOM) ? box.y + box.height : box.y;
 
     toplevel_update_position_for_anchor(toplevel);
     toplevel_resize(toplevel, box.width, box.height, false);
@@ -532,7 +532,6 @@ void toplevel_commit(wl_listener* listener, void*)
 
             if (toplevel->xdg_toplevel()->parent) {
                 // Child, position at center of parent.
-                // TODO: Use xdg_positioner requests to position child windwos
                 wlr_box parent_bounds = surface_get_bounds(Surface::from(toplevel->xdg_toplevel()->parent->base->surface));
                 bounds.x = parent_bounds.x + (parent_bounds.width  - bounds.width)  / 2;
                 bounds.y = parent_bounds.y + (parent_bounds.height - bounds.height) / 2;

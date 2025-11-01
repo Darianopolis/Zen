@@ -49,6 +49,8 @@ static constexpr PointerAccelConfig pointer_rel_accel = { 2.0, 0.05, 1.0 };
 
 static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
 
+static constexpr uint32_t pointer_modifier_button = BTN_SIDE;
+
 // -----------------------------------------------------------------------------
 
 struct OutputConfig
@@ -89,7 +91,19 @@ static const WindowRule window_rules[] = {
 
 // -----------------------------------------------------------------------------
 
-enum class MouseButton {
+enum class Modifiers : uint32_t
+{
+    Mod   = 1 << 0,
+    Super = 1 << 1,
+    Ctrl  = 1 << 2,
+    Shift = 1 << 3,
+    Alt   = 1 << 4,
+};
+DECORATE_FLAG_ENUM(Modifiers)
+
+// -----------------------------------------------------------------------------
+
+enum class MouseButton : uint32_t {
     Left    = BTN_LEFT,
     Right   = BTN_RIGHT,
     Middle  = BTN_MIDDLE,
@@ -100,7 +114,7 @@ enum class MouseButton {
     Task    = BTN_TASK,
 };
 
-enum class ScrollDirection {
+enum class ScrollDirection : uint32_t {
     Up,
     Down,
     Left,
@@ -109,7 +123,7 @@ enum class ScrollDirection {
 
 struct Bind
 {
-    uint32_t modifiers;
+    Modifiers modifiers;
     std::variant<xkb_keysym_t, MouseButton, ScrollDirection> action;
     bool release = false;
 
@@ -125,9 +139,7 @@ struct CommandBind
     std::vector<std::string> command;
 };
 
-// -----------------------------------------------------------------------------
-
-enum class Strata
+enum class Strata : uint32_t
 {
     background,
     floating,
@@ -148,7 +160,7 @@ constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
     }
 }
 
-enum class InteractionMode
+enum class InteractionMode : uint32_t
 {
     passthrough,
     move,
@@ -317,7 +329,7 @@ struct Output
 
 // -----------------------------------------------------------------------------
 
-enum class SurfaceRole
+enum class SurfaceRole : uint32_t
 {
     invalid,
     toplevel,
@@ -388,8 +400,7 @@ struct Toplevel : Surface
 
     wlr_box prev_bounds;
 
-    int anchor_x;
-    int anchor_y;
+    ivec2     anchor;
     wlr_edges anchor_edges;
 
     struct {
@@ -471,9 +482,8 @@ bool input_handle_key(   Server*, const wlr_keyboard_key_event&, xkb_keysym_t sy
 bool input_handle_button(Server*, const wlr_pointer_button_event&);
 bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 
-bool is_mod_down(      Server*, wlr_keyboard_modifier modifiers);
-bool is_main_mod_down( Server*);
-uint32_t get_modifiers(Server*);
+Modifiers get_modifiers(Server*);
+bool check_mods(Server*, Modifiers);
 
 // ---- Client -----------------------------------------------------------------
 

@@ -119,7 +119,6 @@
    - Unify input processing into single callback + state machine?
    - Interlocks to prevent invalid interaction interactions
       - While cursor is hidden, should be considered to not exist - add centralised way of querying cursor position/state
-- Support xdg-positioner requests to position child windows
 - Use updated protocol version
    - xdg_shell -> version 7
    - tell clients that all edges are constrained

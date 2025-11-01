@@ -14,21 +14,33 @@ void update_seat_caps(Server* server)
     wlr_seat_set_capabilities(server->seat, caps);
 }
 
-uint32_t get_modifiers(Server* server)
+Modifiers get_modifiers(Server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
-    if (!keyboard) return 0;
-    return wlr_keyboard_get_modifiers(keyboard);
+    uint32_t key_mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+
+    Modifiers mods = {};
+    if (key_mods & WLR_MODIFIER_LOGO)     mods |= Modifiers::Super;
+    if (key_mods & WLR_MODIFIER_SHIFT)    mods |= Modifiers::Shift;
+    if (key_mods & WLR_MODIFIER_CTRL)     mods |= Modifiers::Ctrl;
+    if (key_mods & WLR_MODIFIER_ALT)      mods |= Modifiers::Alt;
+    if (key_mods & server->main_modifier) mods |= Modifiers::Mod;
+
+    for (Pointer* pointer : server->pointers) {
+        for (uint32_t i = 0; i < pointer->wlr_pointer->button_count; ++i) {
+            if (pointer->wlr_pointer->buttons[i] == pointer_modifier_button) {
+                mods |= Modifiers::Mod;
+                break;
+            }
+        }
+    }
+
+    return mods;
 }
 
-bool is_mod_down(Server* server, wlr_keyboard_modifier modifiers)
+bool check_mods(Server* server, Modifiers required_mods)
 {
-    return (get_modifiers(server) & modifiers) == modifiers;
-}
-
-bool is_main_mod_down(Server* server)
-{
-    return get_modifiers(server) & server->main_modifier;
+    return get_modifiers(server) >= required_mods;
 }
 
 // -----------------------------------------------------------------------------
@@ -144,7 +156,11 @@ uint32_t get_num_pointer_buttons_down(Server* server)
 {
     uint32_t count = 0;
     for (Pointer* pointer : server->pointers) {
-        count += pointer->wlr_pointer->button_count;
+        for (uint32_t i = 0; i < pointer->wlr_pointer->button_count; ++i) {
+            if (pointer->wlr_pointer->buttons[i] != pointer_modifier_button) {
+                count++;
+            }
+        }
     }
     return count;
 }
@@ -769,7 +785,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
         return state == WL_KEYBOARD_KEY_STATE_PRESSED;
     }
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && is_main_mod_down(server)) {
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && check_mods(server, Modifiers::Mod)) {
 
         // Core binds
 
@@ -832,7 +848,7 @@ bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
         if (command_execute_bind(server, Bind { get_modifiers(server), dir })) return true;
     }
 
-    if (is_main_mod_down(server) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+    if (check_mods(server, Modifiers::Mod) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         if (server->interaction_mode ==  InteractionMode::passthrough) {
             focus_cycle_begin(server, server->cursor);
         }
@@ -849,6 +865,13 @@ bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
 bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 {
     // log_trace("Button {} -> {}", libevdev_event_code_get_name(EV_KEY, event.button), magic_enum::enum_name(event.state));
+
+    if (event.button == pointer_modifier_button) {
+        if (event.state == WL_POINTER_BUTTON_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
+            surface_focus(focus_cycle_end(server));
+        }
+        return true;
+    }
 
     // Handle interrupt focus cycle
 
@@ -889,9 +912,9 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     // Check for move/size interaction begin, or close-under-cursor
 
-    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && is_main_mod_down(server) && server->interaction_mode == InteractionMode::passthrough) {
+    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && check_mods(server, Modifiers::Mod) && server->interaction_mode == InteractionMode::passthrough) {
         if (is_cursor_visible(server)) {
-            if (event.button == BTN_LEFT && is_mod_down(server, WLR_MODIFIER_SHIFT)) {
+            if (event.button == BTN_LEFT && check_mods(server, Modifiers::Shift)) {
                 toplevel_begin_interactive(toplevel, InteractionMode::move);
             } else if (event.button == BTN_RIGHT) {
                 toplevel_begin_interactive(toplevel, InteractionMode::resize);
