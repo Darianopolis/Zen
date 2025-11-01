@@ -8,8 +8,7 @@ struct startup_options
 {
     std::string xwayland_socket;
     std::string log_file;
-    std::span<const std::string_view> startup_command;
-    std::vector<std::string_view> startup_shell_commands;
+    std::vector<std::variant<std::filesystem::path, std::string_view>> startup_scripts;
     bool ctrl_mod;
 };
 
@@ -178,6 +177,10 @@ void init(Server* server, const startup_options& options)
     // Zone window management
 
     zone_init(server);
+
+    // Scripting
+
+    script_system_init(server);
 }
 
 void run(Server* server, const startup_options& options)
@@ -201,13 +204,12 @@ void run(Server* server, const startup_options& options)
 
     // Startup command
 
-    for (std::string_view shell_cmd : options.startup_shell_commands) {
-        spawn(server, "sh", {"sh", shell_cmd, PROGRAM_NAME}, {}, server->debug.original_cwd.c_str());
+    for (auto& script_path : options.startup_scripts) {
+        std::visit(overload_set {
+            [&](const std::filesystem::path& path) { script_run_file(server, path); },
+            [&](std::string_view source)           { script_run(server, source, server->debug.original_cwd); }
+        }, script_path);
     }
-
-    chdir(server->debug.original_cwd.c_str());
-    command_execute(server, CommandParser{options.startup_command});
-    chdir(getenv("HOME"));
 
     // Run
 
@@ -266,10 +268,12 @@ int main(int argc, char* argv[])
         } else if (cmd.match("--ctrl-mod")) {
             options.ctrl_mod = true;
         } else if (cmd.match("-s")) {
-            options.startup_shell_commands.emplace_back(cmd.get_string());
-        } else if (cmd.match("--")) {
-            options.startup_command = cmd.peek_rest();
-            break;
+            std::string_view arg = cmd.get_string();
+            if (std::filesystem::exists(arg)) {
+                options.startup_scripts.emplace_back(std::filesystem::absolute(arg));
+            } else {
+                options.startup_scripts.emplace_back(arg);
+            }
         } else {
             print_usage();
         }

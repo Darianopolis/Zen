@@ -29,7 +29,7 @@ vendor_dir = ensure_dir(build_dir / "3rdparty")
 
 # -----------------------------------------------------------------------------
 
-def git_fetch(dir, repo, branch):
+def git_fetch(dir, repo, branch, dumb=False):
     if not dir.exists():
         cmd = ["git", "clone", repo, "--branch", branch, dir]
         print(cmd)
@@ -50,6 +50,20 @@ git_fetch(vendor_dir / "magic-enum", "https://github.com/Neargye/magic_enum.git"
 # -----------------------------------------------------------------------------
 
 git_fetch(vendor_dir / "glm", "https://github.com/g-truc/glm.git", "master")
+
+# -----------------------------------------------------------------------------
+
+git_fetch(vendor_dir / "sol2", "https://github.com/ThePhD/sol2.git", "develop")
+
+def build_luajit():
+    source_dir = vendor_dir / "luajit"
+
+    git_fetch(source_dir, "https://luajit.org/git/luajit.git", "v2.1", dumb=True)
+
+    if not (source_dir / "src/libluajit.a").exists() or args.update:
+        subprocess.run(["make", "-j"], cwd = source_dir)
+
+build_luajit()
 
 # -----------------------------------------------------------------------------
 

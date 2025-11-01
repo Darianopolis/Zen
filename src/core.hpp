@@ -136,7 +136,7 @@ struct Bind
 struct CommandBind
 {
     Bind bind;
-    std::vector<std::string> command;
+    std::function<void()> function;
 };
 
 enum class Strata : uint32_t
@@ -180,6 +180,11 @@ struct Client;
 struct Server
 {
     ListenerSet listeners;
+
+    struct {
+        sol::state lua;
+        std::filesystem::path current_script_dir;
+    } script;
 
     wl_display* display;
     wlr_session* session;
@@ -261,6 +266,8 @@ struct Server
     } zone;
 };
 
+#define GET_WL_CLIENT_CMDLINE 0
+
 struct Client
 {
     Server* server;
@@ -273,7 +280,9 @@ struct Client
     gid_t gid;
 
     std::filesystem::path path;
+#if GET_WL_CLIENT_CMDLINE
     std::vector<std::string> cmdline;
+#endif
     std::string process_name;
 
     bool is_output_aware = false;
@@ -454,21 +463,34 @@ struct CursorSurface : Surface
     // Surface::from(struct wlr_surface*) calls are still always safe to make
 };
 
-// ---- Commands ---------------------------------------------------------------
+// ---- Binds ------------------------------------------------------------------
 
-void command_execute(Server*, CommandParser);
-bool command_execute_bind(Server*, Bind);
+Modifiers mod_from_string(std::string_view name);
 
-// ---- Process / IPC ----------------------------------------------------------
+std::optional<Bind> bind_from_string(Server*, std::string_view bind_string);
+void                bind_erase(      Server*, Bind);
+void                bind_register(   Server*, const CommandBind&);
+bool                bind_trigger(    Server*, Bind);
 
-void ipc_server_init(Server*);
+// ---- IPC --------------------------------------------------------------------
+
+void ipc_server_init(   Server*);
 void ipc_server_cleanup(Server*);
+
 void ipc_client_run(std::span<const std::string_view>);
+
+// ---- Process ----------------------------------------------------------------
 
 void env_set(Server*, std::string_view name, std::optional<std::string_view> value);
 
 struct SpawnEnvAction { const char* name; const char* value; };
 void spawn(Server*, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {}, const char* wd = nullptr);
+
+// ---- Script -----------------------------------------------------------------
+
+void script_system_init(Server*);
+void script_run(        Server*, std::string_view source, const std::filesystem::path& source_dir);
+void script_run_file(   Server*, const std::filesystem::path& script_path);
 
 // ---- Policy -----------------------------------------------------------------
 
@@ -483,12 +505,13 @@ bool input_handle_button(Server*, const wlr_pointer_button_event&);
 bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 
 Modifiers get_modifiers(Server*);
-bool check_mods(Server*, Modifiers);
+bool      check_mods(   Server*, Modifiers);
 
 // ---- Client -----------------------------------------------------------------
 
-void client_new(wl_listener*, void*);
+void client_new(    wl_listener*, void*);
 void client_destroy(wl_listener*, void*);
+
 bool client_filter_globals(const wl_client*, const wl_global*, void*);
 
 // ---- Keyboard ---------------------------------------------------------------
@@ -505,8 +528,10 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 
 bool is_cursor_visible(  Server*);
 void update_cursor_state(Server*);
-void cursor_surface_commit(wl_listener*, void*);
+
+void cursor_surface_commit( wl_listener*, void*);
 void cursor_surface_destroy(wl_listener*, void*);
+
 bool cursor_surface_is_visible(CursorSurface*);
 
 vec2 get_cursor_pos(Server*);
@@ -516,8 +541,8 @@ uint32_t get_num_pointer_buttons_down(Server*);
 void process_cursor_resize(Server*);
 void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, vec2 delta, vec2 rel, vec2 rel_unaccel);
 
-void seat_request_set_cursor(      wl_listener*, void*);
-void seat_pointer_focus_change(    wl_listener*, void*);
+void seat_request_set_cursor(  wl_listener*, void*);
+void seat_pointer_focus_change(wl_listener*, void*);
 
 void cursor_motion(         wl_listener*, void*);
 void cursor_motion_absolute(wl_listener*, void*);
@@ -553,14 +578,15 @@ wlr_box zone_apply_external_padding(wlr_box);
 
 // ---- Output -----------------------------------------------------------------
 
-Output* get_primary_output(Server*);
-bool output_filter_global(Server*, Client*, const wl_global*);
-void update_output_states(Server* server);
+Output* get_primary_output(  Server*);
+bool    output_filter_global(Server*, Client*, const wl_global*);
+void    update_output_states(Server*);
 
 Output* get_output_at(              Server*, vec2);
 Output* get_nearest_output_to_point(Server*, vec2);
 Output* get_nearest_output_to_box(  Server*, wlr_box);
-Output* get_output_for_surface(     Surface*);
+
+Output* get_output_for_surface(Surface*);
 
 wlr_box output_get_bounds( Output*);
 void    output_reconfigure(Output*);
@@ -638,9 +664,9 @@ void popup_new(    wl_listener*, void*);
 
 // ---- Debug ------------------------------------------------------------------
 
-std::string surface_to_string(Surface*);
+std::string surface_to_string(           Surface*                  );
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1*);
-std::string client_to_string(Client*);
-std::string cursor_surface_to_string(CursorSurface*);
-std::string pointer_to_string(Pointer*);
-std::string output_to_string(Output*);
+std::string client_to_string(            Client*                   );
+std::string cursor_surface_to_string(    CursorSurface*            );
+std::string pointer_to_string(           Pointer*                  );
+std::string output_to_string(            Output*                   );

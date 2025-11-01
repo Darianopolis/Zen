@@ -36,4 +36,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#include <sol/sol.hpp>
+
 using namespace std::literals;

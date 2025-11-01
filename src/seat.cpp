@@ -781,7 +781,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 
     // User binds
 
-    if (command_execute_bind(server, input_action)) {
+    if (bind_trigger(server, input_action)) {
         return state == WL_KEYBOARD_KEY_STATE_PRESSED;
     }
 
@@ -845,7 +845,7 @@ bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
         } else {
             dir = event.delta >= 0 ? ScrollDirection::Left : ScrollDirection::Right;
         }
-        if (command_execute_bind(server, Bind { get_modifiers(server), dir })) return true;
+        if (bind_trigger(server, Bind { get_modifiers(server), dir })) return true;
     }
 
     if (check_mods(server, Modifiers::Mod) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
