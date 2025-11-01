@@ -13,11 +13,6 @@ bool client_filter_globals(const struct wl_client* wl_client, const wl_global* g
     Server* server = static_cast<Server*>(data);
     Client* client = Client::from(server, wl_client);
 
-    // log_trace("{} binding global {} ({})",
-    //     client_to_string(client),
-    //     wl_global_get_interface(global)->name,
-    //     wl_global_get_interface(global)->version);
-
     if (&wl_output_interface == wl_global_get_interface(global)) {
         return output_filter_global(server, client, global);
     }
@@ -54,6 +49,7 @@ void client_new(wl_listener* listener, void* data)
         }
     }
 
+#if GET_WL_CLIENT_CMDLINE
     // Get command line
 
     if (std::ifstream file{std::format("/proc/{}/cmdline", client->pid), std::ios::binary | std::ios::ate}; file.is_open()) {
@@ -64,8 +60,7 @@ void client_new(wl_listener* listener, void* data)
             client->cmdline.emplace_back(a);
         }
     }
-
-    log_info("Client connected: {}", client_to_string(client));
+#endif
 
     client->is_output_aware = true;
     for (auto allowed : output_unaware_clients) {
@@ -82,7 +77,6 @@ void client_new(wl_listener* listener, void* data)
             break;
         }
     }
-    log_info("  is_output_aware = {}", client->is_output_aware);
 
     server->clients.emplace_back(client);
 
@@ -92,8 +86,6 @@ void client_new(wl_listener* listener, void* data)
 void client_destroy(wl_listener* listener, void*)
 {
     Client* client = listener_userdata<Client*>(listener);
-
-    log_info("Client disconnected: {}", client_to_string(client));
 
     std::erase(client->server->clients, client);
 

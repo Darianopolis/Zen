@@ -16,6 +16,15 @@ struct Defer
 
 // -----------------------------------------------------------------------------
 
+template<typename... Ts>
+struct overload_set : Ts... {
+    using Ts::operator()...;
+};
+
+template<typename... Ts> overload_set(Ts...) -> overload_set<Ts...>;
+
+// -----------------------------------------------------------------------------
+
 constexpr auto ptr(auto&& value) { return &value; }
 
 // -----------------------------------------------------------------------------

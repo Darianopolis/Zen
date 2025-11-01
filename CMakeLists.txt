@@ -35,6 +35,16 @@ add_subdirectory(${VENDOR_DIR}/glm EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
+add_subdirectory(${VENDOR_DIR}/sol2 EXCLUDE_FROM_ALL)
+
+# ------------------------------------------------------------------------------
+
+add_library(               luajit INTERFACE)
+target_link_libraries(     luajit INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${VENDOR_DIR}/luajit/src/libluajit.a)
+target_include_directories(luajit INTERFACE ${VENDOR_DIR}/luajit/src)
+
+# ------------------------------------------------------------------------------
+
 add_executable(            ${PROJECT_NAME})
 target_precompile_headers( ${PROJECT_NAME} PUBLIC src/pch.hpp)
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PROGRAM_NAME=\"${PROJECT_NAME}\"")
@@ -66,8 +76,10 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/zone.cpp
     src/debug.cpp
     src/ipc.cpp
-    src/commands.cpp
+    src/process.cpp
     src/client.cpp
+    src/script.cpp
+    src/bind.cpp
     )
 if(USE_ASAN)
     target_link_libraries(${PROJECT_NAME} PUBLIC asan)
@@ -84,4 +96,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     stdc++exp
     Backward::Object
     magic_enum::magic_enum
+    sol2::sol2
+    luajit
     )

@@ -59,6 +59,7 @@ struct MessageConnection
 {
     Server* server;
     wl_event_source* source;
+    std::filesystem::path cwd;
 };
 
 static
@@ -66,17 +67,20 @@ int ipc_handle_client_read(int fd, uint32_t /* mask */, void* data)
 {
     MessageConnection* conn = static_cast<MessageConnection*>(data);
 
-    char buf[4096] = {};
-    recv(fd, buf, sizeof(buf) - 1, 0);
-    buf[sizeof(buf) - 1] = '\0';
-    buf[sizeof(buf) - 2] = '\0';
-
-    std::vector<std::string_view> args;
-    for (const char* a = buf; *a; a += strlen(a) + 1) {
-        args.emplace_back(a);
+    std::vector<char> message;
+    {
+        char buf[4096] = {};
+        int read;
+        while ((read = recv(fd, buf, sizeof(buf), 0)) > 0) {
+            message.append_range(std::string_view(buf, read));
+        }
     }
+    message.emplace_back('\0');
+    message.emplace_back('\0');
 
-    command_execute(conn->server, CommandParser { args });
+    for (const char* a = message.data(); *a; a += strlen(a) + 1) {
+        script_run(conn->server, std::string_view(a), conn->cwd);
+    }
 
     close(fd);
     wl_event_source_remove(conn->source);
@@ -95,6 +99,26 @@ int ipc_handle_socket_accept(int fd, uint32_t /* mask */, void* data)
 
     MessageConnection* conn = new MessageConnection {};
     conn->server = server;
+
+    {
+        ucred cred;
+        socklen_t len = sizeof(cred);
+        if (getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) >= 0) {
+
+            char buf[8192] = {};
+            int count = readlink(std::format("/proc/{}/cwd", cred.pid).c_str(), buf, sizeof(buf));
+            if (count >= 0) {
+                conn->cwd = std::string_view(buf, count);
+            }
+        }
+
+        if (conn->cwd.empty()) {
+            conn->cwd = std::filesystem::current_path();
+            log_warn("Could not determine cwd of IPC source, using [{}]", conn->cwd.c_str());
+        }
+
+    }
+
     conn->source = wl_event_loop_add_fd(wl_display_get_event_loop(server->display), client_fd, WL_EVENT_READABLE, ipc_handle_client_read, conn);
 
     return 0;
@@ -138,5 +162,6 @@ void ipc_client_run(std::span<const std::string_view> args)
     buf.emplace_back('\0');
 
     send(fd, buf.data(), buf.size(), 0);
+
     close(fd);
 }

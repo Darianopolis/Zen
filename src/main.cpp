@@ -8,8 +8,7 @@ struct startup_options
 {
     std::string xwayland_socket;
     std::string log_file;
-    std::span<const std::string_view> startup_command;
-    std::vector<std::string_view> startup_shell_commands;
+    std::vector<std::variant<std::filesystem::path, std::string_view>> startup_scripts;
     bool ctrl_mod;
 };
 
@@ -178,6 +177,10 @@ void init(Server* server, const startup_options& options)
     // Zone window management
 
     zone_init(server);
+
+    // Scripting
+
+    script_system_init(server);
 }
 
 void run(Server* server, const startup_options& options)
@@ -201,13 +204,12 @@ void run(Server* server, const startup_options& options)
 
     // Startup command
 
-    for (std::string_view shell_cmd : options.startup_shell_commands) {
-        spawn(server, "sh", {"sh", shell_cmd, PROGRAM_NAME}, {}, server->debug.original_cwd.c_str());
+    for (auto& script_path : options.startup_scripts) {
+        std::visit(overload_set {
+            [&](const std::filesystem::path& path) { script_run_file(server, path); },
+            [&](std::string_view source)           { script_run(server, source, server->debug.original_cwd); }
+        }, script_path);
     }
-
-    chdir(server->debug.original_cwd.c_str());
-    command_execute(server, CommandParser{options.startup_command});
-    chdir(getenv("HOME"));
 
     // Run
 
@@ -233,12 +235,26 @@ void cleanup(Server* server)
     wlr_scene_node_destroy(&server->scene->tree.node);
 }
 
-constexpr const char* help_prompt = R"(Usage: {} [options] [-- [initial command]]
+constexpr const char* help_prompt = R"(
+Usage: {0} [options]...
 
-Options:
-  --xwayland [socket]   Launch xwayland-satellite with given socket (E.g. :0, :1, ...)
-  --log-file [path]     Log to file
-  --ctrl-mod            Use CTRL instead of ALT in nested mode
+  Launch a new instance of the compositor.
+
+    --xwayland [socket]   Launch xwayland-satellite with given socket
+    --log-file [path]     Log to file
+    --ctrl-mod            Use CTRL instead of ALT in nested mode
+     -s        [script]   Either a path to a Lua script file or
+                          inline Lua code to be executed on startup.
+                          Multiple entries are allowed and will be run in order.
+
+  E.g. {0} --xwayland :0 --log-file {0}.log -s resources/startup.lua
+
+Usage: {0} msg [script]...
+
+  Send a number of Lua fragments to the enclosing compositor to be executed.
+
+  E.g. {0} msg 'debug.output.new()'
+
 )";
 
 int main(int argc, char* argv[])
@@ -265,11 +281,13 @@ int main(int argc, char* argv[])
             options.xwayland_socket = cmd.get_string();
         } else if (cmd.match("--ctrl-mod")) {
             options.ctrl_mod = true;
-        } else if (cmd.match("-s")) {
-            options.startup_shell_commands.emplace_back(cmd.get_string());
-        } else if (cmd.match("--")) {
-            options.startup_command = cmd.peek_rest();
-            break;
+        } else if (cmd.match("-s") || cmd.match("--script")) {
+            std::string_view arg = cmd.get_string();
+            if (std::filesystem::exists(arg)) {
+                options.startup_scripts.emplace_back(std::filesystem::absolute(arg));
+            } else {
+                options.startup_scripts.emplace_back(arg);
+            }
         } else {
             print_usage();
         }
