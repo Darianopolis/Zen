@@ -18,13 +18,12 @@ struct startup_options
 static
 void init(Server* server, const startup_options& options)
 {
-    server->debug.original_cwd = std::filesystem::current_path();
-    chdir(getenv("HOME"));
+    server->session.home_dir = getenv("HOME");
 
     // Core
 
     server->display = wl_display_create();
-    server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), &server->session);
+    server->backend = wlr_backend_autocreate(wl_display_get_event_loop(server->display), &server->wlr_session);
     if (!server->backend) {
         log_error("Failed to create wlr_backend");
         return;
@@ -43,8 +42,8 @@ void init(Server* server, const startup_options& options)
     auto for_each_backend = [&](wlr_backend* backend) {
         if (!wlr_backend_is_wl(backend) && !wlr_backend_is_x11(backend)) return;
 
-        server->debug.is_nested = true;
-        server->debug.window_backend = backend;
+        server->session.is_nested = true;
+        server->session.window_backend = backend;
 
         if (options.ctrl_mod) {
             server->main_modifier = WLR_MODIFIER_CTRL;
@@ -207,7 +206,7 @@ void run(Server* server, const startup_options& options)
     for (auto& script_path : options.startup_scripts) {
         std::visit(overload_set {
             [&](const std::filesystem::path& path) { script_run_file(server, path); },
-            [&](std::string_view source)           { script_run(server, source, server->debug.original_cwd); }
+            [&](std::string_view source)           { script_run(server, source, std::filesystem::current_path()); }
         }, script_path);
     }
 

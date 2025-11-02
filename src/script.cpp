@@ -58,7 +58,7 @@ void script_env_set_globals(Server* server)
     {
         sol::table env = lua["env"] = lua.create_table();
 
-        env["launch_dir"] = std::filesystem::absolute(server->debug.original_cwd).string();
+        env["launch_dir"] = std::filesystem::current_path().string();
 
         env.set_function("set", [server](std::string_view name, std::optional<sol::string_view> value) {
             env_set(server, name, value);
@@ -91,8 +91,8 @@ void script_env_set_globals(Server* server)
             sol::table output = debug["output"] = lua.create_table();
 
             output.set_function("new", [server] {
-                if (server->debug.window_backend) {
-                    wlr_output* output = wlr_wl_output_create(server->debug.window_backend);
+                if (server->session.window_backend) {
+                    wlr_output* output = wlr_wl_output_create(server->session.window_backend);
                     if (output) log_info("Spawning new output: {}", output->name);
                 }
             });

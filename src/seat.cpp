@@ -252,7 +252,7 @@ void update_cursor_debug_visual_position(Server* server)
 
     int32_t he = server->pointer.debug_visual_half_extent;
     wlr_scene_node_set_position(&server->pointer.debug_visual->node,
-        get_cursor_pos(server).x + (server->debug.is_nested ? 0 : -he*2),
+        get_cursor_pos(server).x + (server->session.is_nested ? 0 : -he*2),
         get_cursor_pos(server).y - he*2);
 }
 
@@ -773,9 +773,9 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 
     // VT Switching
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && server->session && sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && server->wlr_session && sym >= XKB_KEY_XF86Switch_VT_1 && sym <= XKB_KEY_XF86Switch_VT_12) {
         log_debug("Switching to TTY {}", 1 + sym - XKB_KEY_XF86Switch_VT_1);
-        wlr_session_change_vt(server->session, 1 + sym - XKB_KEY_XF86Switch_VT_1);
+        wlr_session_change_vt(server->wlr_session, 1 + sym - XKB_KEY_XF86Switch_VT_1);
         return true;
     }
 

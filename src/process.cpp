@@ -26,7 +26,7 @@ std::filesystem::path find_on_path(std::string_view in)
 
 // -----------------------------------------------------------------------------
 
-void spawn(Server*, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions, const char* wd)
+void spawn(Server* server, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions, const char* wd)
 {
     std::vector<std::string> argv_str;
     for (std::string_view a : argv) argv_str.emplace_back(a);
@@ -50,10 +50,12 @@ void spawn(Server*, std::string_view file, std::span<const std::string_view> arg
         return;
     }
 
+    if (!wd) {
+        wd = server->session.home_dir.c_str();
+    }
+
     if (fork() == 0) {
-        if (wd) {
-            chdir(wd);
-        }
+        chdir(wd);
         for (const SpawnEnvAction& env_action : env_actions) {
             if (env_action.value) {
                 setenv(env_action.name, env_action.value, true);
@@ -76,7 +78,7 @@ void env_set(Server* server, std::string_view name, std::optional<std::string_vi
         unsetenv(std::string(name).c_str());
     }
 
-    if (!server->debug.is_nested) {
+    if (!server->session.is_nested) {
         spawn(server, "systemctl", {"systemctl", "--user", "import-environment", name});
     }
 }

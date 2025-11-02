@@ -187,7 +187,7 @@ struct Server
     } script;
 
     wl_display* display;
-    wlr_session* session;
+    struct wlr_session* wlr_session;
     wlr_backend* backend;
     wlr_renderer* renderer;
     wlr_allocator* allocator;
@@ -195,10 +195,10 @@ struct Server
     std::vector<Client*> clients;
 
     struct {
-        std::filesystem::path original_cwd;
+        std::filesystem::path home_dir;
         bool is_nested;
         wlr_backend* window_backend;
-    } debug;
+    } session;
 
     wlr_scene* scene;
     EnumMap<wlr_scene_tree*, Strata> layers;

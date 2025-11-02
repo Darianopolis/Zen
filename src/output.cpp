@@ -245,7 +245,7 @@ void output_new(wl_listener* listener, void* data)
 
     update_output_states(server);
 
-    if (output->config.primary && !server->debug.is_nested) {
+    if (output->config.primary && !server->session.is_nested) {
         wlr_box bounds = output_get_bounds(output);
         vec2 pos = vec2(box_origin(bounds)) + vec2(box_extent(bounds)) / 2.0;
         log_info("Output is primary, warping cursor to center ({}, {})", pos.x, pos.y);
