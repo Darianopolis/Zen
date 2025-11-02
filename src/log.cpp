@@ -1,5 +1,6 @@
 #include "pch.hpp"
 #include "log.hpp"
+#include "core.hpp"
 
 using namespace std::literals;
 
@@ -11,7 +12,13 @@ static struct {
     LogLevel log_level = LogLevel::trace;
     wlr_log_importance wlr_level = WLR_INFO;
     std::ofstream log_file;
+    MessageConnection* ipc_sink = {};
 } log_state = {};
+
+void log_set_message_sink(struct MessageConnection* conn)
+{
+    log_state.ipc_sink = conn;
+}
 
 LogLevel get_log_level()
 {
@@ -39,6 +46,10 @@ void log(LogLevel level, std::string_view message)
     std::cout << std::vformat(fmt.vt, std::make_format_args(message));
     if (log_state.log_file.is_open()) {
         log_state.log_file << std::vformat(fmt.plain, std::make_format_args(message)) << std::flush;
+    }
+    if (log_state.ipc_sink) {
+        ipc_send_string(log_state.ipc_sink->fd, MessageType::StdErr,
+            std::vformat(fmt.vt, std::make_format_args(message)));
     }
 }
 

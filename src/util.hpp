@@ -14,6 +14,8 @@ struct Defer
     ~Defer() { fn(); };
 };
 
+#define defer Defer _ = [&]
+
 // -----------------------------------------------------------------------------
 
 template<typename... Ts>
@@ -22,6 +24,16 @@ struct overload_set : Ts... {
 };
 
 template<typename... Ts> overload_set(Ts...) -> overload_set<Ts...>;
+
+// -----------------------------------------------------------------------------
+
+constexpr
+std::string ascii_to_upper(std::string_view in)
+{
+    std::string out(in);
+    for (char& c : out) c = std::toupper(c);
+    return out;
+}
 
 // -----------------------------------------------------------------------------
 

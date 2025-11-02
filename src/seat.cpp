@@ -515,7 +515,7 @@ void process_cursor_resize(Server* server)
 
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, vec2 delta, vec2 rel, vec2 rel_unaccel)
 {
-    Defer _ = [&] {
+    defer {
         update_cursor_debug_visual_position(server);
     };
 
@@ -567,7 +567,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
         }
 
         bool constraint_active = false;
-        Defer _ = [&] {
+        defer {
             if (!constraint_active && server->pointer.active_constraint) {
 #if NOISY_POINTERS
                 log_info("Pointer constraint deactivated: {} (reason: no constraints active)", pointer_constraint_to_string(server->pointer.active_constraint));

@@ -12,6 +12,7 @@ enum class LogLevel : uint32_t
     fatal,
 };
 
+void log_set_message_sink(struct MessageConnection*);
 LogLevel get_log_level();
 void init_log(LogLevel, wlr_log_importance, const char* log_file);
 void      log(LogLevel, std::string_view message);

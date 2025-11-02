@@ -266,6 +266,27 @@ struct Server
     } zone;
 };
 
+struct MessageConnection
+{
+    Server* server;
+    wl_event_source* source;
+    std::filesystem::path cwd;
+    int fd;
+};
+
+enum class MessageType : uint32_t
+{
+    Argument = 1,
+    StdOut   = 2,
+    StdErr   = 3,
+};
+
+struct MessageHeader
+{
+    MessageType type;
+    uint32_t    size;
+};
+
 #define GET_WL_CLIENT_CMDLINE 0
 
 struct Client
@@ -478,6 +499,8 @@ void ipc_server_init(   Server*);
 void ipc_server_cleanup(Server*);
 
 void ipc_client_run(std::span<const std::string_view>);
+
+void ipc_send_string(int fd, MessageType type, std::string_view str);
 
 // ---- Process ----------------------------------------------------------------
 

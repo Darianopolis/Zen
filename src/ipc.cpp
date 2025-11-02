@@ -1,16 +1,8 @@
 #include "core.hpp"
 
-constexpr
-std::string to_upper(std::string_view in)
-{
-    std::string out(in);
-    for (char& c : out) c = std::toupper(c);
-    return out;
-}
-
 static const std::filesystem::path xdg_runtime_dir = getenv("XDG_RUNTIME_DIR");
 static const std::filesystem::path ipc_socket_dir  = xdg_runtime_dir / PROGRAM_NAME;
-static const std::string           ipc_socket_env  = std::format("{}_PROCESS", to_upper(PROGRAM_NAME));
+static const std::string           ipc_socket_env  = ascii_to_upper(PROGRAM_NAME) + "_PROCESS";
 
 static
 sockaddr_un ipc_socket_path_from_name(std::string_view name)
@@ -55,31 +47,48 @@ int ipc_open_socket(std::string* name)
     return fd;
 }
 
-struct MessageConnection
+static
+std::optional<MessageHeader> ipd_read_message_header(int fd, int flags)
 {
-    Server* server;
-    wl_event_source* source;
-    std::filesystem::path cwd;
-};
+    MessageHeader header;
+    ssize_t read = recv(fd, &header, sizeof(header), flags | MSG_NOSIGNAL);
+    if (read == sizeof(header)) return header;
+    return std::nullopt;
+}
+
+static
+bool ipc_read_string(int fd, const MessageHeader& header, std::string& out)
+{
+    out.resize(header.size);
+    ssize_t read = recv(fd, out.data(), out.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+    return read == header.size;
+}
+
+void ipc_send_string(int fd, MessageType type, std::string_view str)
+{
+    MessageHeader header {
+        .type = type,
+        .size = uint32_t(str.size()),
+    };
+    send(fd, &header, sizeof(header), MSG_NOSIGNAL);
+    send(fd, str.data(), str.size(),  MSG_NOSIGNAL);
+}
 
 static
 int ipc_handle_client_read(int fd, uint32_t /* mask */, void* data)
 {
     MessageConnection* conn = static_cast<MessageConnection*>(data);
 
-    std::vector<char> message;
     {
-        char buf[4096] = {};
-        int read;
-        while ((read = recv(fd, buf, sizeof(buf), 0)) > 0) {
-            message.append_range(std::string_view(buf, read));
-        }
-    }
-    message.emplace_back('\0');
-    message.emplace_back('\0');
+        log_set_message_sink(conn);
+        defer { log_set_message_sink(nullptr); };
 
-    for (const char* a = message.data(); *a; a += strlen(a) + 1) {
-        script_run(conn->server, std::string_view(a), conn->cwd);
+        std::string arg;
+        while (auto header = ipd_read_message_header(conn->fd, MSG_DONTWAIT)) {
+            if (header->type == MessageType::Argument && ipc_read_string(fd, *header, arg)) {
+                script_run(conn->server, arg, conn->cwd);
+            }
+        }
     }
 
     close(fd);
@@ -99,6 +108,9 @@ int ipc_handle_socket_accept(int fd, uint32_t /* mask */, void* data)
 
     MessageConnection* conn = new MessageConnection {};
     conn->server = server;
+    conn->fd = client_fd;
+
+    log_trace("connection, fd = {}", conn->fd);
 
     {
         ucred cred;
@@ -154,14 +166,18 @@ void ipc_client_run(std::span<const std::string_view> args)
         return;
     }
 
-    std::vector<char> buf;
     for (auto arg : args) {
-        buf.append_range(arg);
-        buf.emplace_back('\0');
+        ipc_send_string(fd, MessageType::Argument, arg);
     }
-    buf.emplace_back('\0');
 
-    send(fd, buf.data(), buf.size(), 0);
+    std::string msg;
+    while (auto header = ipd_read_message_header(fd, 0)) {
+        switch (header->type) {
+            case MessageType::StdOut: if (ipc_read_string(fd, *header, msg)) std::cout << msg; break;
+            case MessageType::StdErr: if (ipc_read_string(fd, *header, msg)) std::cerr << msg; break;
+            default:
+        }
+    }
 
     close(fd);
 }
