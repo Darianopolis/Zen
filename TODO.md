@@ -53,6 +53,7 @@
 - ✅ Position toplevels from anchor point - no juddering when resizing
 - ✅ Support wlr-foreign-toplevel-management and xdg-foreign
 - ✅ Simple offset linear mouse acceleration (separate config for normal and relative mouse acceleration)
+- ✅ Debug damage visualization (wlroots scene debug option)
 
 ### Bugs
 
@@ -77,7 +78,7 @@
 - Steam + wofi drun mode
    - When opened via `wofi --show drun`, Steam window shows, then is shortly closed, then repeats
       - NOTE: If `wofi` is launched without `WAYLAND_SERVER` set (E.g. `env -u WAYLAND_SERVER=0 wofi --show drun`), it searches for a display server manually and opens in the parent compositor (which has a lower socket name)
-   - Does not occur when launching via `env -u WAYLAND_SERVER rofi -show drun` (can't test without wayland server masked until layer shell protocol is implemented)
+   - Does not occur when launching via `rofi -show drun`
 - Steam client gamma problem
    - Sometimes, after closing a steam game, the steam client's gamma is messed up.
    - Closing and reopening the Steam window does not fix it, the entire processh as to be completely restarted
@@ -122,8 +123,6 @@
 - Use updated protocol version
    - xdg_shell -> version 7
    - tell clients that all edges are constrained
-- Debug options
-   - WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT
 - Add IPC with messaging client
    - Spawn message
 - Idle protocol

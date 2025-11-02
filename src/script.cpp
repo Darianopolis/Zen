@@ -1,13 +1,32 @@
 #include "core.hpp"
 
-static
-bool new_boolean_state(bool old_state, std::string_view command)
+struct MetatableBuilder
 {
-    if (command == "on") return true;
-    if (command == "off") return false;
-    if (command == "toggle") return !old_state;
-    return old_state;
-}
+    sol::table metatable;
+    sol::table table;
+
+    static constexpr const char* properties_key = "_properties_";
+
+    MetatableBuilder(sol::state& lua): metatable(lua.create_table()), table(lua.create_table())
+    {
+        metatable["__newindex"] = [](sol::table table, const char* field, sol::object value) {        table[properties_key][field]["set"](value); };
+        metatable["__index"]    = [](sol::table table, const char* field)                    { return table[properties_key][field]["get"]();      };
+
+        table[properties_key] = lua.create_table();
+    }
+
+    ~MetatableBuilder()
+    {
+        table[sol::metatable_key] = metatable;
+    }
+
+    void add_property(const char* name, auto set, auto get)
+    {
+        auto props = table[properties_key][name].get_or_create<sol::table>();
+        props["set"] = set;
+        props["get"] = get;
+    }
+};
 
 static
 void script_env_set_globals(Server* server)
@@ -23,72 +42,107 @@ void script_env_set_globals(Server* server)
         spawn(server, argview.front(), argview);
     });
 
+    sol::table config = lua["config"].get_or_create<sol::table>();
+
+    // Binds
+
     {
-        lua.set_function("bind", [server](std::string_view bind_str, sol::function action) {
+        sol::table binds = config["bind"].get_or_create<sol::table>();
+
+        binds.set_function("clear", [server] {
+            server->command_binds.clear();
+        });
+
+        sol::table mt = binds[sol::metatable_key].get_or_create<sol::table>();
+        mt["__newindex"] = [server](sol::table, std::string_view bind_str, std::optional<sol::function> action) {
             auto bind = bind_from_string(server, bind_str);
             if (!bind) log_error("Failed to parse bind string: {}", bind_str);
 
-            log_info("Creating bind: {}", bind_str);
+            if (action) {
+                log_info("Creating bind: {}", bind_str);
 
-            bind_register(server, CommandBind {
-                .bind = bind.value(),
-                .function = [bind = bind.value(), server, bind_str = std::string(bind_str), action = std::move(action)] {
-                    log_info("Executing bind: {}", bind_str);
-                    try {
-                        action();
-                    } catch (const sol::error& e) {
-                        log_error("Error while executing bind [{}] unregistering", bind_str);
-                        bind_erase(server, bind);
-                    }
-                },
-            });
-        });
-
-        lua.set_function("unbind", [server](std::optional<std::string_view> bind_str) {
-            if (bind_str) {
-                auto bind = bind_from_string(server, *bind_str);
-                if (!bind) log_error("Failed to parse bind string: {}", *bind_str);
-                bind_erase(server, *bind);
+                bind_register(server, CommandBind {
+                    .bind = bind.value(),
+                    .function = [bind = bind.value(), server, bind_str = std::string(bind_str), action = std::move(*action)] {
+                        log_info("Executing bind: {}", bind_str);
+                        try {
+                            action();
+                        } catch (const sol::error& e) {
+                            log_error("Error while executing bind [{}] unregistering", bind_str);
+                            bind_erase(server, bind);
+                        }
+                    },
+                });
             } else {
-                server->command_binds.clear();
+                bind_erase(server, *bind);
             }
-        });
+        };
     }
 
+    // Process
+
     {
-        sol::table env = lua["env"] = lua.create_table();
+        MetatableBuilder process(lua);
+        lua["process"] = process.table;
 
-        env["launch_dir"] = std::filesystem::current_path().string();
+        process.add_property("cwd",
+            [](const char* cwd) { chdir(cwd); },
+            [] { return std::filesystem::current_path().string(); });
+    }
 
-        env.set_function("set", [server](std::string_view name, std::optional<sol::string_view> value) {
+    // Environment
+
+    {
+        sol::table env = lua["env"].get_or_create<sol::table>();
+
+        sol::table mt = env[sol::metatable_key].get_or_create<sol::table>();
+        mt["__newindex"] = [server](sol::table, std::string_view name, std::optional<sol::string_view> value) {
             env_set(server, name, value);
-        });
-
-        env.set_function("get", [](const char* name) {
-            return getenv(name);
-        });
+        };
+        mt["__index"] = [](sol::table, const char* field) {
+            return getenv(field);
+        };
     }
 
-    {
-        sol::table debug = lua["debug"] = lua.create_table();
+    // Debug
 
-        debug.set_function("cursor", [server](std::string_view command) {
-            server->pointer.debug_visual_enabled = new_boolean_state(server->pointer.debug_visual_enabled, command);
+    {
+        MetatableBuilder debug(lua);
+        lua["debug"] = debug.table;
+
+        // Cursor
+
+        debug.add_property("cursor", [server](bool state) {
+            server->pointer.debug_visual_enabled = state;
             log_info("Debug cursor visual: {}", server->pointer.debug_visual_enabled ? "enabled" : "disabled");
             update_cursor_state(server);
-        });
+        }, [server] { return server->pointer.debug_visual_enabled; });
+
+        // Pointer
 
         {
-            sol::table pointer = debug["pointer"] = lua.create_table();
+            MetatableBuilder pointer(lua);
+            debug.table["pointer"] = pointer.table;
 
-            pointer.set_function("accel", [server](std::string_view command) {
-                server->pointer.debug_accel_rate = new_boolean_state(server->pointer.debug_accel_rate, command);
-                log_info("Debug pointer accel: {}", server->pointer.debug_accel_rate);
-            });
+            pointer.add_property("accel", [server](bool state) {
+                server->pointer.debug_accel_rate = state;
+                log_info("Debug pointer acceleration: {}", state ? "enabled" : "disabled");
+            }, [server] { return server->pointer.debug_accel_rate; });
         }
 
+        // Damage
+
+        debug.add_property("damage", [server](bool state) {
+            server->scene->WLR_PRIVATE.debug_damage_option = state ? WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT : WLR_SCENE_DEBUG_DAMAGE_NONE;
+            log_info("Debug damage visual: {}", state ? "enabled" : "disabled");
+        }, [server] {
+            return server->scene->WLR_PRIVATE.debug_damage_option == WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT;
+        });
+
+        // Outputs
+
         {
-            sol::table output = debug["output"] = lua.create_table();
+            sol::table output = debug.table["output"].get_or_create<sol::table>();
 
             output.set_function("new", [server] {
                 if (server->session.window_backend) {
@@ -98,21 +152,30 @@ void script_env_set_globals(Server* server)
             });
         }
 
-        {
-            sol::table stats = debug["stats"] = lua.create_table();
+        // Statistics
 
-            stats.set_function("window", [server](std::string_view command) {
+        {
+            MetatableBuilder stats(lua);
+            debug.table["stats"] = stats.table;
+
+            stats.add_property("window", [server](bool state) {
                 if (Toplevel* toplevel = Toplevel::from(get_focused_surface(server))) {
-                    toplevel->report_stats = new_boolean_state(toplevel->report_stats, command);
-                    log_info("{} statistics for {}", toplevel->report_stats ? "Enabling" : "Disabling", surface_to_string(toplevel));
+                    toplevel->report_stats = state;
+                    log_info("{} statistics for {}", state ? "Enabling" : "Disabling", surface_to_string(toplevel));
                 }
+            }, [server] {
+                Toplevel* toplevel = Toplevel::from(get_focused_surface(server));
+                return toplevel && toplevel->report_stats;
             });
 
-            stats.set_function("output", [server](std::string_view command) {
+            stats.add_property("output", [server](bool state) {
                 if (Output* output = get_nearest_output_to_point(server, get_cursor_pos(server))) {
-                    output->report_stats = new_boolean_state(output->report_stats, command);
-                    log_info("{} statistics for {}", output->report_stats ? "Enabling" : "Disabling",  output->wlr_output->name);
+                    output->report_stats = state;
+                    log_info("{} statistics for {}", state ? "Enabling" : "Disabling",  output->wlr_output->name);
                 }
+            }, [server] {
+                Output* output = get_nearest_output_to_point(server, get_cursor_pos(server));
+                return output && output->report_stats;
             });
         }
     }
@@ -134,8 +197,6 @@ sol::environment script_environment_create(Server* server, std::filesystem::path
     sol::environment e(lua, sol::create, lua.globals());
 
     dir = std::filesystem::absolute(dir);
-
-    e["source_dir"] = dir.string();
 
     e.set_function("source", [server, dir](std::string_view path) {
         log_debug("Sourcing [{}] -> {}", path, (dir / path).c_str());

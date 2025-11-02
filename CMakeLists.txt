@@ -61,6 +61,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-gnu-conditional-omitted-operand
     -Wno-zero-length-array
     -Wimplicit-fallthrough
+    -Wshadow
     )
 if(USE_ASAN)
     target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=address)

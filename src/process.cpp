@@ -12,9 +12,9 @@ std::filesystem::path find_on_path(std::string_view in)
         size_t n = path.find_first_of(":", b);
         auto part = path.substr(b, n - b);
 
-        auto path = std::filesystem::path(part) / in;
-        if (std::filesystem::exists(path)) {
-            return path;
+        auto test_path = std::filesystem::path(part) / in;
+        if (std::filesystem::exists(test_path)) {
+            return test_path;
         }
 
         if (n == std::string::npos) break;
