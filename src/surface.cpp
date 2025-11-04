@@ -221,6 +221,8 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen, Output* output
 
 void toplevel_set_activated(Toplevel* toplevel, bool active)
 {
+    if (!toplevel->xdg_toplevel()->base->initialized) return;
+
     log_info("{} toplevel: {}", active ? "Activating" : "Dectivating", surface_to_string(toplevel));
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel(), active);
 }
@@ -331,7 +333,7 @@ void surface_focus(Surface* surface)
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     if (toplevel) {
-        toplevel_set_activated(Toplevel::from(surface), true);
+        toplevel_set_activated(toplevel, true);
 
         log_debug("Raising to top: {}", surface_to_string(toplevel));
         std::erase(server->toplevels, toplevel);
