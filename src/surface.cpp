@@ -909,18 +909,43 @@ void popup_new(wl_listener* listener, void* data)
 
 void scene_reconfigure(Server* server)
 {
-    for (Toplevel* toplevel : server->toplevels) {
-        wlr_scene_node_reparent(&toplevel->scene_tree->node,
-            (toplevel == get_focused_surface(server) && server->interaction_mode != InteractionMode::focus_cycle)
-            ? server->layers[Strata::focused]
-            : server->layers[Strata::floating]);
+    std::unordered_multimap<Toplevel*, Toplevel*> parent_child;
+
+    auto raise_with_children = [&](this auto&& raise_with_children, Toplevel* toplevel, wlr_scene_tree* layer) -> void {
+        wlr_scene_node_reparent(&toplevel->scene_tree->node, layer);
         wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+
+        auto[b, e] = parent_child.equal_range(toplevel);
+        for (auto i = b; i != e; ++i) {
+            raise_with_children(i->second, layer);
+        }
+    };
+
+    auto raise = [&](this auto&& raise, Toplevel* toplevel, wlr_scene_tree* layer) -> void {
+        if (Toplevel* parent = Toplevel::from(toplevel->xdg_toplevel()->parent)) {
+            raise(parent, layer);
+        }
+        raise_with_children(toplevel, layer);
+    };
+
+    auto get_layer_for = [&](Toplevel* toplevel) {
+        bool ontop = (server->interaction_mode == InteractionMode::focus_cycle)
+            ? toplevel == server->focus_cycle.current.get()
+            : toplevel == get_focused_surface(server);
+        return server->layers[ontop ? Strata::focused : Strata::floating];
+    };
+
+    for (Toplevel* toplevel : server->toplevels) {
+        if (Toplevel* parent = Toplevel::from(toplevel->xdg_toplevel()->parent)) {
+            parent_child.insert({ parent, toplevel });
+        }
+
+        raise(toplevel, get_layer_for(toplevel));
         toplevel_update_borders(toplevel);
         toplevel_update_opacity(toplevel);
     }
 
     if (Toplevel* toplevel  = server->focus_cycle.current.get()) {
-        wlr_scene_node_reparent(&toplevel->scene_tree->node, server->layers[Strata::focused]);
-        wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+        raise(toplevel, server->layers[Strata::focused]);
     }
 }

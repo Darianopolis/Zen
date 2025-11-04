@@ -877,7 +877,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle) {
         Toplevel* selected = focus_cycle_end(server);
-        if (wlr_box_contains_point(ptr(surface_get_bounds(selected)), get_cursor_pos(server).x, get_cursor_pos(server).y)) {
+        if (selected && wlr_box_contains_point(ptr(surface_get_bounds(selected)), get_cursor_pos(server).x, get_cursor_pos(server).y)) {
             surface_focus(selected);
         }
         return true;

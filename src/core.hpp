@@ -425,8 +425,9 @@ struct Toplevel : Surface
     {
         return (surface && surface->role == SurfaceRole::toplevel) ? static_cast<Toplevel*>(surface) : nullptr;
     }
-    static Toplevel* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static Toplevel* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
+    static Toplevel* from(struct wlr_surface* wlr_surface)  { return from(Surface::from(wlr_surface)); }
+    static Toplevel* from(wlr_scene_node*     node)         { return from(Surface::from(node));        }
+    static Toplevel* from(wlr_xdg_toplevel*   xdg_toplevel) { return xdg_toplevel ? Toplevel::from(xdg_toplevel->base->surface) : nullptr; }
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
 
