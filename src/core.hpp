@@ -10,13 +10,15 @@
 static constexpr uint32_t cursor_size = 24;
 
 static constexpr int   border_width = 2;
-static constexpr fvec4 border_color_unfocused = premultiply({ 0.3f, 0.3f, 0.3f, 1.0f });
-static constexpr fvec4 border_color_focused   = premultiply({ 0.4f, 0.4f, 1.0f, 1.0f });
+static constexpr fvec4 border_color_unfocused = { 0.3f, 0.3f, 0.3f, 1.0f };
+static constexpr fvec4 border_color_focused   = { 0.4f, 0.4f, 1.0f, 1.0f };
 
-static constexpr fvec4 background_color = premultiply({ 0.1f, 0.1f, 0.1f, 1.f });
+static constexpr float focus_cycle_unselected_opacity = 0.2;
 
-static constexpr fvec4 zone_color_inital = premultiply({ 0.6f, 0.6f, 0.6f, 0.4f });
-static constexpr fvec4 zone_color_select = premultiply({ 0.4f, 0.4f, 1.0f, 0.4f });
+static constexpr fvec4 background_color = { 0.1f, 0.1f, 0.1f, 1.f };
+
+static constexpr fvec4 zone_color_inital = { 0.6f, 0.6f, 0.6f, 0.4f };
+static constexpr fvec4 zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
 
 static constexpr uint32_t zone_horizontal_zones = 6;
 static constexpr uint32_t zone_vertical_zones   = 2;
@@ -34,7 +36,7 @@ static constexpr double zone_internal_padding = 4 +  + border_width * 2;
 static constexpr bool keyboard_default_numlock_state = true;
 
 static constexpr const char* keyboard_layout       = "gb";
-static constexpr int32_t     keyboard_repeat_rate  = 25;
+static constexpr int32_t     keyboard_repeat_rate  =  25;
 static constexpr int32_t     keyboard_repeat_delay = 600;
 
 struct PointerAccelConfig
@@ -194,6 +196,8 @@ struct Server
 
     std::vector<Client*> clients;
 
+    std::vector<Toplevel*> toplevels;
+
     struct {
         std::filesystem::path home_dir;
         bool is_nested;
@@ -250,6 +254,10 @@ struct Server
         uint32_t resize_edges;
     } movesize;
 
+    struct {
+        Weak<Toplevel> current;
+    } focus_cycle;
+
     uint32_t main_modifier;
     xkb_keysym_t main_modifier_keysym_left;
     xkb_keysym_t main_modifier_keysym_right;
@@ -257,11 +265,11 @@ struct Server
     wlr_scene_tree* drag_icon_parent;
 
     struct {
+        Weak<Toplevel> toplevel;
         wlr_box selection;
         wlr_scene_rect* selector;
         wlr_box initial_zone = {};
         wlr_box final_zone   = {};
-        bool moving    = false;
         bool selecting = false;
     } zone;
 };
@@ -530,6 +538,10 @@ bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 Modifiers get_modifiers(Server*);
 bool      check_mods(   Server*, Modifiers);
 
+// ---- Scene ------------------------------------------------------------------
+
+void scene_reconfigure(Server* server);
+
 // ---- Client -----------------------------------------------------------------
 
 void client_new(    wl_listener*, void*);
@@ -594,7 +606,6 @@ void seat_start_drag(           wl_listener*, void*);
 void zone_init(                 Server*);
 void zone_process_cursor_motion(Server*);
 bool zone_process_cursor_button(Server*, const wlr_pointer_button_event&);
-void zone_begin_selection(      Server*);
 void zone_end_selection(        Server*);
 
 wlr_box zone_apply_external_padding(wlr_box);
@@ -653,11 +664,13 @@ void layer_surface_new(    wl_listener*, void*);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
+void toplevel_update_opacity(   Toplevel*);
+void toplevel_update_borders(   Toplevel*);
+
 void toplevel_set_bounds(       Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);
 bool toplevel_is_fullscreen(    Toplevel*);
 void toplevel_set_fullscreen(   Toplevel*, bool fullscreen, Output* output);
-void toplevel_update_border(    Toplevel*);
 bool toplevel_is_interactable(  Toplevel*);
 void toplevel_begin_interactive(Toplevel*, InteractionMode);
 void toplevel_close(            Toplevel*);

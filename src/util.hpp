@@ -79,7 +79,10 @@ constexpr vec2 round_to_zero(vec2 v)         { return copysign(glm::floor(glm::a
 
 // -----------------------------------------------------------------------------
 
-constexpr fvec4 premultiply(fvec4 v) { return {glm::fvec3{v} * v.w, v.w}; }
+constexpr const float* color_to_wlroots(fvec4 v, fvec4&& temp = {})
+{
+    return glm::value_ptr(temp = {glm::fvec3{v} * v.w, v.w});
+}
 
 // -----------------------------------------------------------------------------
 
@@ -245,6 +248,44 @@ Weak<T> weak_from(T* t)
     if (!t) return {};
     if (!t->weak_state) t->weak_state.reset(new WeakState{t});
     return Weak<T>{t->weak_state};
+}
+
+// -----------------------------------------------------------------------------
+
+template<typename T>
+void fixup_weak_vector(std::vector<Weak<T>>& vector)
+{
+    std::erase_if(vector, [](const Weak<T>& v) { return !v.get(); });
+}
+
+template<typename T>
+auto iterate(std::span<T> view, bool reverse = false)
+{
+    struct Iterator
+    {
+        std::span<T> view;
+        int64_t cur, end, step;
+
+        bool operator==(std::default_sentinel_t) const { return cur == end; }
+        void operator++() { cur += step; }
+        T&   operator*()  { return view[cur]; }
+    };
+
+    struct Iterable
+    {
+        std::span<T> view;
+        bool backward;
+
+        Iterator begin() {
+            return backward
+                ? Iterator { view, int64_t(view.size()) - 1, -1, -1 }
+                : Iterator { view, 0, int64_t(view.size()), 1 };
+        }
+
+        std::default_sentinel_t end() { return {}; }
+    };
+
+    return Iterable{view, reverse};
 }
 
 // -----------------------------------------------------------------------------

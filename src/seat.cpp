@@ -100,8 +100,8 @@ void seat_keyboard_focus_change(wl_listener*, void* data)
 {
     wlr_seat_keyboard_focus_change_event* event = static_cast<wlr_seat_keyboard_focus_change_event*>(data);
 
-    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) toplevel_update_border(toplevel);
-    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_border(toplevel);
+    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) toplevel_update_borders(toplevel);
+    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_borders(toplevel);
 }
 
 void keyboard_new(Server* server, wlr_input_device* device)
@@ -269,23 +269,23 @@ void update_cursor_state(Server* server)
             server->pointer.cursor_is_visible = visible;
 
             wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
-            debug_visual_color = visible ? premultiply({0, 1, 0, 0.5}) : premultiply({1, 0, 0, 0.5});
+            debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
         } else {
             // log_debug("Cursor state: Client not allowed to hide cursor, using default");
             wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-            debug_visual_color = premultiply({1, 1, 0, 0.5});
+            debug_visual_color = {1, 1, 0, 0.5};
         }
     } else {
         // log_debug("Cursor state: No surface focus or surface cursor unset, using default");
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-        debug_visual_color = premultiply({1, 0, 1, 0.5});
+        debug_visual_color = {1, 0, 1, 0.5};
     }
 
     // Update debug visual
 
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, server->pointer.debug_visual_enabled);
     if (server->pointer.debug_visual_enabled) {
-        wlr_scene_rect_set_color(server->pointer.debug_visual, glm::value_ptr(debug_visual_color));
+        wlr_scene_rect_set_color(server->pointer.debug_visual, color_to_wlroots(debug_visual_color));
         update_cursor_debug_visual_position(server);
     }
 }

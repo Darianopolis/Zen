@@ -11,8 +11,27 @@ Surface* get_focused_surface(Server* server)
     return Surface::from(server->seat->keyboard_state.focused_surface);
 }
 
-void toplevel_update_border(Toplevel* toplevel)
+static
+float toplevel_get_opacity(Toplevel* toplevel)
 {
+    return (toplevel->server->interaction_mode != InteractionMode::focus_cycle
+            || toplevel == toplevel->server->focus_cycle.current.get()) ? 1 : focus_cycle_unselected_opacity;
+}
+
+void toplevel_update_opacity(Toplevel* toplevel)
+{
+    float opacity = toplevel_get_opacity(toplevel);
+    auto set_opacity = [&](wlr_scene_node* node, ivec2) -> bool {
+        if (node->type == WLR_SCENE_NODE_BUFFER) wlr_scene_buffer_set_opacity(wlr_scene_buffer_from_node(node), opacity);
+        return true;
+    };
+    walk_scene_tree_back_to_front(&toplevel->scene_tree->node, {}, FUNC_REF(set_opacity), false);
+}
+
+void toplevel_update_borders(Toplevel* toplevel)
+{
+    // Borders
+
     static constexpr uint32_t left = 0;
     static constexpr uint32_t top = 1;
     static constexpr uint32_t right = 2;
@@ -23,21 +42,21 @@ void toplevel_update_border(Toplevel* toplevel)
     bool show = geom.width && geom.height;
     show &= !toplevel_is_fullscreen(toplevel);
 
+    fvec4 color = get_focused_surface(toplevel->server) == toplevel ? border_color_focused : border_color_unfocused;
+    color.a = toplevel_get_opacity(toplevel);
+
     wlr_box positions[4];
     positions[left]   = { -border_width, -border_width, border_width, geom.height + border_width * 2 };
     positions[right]  = {  geom.width,   -border_width, border_width, geom.height + border_width * 2 };
-    positions[top]    = {  0,            -border_width, geom.width, border_width                     };
-    positions[bottom] = {  0,             geom.height,  geom.width, border_width                     };
+    positions[top]    = {  0,            -border_width, geom.width,   border_width                   };
+    positions[bottom] = {  0,             geom.height,  geom.width,   border_width                   };
 
     for (uint32_t i = 0; i < 4; ++i) {
         if (show) {
             wlr_scene_node_set_enabled(&toplevel->border[i]->node, true);
             wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
             wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
-            wlr_scene_rect_set_color(toplevel->border[i],
-                get_focused_surface(toplevel->server) == toplevel
-                    ? glm::value_ptr(border_color_focused)
-                    : glm::value_ptr(border_color_unfocused));
+            wlr_scene_rect_set_color(toplevel->border[i], color_to_wlroots(color));
         } else {
             wlr_scene_node_set_enabled(&toplevel->border[i]->node, false);
         }
@@ -204,7 +223,6 @@ void toplevel_set_activated(Toplevel* toplevel, bool active)
 {
     log_info("{} toplevel: {}", active ? "Activating" : "Dectivating", surface_to_string(toplevel));
     wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel(), active);
-    toplevel_update_border(toplevel);
 }
 
 void request_activate(wl_listener*, void* data)
@@ -220,71 +238,26 @@ void request_activate(wl_listener*, void* data)
 // -----------------------------------------------------------------------------
 
 static
-void walk_toplevels(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data, bool backward)
+bool focus_cycle_toplevel_in_cycle(Toplevel* toplevel, wlr_cursor* cursor)
 {
-    auto fn = [&](wlr_scene_node* node, ivec2) -> bool {
-        if (Toplevel* toplevel = Toplevel::from(node)) {
-            if (&toplevel->scene_tree->node != node) {
-                // TODO: Root cause this issue in wlroots
-                log_error("BUG - Unexpected wlr_scene_node referencing {} (expected {}, got {}), unlinking!",
-                    surface_to_string(toplevel),
-                    (void*)&toplevel->scene_tree->node,
-                    (void*)node);
-                node->data = nullptr;
-                return true;
-            }
-            if (!toplevel->xdg_toplevel()->base->initialized) return true;
-            return for_each(for_each_data, toplevel);
-        }
-        return true;
-    };
-    if (backward) {
-        walk_scene_tree_back_to_front(&server->scene->tree.node, {}, FUNC_REF(fn), false);
-    } else {
-        walk_scene_tree_front_to_back(&server->scene->tree.node, {}, FUNC_REF(fn), false);
-    }
-}
-
-static
-void walk_toplevels_front_to_back(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
-{
-    walk_toplevels(server, for_each, for_each_data, false);
-}
-
-static
-void walk_toplevels_back_to_front(Server* server, bool(*for_each)(void*, Toplevel*), void* for_each_data)
-{
-    walk_toplevels(server, for_each, for_each_data, true);
-}
-
-// -----------------------------------------------------------------------------
-
-static
-bool focus_cycle_toplevel_is_enabled(Toplevel* toplevel)
-{
-    return toplevel->scene_tree->node.enabled;
-}
-
-static
-void focus_cycle_toplevel_set_enabled(Toplevel* toplevel, bool enabled)
-{
-    wlr_scene_node_set_enabled(&toplevel->scene_tree->node, enabled);
+    return toplevel && toplevel->wlr_surface->mapped
+        && (!cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y));
 }
 
 void focus_cycle_begin(Server* server, wlr_cursor* cursor)
 {
     set_interaction_mode(server, InteractionMode::focus_cycle);
 
-    surface_unfocus(get_focused_surface(server));
+    server->focus_cycle.current.reset();
 
-    Toplevel* current = nullptr;
-    auto fn = [&](Toplevel* toplevel) -> bool {
-        bool new_current = !current && (!cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y));
-        focus_cycle_toplevel_set_enabled(toplevel, new_current);
-        if (new_current) current = toplevel;
-        return true;
-    };
-    walk_toplevels_front_to_back(server, FUNC_REF(fn));
+    for (Toplevel* toplevel : iterate<Toplevel*>(server->toplevels, true)) {
+        if (focus_cycle_toplevel_in_cycle(toplevel, cursor)) {
+            toplevel->server->focus_cycle.current = weak_from(toplevel);
+            break;
+        }
+    }
+
+    scene_reconfigure(server);
 }
 
 Toplevel* focus_cycle_end(Server* server)
@@ -292,16 +265,10 @@ Toplevel* focus_cycle_end(Server* server)
     if (server->interaction_mode != InteractionMode::focus_cycle) return nullptr;
     server->interaction_mode = InteractionMode::passthrough;
 
-    Toplevel* selected = nullptr;
-    auto fn = [&](Toplevel* toplevel) -> bool {
-        if (focus_cycle_toplevel_is_enabled(toplevel)) {
-            if (!selected) selected = toplevel;
-        }
+    Toplevel* selected = server->focus_cycle.current.get();
+    server->focus_cycle.current.reset();
 
-        focus_cycle_toplevel_set_enabled(toplevel, true);
-        return true;
-    };
-    walk_toplevels_front_to_back(server, FUNC_REF(fn));
+    scene_reconfigure(server);
 
     return selected;
 }
@@ -314,11 +281,8 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
     bool next_is_active = false;
     Toplevel* new_active = nullptr;
 
-    auto iter_fn = backwards ? walk_toplevels_back_to_front : walk_toplevels_front_to_back;
-
-    auto pick = [&](Toplevel* toplevel) -> bool {
-        bool in_cycle = !cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y);
-        if (!in_cycle) return true;
+    for (Toplevel* toplevel : iterate<Toplevel*>(server->toplevels, !backwards)) {
+        if (!focus_cycle_toplevel_in_cycle(toplevel, cursor)) continue;
 
         // Is this is the first window in the cycle, mark incase we need to
         if (!first) first = toplevel;
@@ -326,27 +290,22 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
         // Previous window was active, moving to this one
         if (next_is_active) {
             new_active = toplevel;
-            return false;
+            break;
         }
 
         // This is the first active window in the cycle, cycle to next
-        if (focus_cycle_toplevel_is_enabled(toplevel)) {
+        if (toplevel->server->focus_cycle.current.get() == toplevel) {
             next_is_active = true;
         }
-
-        return true;
     };
-    iter_fn(server, FUNC_REF(pick));
 
     if (!new_active && first) {
         new_active = first;
     }
 
-    auto update = [&](Toplevel* toplevel) -> bool {
-        focus_cycle_toplevel_set_enabled(toplevel, toplevel == new_active);
-        return true;
-    };
-    iter_fn(server, FUNC_REF(update));
+    server->focus_cycle.current = weak_from(new_active);
+
+    scene_reconfigure(server);
 }
 
 // -----------------------------------------------------------------------------
@@ -372,8 +331,11 @@ void surface_focus(Surface* surface)
 
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     if (toplevel) {
-        wlr_scene_node_reparent(&surface->scene_tree->node, surface->server->layers[Strata::focused]);
         toplevel_set_activated(Toplevel::from(surface), true);
+
+        log_debug("Raising to top: {}", surface_to_string(toplevel));
+        std::erase(server->toplevels, toplevel);
+        server->toplevels.emplace_back(toplevel);
     }
 
     if (keyboard) {
@@ -383,6 +345,7 @@ void surface_focus(Surface* surface)
     // TODO: Tidy up and consolidate API for handling (re)focus
     process_cursor_motion(server, 0, nullptr, {}, {}, {});
     update_cursor_state(server);
+    scene_reconfigure(server);
 }
 
 void surface_unfocus(Surface* surface)
@@ -396,8 +359,6 @@ void surface_unfocus(Surface* surface)
     // Move to top of "unfocused" layer
 
     if (Toplevel* toplevel = Toplevel::from(surface)) {
-        wlr_scene_node_reparent(&surface->scene_tree->node, surface->server->layers[Strata::floating]);
-        wlr_scene_node_raise_to_top(&surface->scene_tree->node);
         toplevel_set_activated(toplevel, false);
     }
 
@@ -405,6 +366,7 @@ void surface_unfocus(Surface* surface)
 
     process_cursor_motion(surface->server, 0, nullptr, {}, {}, {});
     update_cursor_state(surface->server);
+    scene_reconfigure(surface->server);
 }
 
 Surface* get_surface_accepting_input_at(Server* server, vec2 layout_pos, wlr_surface** p_surface, vec2* surface_pos)
@@ -446,7 +408,7 @@ void surface_cleanup(Surface* surface)
 // -----------------------------------------------------------------------------
 
 static
-void toplevel_foreign_request_maximize(wl_listener* listener, void*)
+void toplevel_foreign_request_activate(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
     log_warn("Foreign activation request for: {}", surface_to_string(toplevel));
@@ -463,7 +425,7 @@ void toplevel_map(wl_listener* listener, void*)
     toplevel->foreign_handle = wlr_foreign_toplevel_handle_v1_create(toplevel->server->foreign_toplevel_manager);
     if (toplevel->xdg_toplevel()->app_id) wlr_foreign_toplevel_handle_v1_set_app_id(toplevel->foreign_handle, toplevel->xdg_toplevel()->app_id);
     if (toplevel->xdg_toplevel()->title) wlr_foreign_toplevel_handle_v1_set_title(toplevel->foreign_handle, toplevel->xdg_toplevel()->title);
-    toplevel->foreign_listeners.listen(&toplevel->foreign_handle->events.request_activate, toplevel, toplevel_foreign_request_maximize);
+    toplevel->foreign_listeners.listen(&toplevel->foreign_handle->events.request_activate, toplevel, toplevel_foreign_request_activate);
 
     // xdg foreign
     wlr_xdg_foreign_exported_init(&toplevel->foreign_exported, toplevel->server->foreign_registry);
@@ -487,14 +449,12 @@ void toplevel_unmap(wl_listener* listener, void*)
     if (get_focused_surface(unmapped_toplevel->server) == unmapped_toplevel) {
         surface_unfocus(unmapped_toplevel);
 
-        auto fn = [&](Toplevel* toplevel) {
-            if (toplevel != unmapped_toplevel) {
+        for (Toplevel* toplevel : iterate<Toplevel*>(unmapped_toplevel->server->toplevels, true)) {
+            if (focus_cycle_toplevel_in_cycle(toplevel, nullptr)) {
                 surface_focus(toplevel);
-                return false;
+                break;
             }
-            return true;
-        };
-        walk_toplevels_front_to_back(unmapped_toplevel->server, FUNC_REF(fn));
+        }
     }
 
     if (unmapped_toplevel->foreign_handle) {
@@ -512,7 +472,7 @@ void toplevel_commit(wl_listener* listener, void*)
 
     if (toplevel->xdg_toplevel()->base->initial_commit) {
 
-        log_info("Toplevel committed: {}", surface_to_string(toplevel));
+        log_info("Toplevel initial commit: {}", surface_to_string(toplevel));
 
         for (const WindowRule& rule : window_rules) {
             if (rule.app_id && (!toplevel->xdg_toplevel()->app_id || !std::string_view(toplevel->xdg_toplevel()->app_id).starts_with(rule.app_id))) continue;
@@ -557,7 +517,10 @@ void toplevel_commit(wl_listener* listener, void*)
 
         toplevel_resize_handle_commit(toplevel);
         toplevel_update_position_for_anchor(toplevel);
-        toplevel_update_border(toplevel);
+        toplevel_update_borders(toplevel);
+        if (toplevel->server->interaction_mode == InteractionMode::focus_cycle) {
+            toplevel_update_opacity(toplevel);
+        }
     }
 
     surface_profiler_report_commit(toplevel);
@@ -567,11 +530,9 @@ void toplevel_destroy(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
-    log_debug("Toplevel destroyed: {} (wlr_surface = {}, xdg_toplevel = {}, scene_tree.node = {})",
-        surface_to_string(toplevel),
-        (void*)toplevel->xdg_toplevel()->base->surface,
-        (void*)toplevel->xdg_toplevel(),
-        (void*)&toplevel->scene_tree->node);
+    log_debug("Toplevel destroyed: {}", surface_to_string(toplevel));
+
+    std::erase(toplevel->server->toplevels, toplevel);
 
     surface_cleanup(toplevel);
 
@@ -697,8 +658,10 @@ void toplevel_new(wl_listener* listener, void* data)
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.new_subsurface, server, subsurface_new);
 
     for (int i = 0; i < 4; ++i) {
-        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, glm::value_ptr(border_color_unfocused));
+        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color_to_wlroots(border_color_unfocused));
     }
+
+    server->toplevels.emplace_back(toplevel);
 }
 
 // -----------------------------------------------------------------------------
@@ -726,6 +689,15 @@ void subsurface_commit(wl_listener* listener, void*)
     Subsurface* subsurface = listener_userdata<Subsurface*>(listener);
 
     surface_profiler_report_commit(subsurface);
+
+    if (subsurface->server->interaction_mode == InteractionMode::focus_cycle) {
+        for (Surface* current = subsurface; (current = subsurface->parent());) {
+            if (Toplevel* toplevel = Toplevel::from(current)) {
+                toplevel_update_opacity(toplevel);
+                break;
+            }
+        }
+    }
 }
 
 void subsurface_destroy(wl_listener* listener, void*)
@@ -931,4 +903,24 @@ void popup_new(wl_listener* listener, void* data)
 
     popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup, popup_commit);
     popup->listeners.listen(&               xdg_popup->events.destroy, popup, popup_destroy);
+}
+
+// -----------------------------------------------------------------------------
+
+void scene_reconfigure(Server* server)
+{
+    for (Toplevel* toplevel : server->toplevels) {
+        wlr_scene_node_reparent(&toplevel->scene_tree->node,
+            (toplevel == get_focused_surface(server) && server->interaction_mode != InteractionMode::focus_cycle)
+            ? server->layers[Strata::focused]
+            : server->layers[Strata::floating]);
+        wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+        toplevel_update_borders(toplevel);
+        toplevel_update_opacity(toplevel);
+    }
+
+    if (Toplevel* toplevel  = server->focus_cycle.current.get()) {
+        wlr_scene_node_reparent(&toplevel->scene_tree->node, server->layers[Strata::focused]);
+        wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+    }
 }

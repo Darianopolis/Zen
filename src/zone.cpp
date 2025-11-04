@@ -18,7 +18,7 @@ wlr_box zone_apply_external_padding(wlr_box box)
 
 void zone_init(Server* server)
 {
-    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, glm::value_ptr(zone_color_inital));
+    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, color_to_wlroots(zone_color_inital));
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 
@@ -34,13 +34,12 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
                 vec2 surface_pos;
                 wlr_surface* surface = nullptr;
                 if (Toplevel* toplevel = Toplevel::from(get_surface_accepting_input_at(server, get_cursor_pos(server), &surface, &surface_pos))) {
-                    surface_focus(toplevel);
+                    server->zone.toplevel = weak_from(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
-                        wlr_scene_rect_set_color(server->zone.selector, glm::value_ptr(zone_color_inital));
+                        wlr_scene_rect_set_color(server->zone.selector, color_to_wlroots(zone_color_inital));
                         wlr_scene_node_set_enabled(&server->zone.selector->node, true);
                         server->zone.selecting = false;
-                        server->zone.moving = true;
                         set_interaction_mode(server, InteractionMode::zone);
                         zone_process_cursor_motion(server);
                     }
@@ -49,24 +48,24 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
                 log_warn("Tried to initiate zone interaction but cursor not visible");
             }
             return true;
-        } else if (server->zone.moving) {
+        } else if (server->interaction_mode == InteractionMode::zone) {
             if (server->zone.selecting) {
-                if (Toplevel* focused_toplevel = Toplevel::from(get_focused_surface(server))) {
-                    toplevel_set_bounds(focused_toplevel, server->zone.final_zone);
+                if (Toplevel* toplevel = server->zone.toplevel.get()) {
+                    toplevel_set_bounds(toplevel, server->zone.final_zone);
+                    surface_focus(toplevel);
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);
             set_interaction_mode(server, InteractionMode::passthrough);
-            server->zone.moving = false;
             return true;
         }
     }
-    else if (event.button == BTN_RIGHT && server->zone.moving) {
+    else if (event.button == BTN_RIGHT && server->interaction_mode == InteractionMode::zone) {
         if (pressed) {
             server->zone.selecting = !server->zone.selecting;
             wlr_scene_rect_set_color(server->zone.selector, server->zone.selecting
-                                                                ? glm::value_ptr(zone_color_select)
-                                                                : glm::value_ptr(zone_color_inital));
+                                                                ? color_to_wlroots(zone_color_select)
+                                                                : color_to_wlroots(zone_color_inital));
         }
         return true;
     }
@@ -129,13 +128,6 @@ void zone_process_cursor_motion(Server* server)
         wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
         wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);
     }
-}
-
-void zone_begin_selection(Server* server)
-{
-    set_interaction_mode(server, InteractionMode::zone);
-
-    zone_process_cursor_motion(server);
 }
 
 void zone_end_selection(Server* server)
