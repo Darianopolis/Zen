@@ -272,6 +272,7 @@ Toplevel* focus_cycle_end(Server* server)
 {
     if (server->interaction_mode != InteractionMode::focus_cycle) return nullptr;
     server->interaction_mode = InteractionMode::passthrough;
+    update_cursor_state(server);
 
     Toplevel* selected = server->focus_cycle.current.get();
     server->focus_cycle.current.reset();

@@ -261,24 +261,30 @@ void update_cursor_state(Server* server)
     fvec4 debug_visual_color;
 
     server->pointer.cursor_is_visible = true;
-    if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
-        CursorSurface* cursor_surface = focused_surface->cursor.surface.get();
-        bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
-        if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
-            // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
-            server->pointer.cursor_is_visible = visible;
+    if (server->interaction_mode == InteractionMode::passthrough) {
+        if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
+            CursorSurface* cursor_surface = focused_surface->cursor.surface.get();
+            bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
+            if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
+                // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
+                server->pointer.cursor_is_visible = visible;
 
-            wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
-            debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
+                wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
+                debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
+            } else {
+                // log_debug("Cursor state: Client not allowed to hide cursor, using default");
+                wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+                debug_visual_color = {1, 1, 0, 0.5};
+            }
         } else {
-            // log_debug("Cursor state: Client not allowed to hide cursor, using default");
+            // log_debug("Cursor state: No surface focus or surface cursor unset, using default");
             wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-            debug_visual_color = {1, 1, 0, 0.5};
+            debug_visual_color = {1, 0, 1, 0.5};
         }
-    } else {
-        // log_debug("Cursor state: No surface focus or surface cursor unset, using default");
+    }  else {
+        // log_debug("Cursor state: Interaction mode is not passthrough, using default");
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-        debug_visual_color = {1, 0, 1, 0.5};
+        debug_visual_color = {0, 1, 1, 0.5};
     }
 
     // Update debug visual
@@ -464,6 +470,8 @@ void set_interaction_mode(Server* server, InteractionMode mode)
     if (prev_mode == InteractionMode::move || prev_mode == InteractionMode::resize) {
         server->movesize.grabbed_toplevel.reset();
     }
+
+    update_cursor_state(server);
 }
 
 void process_cursor_move(Server* server)
