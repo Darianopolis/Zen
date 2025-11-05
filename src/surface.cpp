@@ -239,7 +239,7 @@ void request_activate(wl_listener*, void* data)
 
     if (Toplevel* toplevel = Toplevel::from(event->surface)) {
         log_debug("Activation request for {}, activating...", surface_to_string(toplevel));
-        surface_focus(toplevel);
+        surface_try_focus(toplevel->server, toplevel);
     }
 }
 
@@ -248,7 +248,7 @@ void request_activate(wl_listener*, void* data)
 static
 bool focus_cycle_toplevel_in_cycle(Toplevel* toplevel, wlr_cursor* cursor)
 {
-    return toplevel && toplevel->wlr_surface->mapped
+    return surface_is_mapped(toplevel)
         && (!cursor || wlr_box_contains_point(ptr(surface_get_bounds(toplevel)), cursor->x, cursor->y));
 }
 
@@ -319,63 +319,120 @@ void focus_cycle_step(Server* server, wlr_cursor* cursor, bool backwards)
 
 // -----------------------------------------------------------------------------
 
-void surface_focus(Surface* surface)
+static
+void raise_toplevel(Toplevel* toplevel)
 {
-    if (!surface) return;
+    log_debug("Raising to top: {}", surface_to_string(toplevel));
+    std::erase(toplevel->server->toplevels, toplevel);
+    toplevel->server->toplevels.emplace_back(toplevel);
+}
 
-    Server* server = surface->server;
-    wlr_seat* seat = server->seat;
-    wlr_surface* prev_wlr_surface = seat->keyboard_state.focused_surface;
-    struct wlr_surface* wlr_surface = surface->wlr_surface;
+bool surface_is_mapped(Surface* surface)
+{
+    return surface && surface->wlr_surface->mapped;
+}
 
-    if (prev_wlr_surface == wlr_surface) return;
+bool surface_accepts_focus(Surface* surface)
+{
+    if (!surface_is_mapped(surface)) return false;
+    if (LayerSurface* layer_surface = LayerSurface::from(surface))
+        return layer_surface->wlr_layer_surface()->current.keyboard_interactive != ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE;
+    return true;
+}
 
-    if (Toplevel* prev_toplevel = Toplevel::from(prev_wlr_surface)) {
-        surface_unfocus(prev_toplevel);
+static
+void surface_impl_set_focus(Server* server, Surface* surface)
+{
+    // This function implement the actual focus switching.
+    // Use with caution as it does not respect map status, keyboard interactivity, or exclusivity
+
+    Surface* prev = get_focused_surface(server);
+
+    if (surface == prev) return;
+
+    log_debug("Switching focus from\n    {} to\n    {}", surface_to_string(prev), surface_to_string(surface));
+
+    if (Toplevel* prev_toplevel = Toplevel::from(prev)) {
+        toplevel_set_activated(prev_toplevel, false);
     }
 
-    log_info("Focusing surface:   {}", surface_to_string(surface));
-
-    Toplevel* toplevel = Toplevel::from(surface);
-
-    wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
-    if (toplevel) {
-        toplevel_set_activated(toplevel, true);
-
-        log_debug("Raising to top: {}", surface_to_string(toplevel));
-        std::erase(server->toplevels, toplevel);
-        server->toplevels.emplace_back(toplevel);
+    if (Toplevel* new_toplevel = Toplevel::from(surface)) {
+        toplevel_set_activated(new_toplevel, true);
+        raise_toplevel(new_toplevel);
     }
 
-    if (keyboard) {
-        wlr_seat_keyboard_notify_enter(seat, wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+    // TODO: Where/when should we respect keyboard grabs?
+
+    if (surface) {
+        wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
+        wlr_seat_keyboard_enter(server->seat, surface->wlr_surface, keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+    } else {
+        wlr_seat_keyboard_clear_focus(server->seat);
     }
 
-    // TODO: Tidy up and consolidate API for handling (re)focus
     process_cursor_motion(server, 0, nullptr, {}, {}, {});
     update_cursor_state(server);
     scene_reconfigure(server);
 }
 
-void surface_unfocus(Surface* surface)
+static
+Surface* find_exclusive_focus(Server* server)
 {
-    if (!surface) return;
-    if (get_focused_surface(surface->server) != surface)
-        return;
-
-    log_info("Unfocusing surface: {}", surface_to_string(surface));
-
-    // Move to top of "unfocused" layer
-
-    if (Toplevel* toplevel = Toplevel::from(surface)) {
-        toplevel_set_activated(toplevel, false);
+    for (auto layer : { ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP }) {
+        for (auto* output : server->outputs) {
+            for (auto* surface : output->layers[layer]) {
+                if (!surface_is_mapped(surface)) continue;
+                if (surface->wlr_layer_surface()->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) {
+                    return surface;
+                }
+            }
+        }
     }
 
-    wlr_seat_keyboard_clear_focus(surface->server->seat);
+    return nullptr;
+}
 
-    process_cursor_motion(surface->server, 0, nullptr, {}, {}, {});
-    update_cursor_state(surface->server);
-    scene_reconfigure(surface->server);
+static
+Surface* find_most_recently_focused_toplevel(Server* server)
+{
+    for (Toplevel* toplevel : iterate<Toplevel*>(server->toplevels, true)) {
+        if (surface_is_mapped(toplevel)) return toplevel;
+    }
+    return nullptr;
+}
+
+void surface_try_focus(Server* server, Surface* surface)
+{
+    if (!surface_accepts_focus(surface)) {
+        surface = nullptr;
+    }
+
+    if (Toplevel* toplevel = Toplevel::from(surface)) {
+        // Always raise, even if doesn't get focus
+        raise_toplevel(toplevel);
+        scene_reconfigure(server);
+    }
+
+    if (Surface* exclusive = find_exclusive_focus(server)) {
+        surface = exclusive;
+    }
+
+    surface_impl_set_focus(server, surface);
+}
+
+void update_focus(Server* server)
+{
+    Surface* focused = get_focused_surface(server);
+
+    if (focused && !surface_accepts_focus(focused)) {
+        focused = find_most_recently_focused_toplevel(server);
+    }
+
+    if (Surface* exclusive = find_exclusive_focus(server)) {
+        focused = exclusive;
+    }
+
+    surface_impl_set_focus(server, focused);
 }
 
 Surface* get_surface_accepting_input_at(Server* server, vec2 layout_pos, wlr_surface** p_surface, vec2* surface_pos)
@@ -421,7 +478,7 @@ void toplevel_foreign_request_activate(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
     log_warn("Foreign activation request for: {}", surface_to_string(toplevel));
-    surface_focus(toplevel);
+    surface_try_focus(toplevel->server, toplevel);
 }
 
 void toplevel_map(wl_listener* listener, void*)
@@ -439,40 +496,34 @@ void toplevel_map(wl_listener* listener, void*)
     // xdg foreign
     wlr_xdg_foreign_exported_init(&toplevel->foreign_exported, toplevel->server->foreign_registry);
 
-    surface_focus(toplevel);
+    surface_try_focus(toplevel->server, toplevel);
 }
 
 void toplevel_unmap(wl_listener* listener, void*)
 {
-    Toplevel* unmapped_toplevel = listener_userdata<Toplevel*>(listener);
+    Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
+    Server* server = toplevel->server;
 
-    log_debug("Toplevel unmapped:  {}", surface_to_string(unmapped_toplevel));
+    log_debug("Toplevel unmapped:  {}", surface_to_string(toplevel));
 
     // Reset interaction mode if grabbed toplevel was unmapped
-    if (unmapped_toplevel == unmapped_toplevel->server->movesize.grabbed_toplevel.get()) {
-        set_interaction_mode(unmapped_toplevel->server, InteractionMode::passthrough);
+    if (toplevel == server->movesize.grabbed_toplevel.get()) {
+        set_interaction_mode(server, InteractionMode::passthrough);
     }
 
-    // TODO: Handle toplevel unmap during zone operation
-
-    if (get_focused_surface(unmapped_toplevel->server) == unmapped_toplevel) {
-        surface_unfocus(unmapped_toplevel);
-
-        for (Toplevel* toplevel : iterate<Toplevel*>(unmapped_toplevel->server->toplevels, true)) {
-            if (focus_cycle_toplevel_in_cycle(toplevel, nullptr)) {
-                surface_focus(toplevel);
-                break;
-            }
-        }
+    if (server->interaction_mode == InteractionMode::focus_cycle && toplevel == server->focus_cycle.current.get()) {
+        set_interaction_mode(server, InteractionMode::passthrough);
     }
 
-    if (unmapped_toplevel->foreign_handle) {
-        unmapped_toplevel->foreign_listeners.clear();
-        wlr_foreign_toplevel_handle_v1_destroy(unmapped_toplevel->foreign_handle);
-        unmapped_toplevel->foreign_handle = nullptr;
+    update_focus(server);
+
+    if (toplevel->foreign_handle) {
+        toplevel->foreign_listeners.clear();
+        wlr_foreign_toplevel_handle_v1_destroy(toplevel->foreign_handle);
+        toplevel->foreign_handle = nullptr;
     }
 
-    wlr_xdg_foreign_exported_finish(&unmapped_toplevel->foreign_exported);
+    wlr_xdg_foreign_exported_finish(&toplevel->foreign_exported);
 }
 
 void toplevel_commit(wl_listener* listener, void*)
@@ -783,18 +834,23 @@ void layer_surface_commit(wl_listener* listener, void*)
 
     // TODO: Handle layer changes
 
-    // TODO: This causes certain applications (e.g. Fuzzel) to continuously commit even if there are no changes
-    //       We could check and lazily reconfigure only if change, or just ignore the problem. Waybar and rofi both don't exhibit this issue
-    //       and even Fuzzel is only visible on screen for a short period of time while selecting
-
-    // TODO: Handle layer keyboard focus preferences
+    update_focus(layer_surface->server);
 
     output_reconfigure(get_output_for_surface(layer_surface));
 }
 
-void layer_surface_unmap(wl_listener*, void*)
+void layer_surface_map(wl_listener* listener, void*)
 {
-    // TODO
+    LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
+
+    surface_try_focus(layer_surface->server, layer_surface);
+}
+
+void layer_surface_unmap(wl_listener* listener, void*)
+{
+    LayerSurface* layer_surface = listener_userdata<LayerSurface*>(listener);
+
+    update_focus(layer_surface->server);
 }
 
 void layer_surface_destroy(wl_listener* listener, void*)
@@ -849,7 +905,6 @@ void layer_surface_new(wl_listener* listener, void* data)
     output->layers[wlr_layer_surface->pending.layer].emplace_back(layer_surface);
 
     wlr_surface_send_enter(layer_surface->wlr_surface, output->wlr_output);
-    surface_focus(layer_surface);
 }
 
 // -----------------------------------------------------------------------------

@@ -647,12 +647,15 @@ void output_layout_change(wl_listener*, void*);
 Surface* get_surface_accepting_input_at(Server*, vec2 layout_pos, wlr_surface** p_surface, vec2* surface_pos);
 Surface* get_focused_surface(           Server*);
 
-void surface_focus(  Surface*);
-void surface_unfocus(Surface*);
+void surface_try_focus(Server*, Surface*);
+void update_focus(     Server*);
 
 wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);
 wlr_box surface_get_coord_system(Surface*);
+
+bool surface_is_mapped(    Surface* surface);
+bool surface_accepts_focus(Surface* surface);
 
 void surface_cleanup(Surface*);
 
@@ -669,6 +672,7 @@ void subsurface_destroy(wl_listener*, void*);
 void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
 
 void layer_surface_commit( wl_listener*, void*);
+void layer_surface_map(    wl_listener*, void*);
 void layer_surface_unmap(  wl_listener*, void*);
 void layer_surface_destroy(wl_listener*, void*);
 void layer_surface_new(    wl_listener*, void*);

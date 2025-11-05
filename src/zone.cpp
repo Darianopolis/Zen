@@ -55,7 +55,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
             if (server->zone.selecting) {
                 if (Toplevel* toplevel = server->zone.toplevel.get()) {
                     toplevel_set_bounds(toplevel, server->zone.final_zone);
-                    surface_focus(toplevel);
+                    surface_try_focus(server, toplevel);
                 }
             }
             wlr_scene_node_set_enabled(&server->zone.selector->node, false);

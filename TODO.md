@@ -55,7 +55,7 @@
 - ✅ Simple offset linear mouse acceleration (separate config for normal and relative mouse acceleration)
 - ✅ Debug damage visualization (wlroots scene debug option)
 
-### Bugs
+### Bugs / Nuisances
 
 - Minecraft, GIMP
    - The following error occasionally occurs if the window is moved during startup
@@ -91,6 +91,7 @@
       - Closing and re-opening from system tray fixes this
       - When launching in X11 mode, first commit also has invalid (0, 0) geometry
 - Steam popups sometimes appear in wrong location on screen
+- swaync takes whole screen for mouse interactivity, resulting in clicking on window outside of notification center not always pulling focus as would be expected
 
 ### Additional
 

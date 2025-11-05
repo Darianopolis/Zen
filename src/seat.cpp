@@ -815,7 +815,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 return true;
             }
             case XKB_KEY_s:
-                surface_unfocus(get_focused_surface(server));
+                surface_try_focus(server, nullptr);
                 return true;
             case XKB_KEY_q:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
@@ -834,7 +834,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
 
     if (state == WL_KEYBOARD_KEY_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
         if (sym == server->main_modifier_keysym_left || sym == server->main_modifier_keysym_right) {
-            surface_focus(focus_cycle_end(server));
+            surface_try_focus(server, focus_cycle_end(server));
             return true;
         }
     }
@@ -876,7 +876,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     if (event.button == pointer_modifier_button) {
         if (event.state == WL_POINTER_BUTTON_STATE_RELEASED && server->interaction_mode == InteractionMode::focus_cycle) {
-            surface_focus(focus_cycle_end(server));
+            surface_try_focus(server, focus_cycle_end(server));
         }
         return true;
     }
@@ -886,7 +886,7 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
     if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle) {
         Toplevel* selected = focus_cycle_end(server);
         if (selected && wlr_box_contains_point(ptr(surface_get_bounds(selected)), get_cursor_pos(server).x, get_cursor_pos(server).y)) {
-            surface_focus(selected);
+            surface_try_focus(server, selected);
         }
         return true;
     }
@@ -935,13 +935,13 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
         return true;
     }
 
-    // Focus window on any button press (only switch focus if no previous focus)
+    // Focus window on any button press (only switch focus if no previous focus or first button pressed)
 
     if (get_num_pointer_buttons_down(server) == 1 || !get_focused_surface(server)) {
         if (surface_under_cursor) {
             Surface* prev_focus = get_focused_surface(server);
             if (prev_focus != surface_under_cursor && server->seat->pointer_state.grab == server->seat->pointer_state.default_grab) {
-                surface_focus(surface_under_cursor);
+                surface_try_focus(server, surface_under_cursor);
                 if (!is_cursor_visible(server)) {
                     log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
                     return true;
@@ -951,8 +951,8 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
                     return true;
                 }
             }
-        } else if (get_focused_surface(server)) {
-            surface_unfocus(get_focused_surface(server));
+        } else {
+            surface_try_focus(server, nullptr);
         }
     }
 

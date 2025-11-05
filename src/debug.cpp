@@ -10,13 +10,22 @@ std::string toplevel_to_string(Toplevel* toplevel)
         : "nullptr";
 }
 
+std::string layer_surface_to_string(LayerSurface* layer_surface)
+{
+    return std::format("LayerSurface<{}>(namespace = {}, interactivity = {})",
+        (void*)layer_surface,
+        layer_surface->wlr_layer_surface()->namespace_,
+        magic_enum::enum_name(layer_surface->wlr_layer_surface()->current.keyboard_interactive)
+            .substr(sizeof("ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_") - 1));
+}
+
 std::string surface_to_string(Surface* surface)
 {
     if (!surface) return "nullptr";
     switch (surface->role) {
         case SurfaceRole::toplevel:      return toplevel_to_string(Toplevel::from(surface));
         case SurfaceRole::popup:         return std::format("Popup<{}>", (void*)surface);
-        case SurfaceRole::layer_surface: return std::format("LayerSurface<{}>", (void*)surface);
+        case SurfaceRole::layer_surface: return layer_surface_to_string(LayerSurface::from(surface));
         case SurfaceRole::subsurface:    return std::format("Subsurface<{}>(parent = {})", (void*)surface, surface_to_string(Subsurface::from(surface)->parent()));
         default:
     }
