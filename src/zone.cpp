@@ -1,9 +1,9 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-wlr_box zone_apply_external_padding(wlr_box box)
+wlr_box zone_apply_external_padding(Server* server, wlr_box box)
 {
-    auto pad = zone_external_padding;
+    auto pad = server->config.layout.zone_external_padding;
 
     if (box.width > pad.left + pad.right) {
         box.x += pad.left;
@@ -18,7 +18,8 @@ wlr_box zone_apply_external_padding(wlr_box box)
 
 void zone_init(Server* server)
 {
-    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, color_to_wlroots(zone_color_inital));
+    auto& c = server->config.layout;
+    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, color_to_wlroots(c.zone_color_inital));
     wlr_scene_node_set_enabled(&server->zone.selector->node, false);
 }
 
@@ -27,6 +28,8 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     bool pressed = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
 
     // Consolidate all interaction state
+
+    auto& c = server->config.layout;
 
     if (event.button == BTN_LEFT) {
         if (pressed && check_mods(server, Modifiers::Mod) && !check_mods(server, Modifiers::Shift)) {
@@ -37,7 +40,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
                     server->zone.toplevel = weak_from(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
-                        wlr_scene_rect_set_color(server->zone.selector, color_to_wlroots(zone_color_inital));
+                        wlr_scene_rect_set_color(server->zone.selector, color_to_wlroots(c.zone_color_inital));
                         wlr_scene_node_set_enabled(&server->zone.selector->node, true);
                         server->zone.selecting = false;
                         set_interaction_mode(server, InteractionMode::zone);
@@ -64,8 +67,8 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
         if (pressed) {
             server->zone.selecting = !server->zone.selecting;
             wlr_scene_rect_set_color(server->zone.selector, server->zone.selecting
-                                                                ? color_to_wlroots(zone_color_select)
-                                                                : color_to_wlroots(zone_color_inital));
+                                                                ? color_to_wlroots(c.zone_color_select)
+                                                                : color_to_wlroots(c.zone_color_inital));
         }
         return true;
     }
@@ -82,11 +85,13 @@ void get_zone_axis(int start, int total_length, int start_pad, int inner_pad, in
     *offset += start + start_pad + inner_pad * i;
 }
 
-wlr_box get_zone_box(wlr_box workarea, int zone_x, int zone_y)
+wlr_box get_zone_box(Server* server, wlr_box workarea, int zone_x, int zone_y)
 {
+    auto& c = server->config.layout;
+
     wlr_box zone;
-    get_zone_axis(workarea.x, workarea.width,  zone_external_padding.left, zone_internal_padding, zone_external_padding.right,  zone_horizontal_zones, zone_x, &zone.x, &zone.width);
-    get_zone_axis(workarea.y, workarea.height, zone_external_padding.top,  zone_internal_padding, zone_external_padding.bottom, zone_vertical_zones,   zone_y, &zone.y, &zone.height);
+    get_zone_axis(workarea.x, workarea.width,  c.zone_external_padding.left, c.zone_internal_padding, c.zone_external_padding.right,  c.zone_horizontal_zones, zone_x, &zone.x, &zone.width);
+    get_zone_axis(workarea.y, workarea.height, c.zone_external_padding.top,  c.zone_internal_padding, c.zone_external_padding.bottom, c.zone_vertical_zones,   zone_y, &zone.y, &zone.height);
     return zone;
 }
 
@@ -99,14 +104,16 @@ void zone_process_cursor_motion(Server* server)
     wlr_box pointer_zone = {};
     bool any_zones = false;
 
-    for (uint32_t zone_x = 0; zone_x < zone_horizontal_zones; ++zone_x) {
-        for (uint32_t zone_y = 0; zone_y < zone_vertical_zones; ++zone_y) {
-            wlr_box rect = get_zone_box(workarea, zone_x, zone_y);
+    auto& c = server->config.layout;
+
+    for (uint32_t zone_x = 0; zone_x < c.zone_horizontal_zones; ++zone_x) {
+        for (uint32_t zone_y = 0; zone_y < c.zone_vertical_zones; ++zone_y) {
+            wlr_box rect = get_zone_box(server, workarea, zone_x, zone_y);
             wlr_box check_rect {
-                .x      = rect.x      - zone_selection_leeway.x,
-                .y      = rect.y      - zone_selection_leeway.y,
-                .width  = rect.width  + zone_selection_leeway.x * 2,
-                .height = rect.height + zone_selection_leeway.y * 2,
+                .x      = rect.x      - c.zone_selection_leeway.x,
+                .y      = rect.y      - c.zone_selection_leeway.y,
+                .width  = rect.width  + c.zone_selection_leeway.x * 2,
+                .height = rect.height + c.zone_selection_leeway.y * 2,
             };
 
             if (wlr_box_contains_point(&check_rect, point.x, point.y)) {

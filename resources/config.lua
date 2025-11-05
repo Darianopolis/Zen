@@ -1,4 +1,26 @@
 
+-- layout
+
+config.focus_cycle.opacity = 0.2
+
+config.background.color = "#191919"
+
+config.border.width = 2
+config.border.color.default = "#4C4C4C"
+config.border.color.focused = "#6666FF"
+
+config.grid.width   = 6
+config.grid.height  = 2
+config.grid.pad.inner  = 4 + config.border.width * 2
+config.grid.pad.left   = 7 + config.border.width
+config.grid.pad.top    = 7 + config.border.width
+config.grid.pad.right  = 7 + config.border.width
+config.grid.pad.bottom = 7 + config.border.width
+config.grid.color.initial  = "#99999966"
+config.grid.color.selected = "#6666FF66"
+config.grid.leeway.horizontal = 200
+config.grid.leeway.vertical   = 200
+
 -- audio control
 
 config.bind["XF86AudioLowerVolume"] = function() spawn("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01-")  end

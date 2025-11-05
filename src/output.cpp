@@ -241,7 +241,7 @@ void output_new(wl_listener* listener, void* data)
 
     log_warn("  Adaptive sync: {}", wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED);
 
-    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, color_to_wlroots(background_color));
+    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, color_to_wlroots(server->config.layout.background_color));
 
     update_output_states(server);
 

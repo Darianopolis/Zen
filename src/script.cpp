@@ -1,5 +1,13 @@
 #include "core.hpp"
 
+template<typename ...Args>
+[[noreturn]] void script_error(std::format_string<Args...> fmt, Args&&... args)
+{
+    auto message = std::vformat(fmt.get(), std::make_format_args(args...));
+    log(LogLevel::error, message);
+    throw std::runtime_error(message);
+}
+
 struct MetatableBuilder
 {
     sol::table metatable;
@@ -7,14 +15,14 @@ struct MetatableBuilder
 
     static constexpr const char* properties_key = "__properties";
 
-    MetatableBuilder(sol::state& lua): metatable(lua.create_table()), table(lua.create_table())
+    MetatableBuilder(sol::state& lua, auto&& slot): metatable(lua.create_table()), table(lua.create_table())
     {
         metatable["__newindex"] = [](sol::table table, const char* field, sol::object value) {
             auto prop = table[properties_key][field];
             if (prop.is<sol::table>()) {
                 prop["set"](value);
             } else {
-                luaL_error(table.lua_state(), "no property with name :%s", field);
+                script_error("no property with name :{}", field);
             }
         };
         metatable["__index"] = [](sol::table table, const char* field) -> sol::object {
@@ -22,12 +30,13 @@ struct MetatableBuilder
             if (prop.is<sol::table>()) {
                 return prop["get"]();
             } else {
-                luaL_error(table.lua_state(), "no property with name :%s", field);
-                return sol::nil;
+                script_error("no property with name :{}", field);
             }
         };
 
         table[properties_key] = lua.create_table();
+
+        slot = table;
     }
 
     ~MetatableBuilder()
@@ -59,6 +68,58 @@ bool script_invoke_safe(auto&& function)
 }
 
 static
+fvec4 script_object_to_color(sol::object obj)
+{
+    fvec4 color = { 0, 0, 0, 1 };
+    if (obj.is<sol::table>()) {
+
+        sol::table table = obj.as<sol::table>();
+        for (int i = 0; i < 4; ++i) {
+            if (table[i + 1].is<float>()) {
+                color[i] = table[i + 1].get<float>();
+            } else {
+                script_error("Error parsing color table, expected float at [{}] got: {}",
+                    i + 1, magic_enum::enum_name(table[i + 1].get_type()));
+            }
+        }
+    } else if (obj.is<std::string_view>()) {
+        std::string_view s = obj.as<std::string_view>();
+
+        if (s.empty() || s.front() != '#') {
+            script_error("Error parsing hex color: Must start with '#'");
+        }
+        s.remove_prefix(1);
+        if (s.size() != 6 && s.size() != 8) {
+            script_error("Error parsing hex color: Expected 6 or 8 hex digits, got: {}", s.size());
+        }
+
+        auto hex_to_digit = [](char c) -> int {
+            if (c >= 'a' && c <= 'f') return 10 + c - 'a';
+            if (c >= 'A' && c <= 'F') return 10 + c - 'A';
+            if (c >= '0' && c <= '9') return c - '0';
+            return -1;
+        };
+
+        for (char c : s) if (hex_to_digit(c) < 0) {
+            script_error("Error parsing color: Expected hex digit, got {}", c);
+        }
+
+        color.r = ((hex_to_digit(s[0]) * 16) + hex_to_digit(s[1])) / 255.0;
+        color.g = ((hex_to_digit(s[2]) * 16) + hex_to_digit(s[3])) / 255.0;
+        color.b = ((hex_to_digit(s[4]) * 16) + hex_to_digit(s[5])) / 255.0;
+        if (s.size() == 8) {
+            color.a = ((hex_to_digit(s[6]) << 4) + hex_to_digit(s[7])) / 255.0;
+        }
+
+        return color;
+
+    } else {
+        script_error("Error parsing color: Expected table got: {}", magic_enum::enum_name(obj.get_type()));
+    }
+    return color;
+}
+
+static
 void script_env_set_globals(Server* server)
 {
     auto& lua = server->script.lua;
@@ -73,6 +134,124 @@ void script_env_set_globals(Server* server)
     });
 
     sol::table config = lua["config"].get_or_create<sol::table>();
+
+    // Focus cycle
+
+    {
+        MetatableBuilder focus_cycle(lua, config["focus_cycle"]);
+
+        focus_cycle.add_property("opacity", [server](float opacity) {
+            server->config.layout.focus_cycle_unselected_opacity = opacity;
+            log_info("Setting focus_cycle.opacity = {}", opacity);
+            scene_reconfigure(server);
+        }, [server] { return server->config.layout.focus_cycle_unselected_opacity; });
+    }
+
+    // Layout
+
+    {
+        {
+            MetatableBuilder background(lua, config["background"]);
+
+            background.add_property("color", [server](sol::object color) {
+                server->config.layout.background_color = script_object_to_color(color);
+                log_info("Setting background.color = {}", glm::to_string(server->config.layout.background_color));
+                for (auto* output : server->outputs) {
+                    wlr_scene_rect_set_color(output->background, color_to_wlroots(server->config.layout.background_color));
+                }
+            }, [] { return sol::nil; /* TODO */ });
+        }
+
+        {
+            MetatableBuilder border(lua, config["border"]);
+
+            border.add_property("width", [server](int width) {
+                log_info("Setting border width: {}", width);
+                server->config.layout.border_width = width;
+                scene_reconfigure(server);
+            }, [server] { return server->config.layout.border_width; });
+
+            {
+                MetatableBuilder color(lua, border.table["color"]);
+
+                color.add_property("focused", [server](sol::object color) {
+                    server->config.layout.border_color_focused = script_object_to_color(color);
+                    log_info("Setting border.color.focused = {}", glm::to_string(server->config.layout.border_color_focused));
+                }, [] { return sol::nil; /* TODO */ });
+
+                color.add_property("default", [server](sol::object color) {
+                    server->config.layout.border_color_unfocused = script_object_to_color(color);
+                    log_info("Setting border.color.default = {}", glm::to_string(server->config.layout.border_color_unfocused));
+                }, [] { return sol::nil; /* TODO */ });
+            }
+        }
+
+        // Grid
+
+        {
+            MetatableBuilder grid(lua, config["grid"]);
+
+            {
+                MetatableBuilder leeway(lua, grid.table["leeway"]);
+
+                leeway.add_property("horizontal", [server](int amount) {
+                    log_info("Setting grid.leeway.horizontal = {}", amount);
+                    server->config.layout.zone_selection_leeway.x = amount;
+                }, [server] { return server->config.layout.zone_selection_leeway.x; });
+
+                leeway.add_property("vertical", [server](int amount) {
+                    log_info("Setting grid.leeway.vertical = {}", amount);
+                    server->config.layout.zone_selection_leeway.y = amount;
+                }, [server] { return server->config.layout.zone_selection_leeway.y; });
+            }
+
+            {
+                MetatableBuilder color(lua, grid.table["color"]);
+
+                color.add_property("initial", [server](sol::object color) {
+                    server->config.layout.zone_color_inital = script_object_to_color(color);
+                    log_info("Setting grid.color.initial = {}", glm::to_string(server->config.layout.zone_color_inital));
+                }, [] { return sol::nil; /* TODO */ });
+
+                color.add_property("selected", [server](sol::object color) {
+                    server->config.layout.zone_color_select = script_object_to_color(color);
+                    log_info("Setting grid.color.selected = {}", glm::to_string(server->config.layout.zone_color_select));
+                }, [] { return sol::nil; /* TODO */ });
+            }
+
+            grid.add_property("width", [server](int width) {
+                log_info("Setting grid.width = {}", width);
+                server->config.layout.zone_horizontal_zones = width;
+            }, [server] { return server->config.layout.zone_horizontal_zones; });
+
+            grid.add_property("height", [server](int height) {
+                log_info("Setting grid.height = {}", height);
+                server->config.layout.zone_vertical_zones = height;
+            }, [server] { return server->config.layout.zone_vertical_zones; });
+
+            {
+                MetatableBuilder padding(lua, grid.table["pad"]);
+
+                padding.add_property("inner", [server](uint32_t size) {
+                    log_info("Setting grid.pad.inner = {}", size);
+                    server->config.layout.zone_internal_padding = size;
+                }, [server] { return server->config.layout.zone_internal_padding; });
+
+#define DIRECTIONAL_PADDING(Name) \
+                    padding.add_property(#Name, [server](uint32_t size) { \
+                        log_info("Setting grid.pad."#Name" = {}", size); \
+                        server->config.layout.zone_external_padding.Name = size; \
+                    }, [server] { return server->config.layout.zone_external_padding.Name; });
+
+                DIRECTIONAL_PADDING(left)
+                DIRECTIONAL_PADDING(top)
+                DIRECTIONAL_PADDING(right)
+                DIRECTIONAL_PADDING(bottom)
+
+#undef DIRECTIONAL_PADDING
+            }
+        }
+    }
 
     // Binds
 
@@ -110,8 +289,7 @@ void script_env_set_globals(Server* server)
     // Process
 
     {
-        MetatableBuilder process(lua);
-        lua["process"] = process.table;
+        MetatableBuilder process(lua, lua["process"]);
 
         process.add_property("cwd",
             [](const char* cwd) { chdir(cwd); },
@@ -135,8 +313,7 @@ void script_env_set_globals(Server* server)
     // Debug
 
     {
-        MetatableBuilder debug(lua);
-        lua["debug"] = debug.table;
+        MetatableBuilder debug(lua, lua["debug"]);
 
         // Testing
 
@@ -155,8 +332,7 @@ void script_env_set_globals(Server* server)
         // Pointer
 
         {
-            MetatableBuilder pointer(lua);
-            debug.table["pointer"] = pointer.table;
+            MetatableBuilder pointer(lua, debug.table["pointer"]);
 
             pointer.add_property("accel", [server](bool state) {
                 server->pointer.debug_accel_rate = state;
@@ -189,8 +365,7 @@ void script_env_set_globals(Server* server)
         // Statistics
 
         {
-            MetatableBuilder stats(lua);
-            debug.table["stats"] = stats.table;
+            MetatableBuilder stats(lua, debug.table["stats"]);
 
             stats.add_property("window", [server](bool state) {
                 if (Toplevel* toplevel = Toplevel::from(get_focused_surface(server))) {

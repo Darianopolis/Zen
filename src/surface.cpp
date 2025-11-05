@@ -15,7 +15,9 @@ static
 float toplevel_get_opacity(Toplevel* toplevel)
 {
     return (toplevel->server->interaction_mode != InteractionMode::focus_cycle
-            || toplevel == toplevel->server->focus_cycle.current.get()) ? 1 : focus_cycle_unselected_opacity;
+            || toplevel == toplevel->server->focus_cycle.current.get())
+        ? 1
+        : toplevel->server->config.layout.focus_cycle_unselected_opacity;
 }
 
 void toplevel_update_opacity(Toplevel* toplevel)
@@ -42,8 +44,12 @@ void toplevel_update_borders(Toplevel* toplevel)
     bool show = geom.width && geom.height;
     show &= !toplevel_is_fullscreen(toplevel);
 
-    fvec4 color = get_focused_surface(toplevel->server) == toplevel ? border_color_focused : border_color_unfocused;
-    color.a = toplevel_get_opacity(toplevel);
+    auto& c = toplevel->server->config.layout;
+
+    fvec4 color = get_focused_surface(toplevel->server) == toplevel ? c.border_color_focused : c.border_color_unfocused;
+    color.a *= toplevel_get_opacity(toplevel);
+
+    int border_width = c.border_width;
 
     wlr_box positions[4];
     positions[left]   = { -border_width, -border_width, border_width, geom.height + border_width * 2 };
@@ -212,7 +218,7 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen, Output* output
         // Constrain prev bounds to output when exiting fullscreen to avoid the case
         // where the window is still full size and the borders are now hidden.
         if (Output* prev_output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-            wlr_box output_bounds = zone_apply_external_padding(prev_output->workarea);
+            wlr_box output_bounds = zone_apply_external_padding(toplevel->server, prev_output->workarea);
             toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, output_bounds);
         }
         toplevel_set_bounds(toplevel, toplevel->prev_bounds);
@@ -506,7 +512,7 @@ void toplevel_commit(wl_listener* listener, void*)
             // Constrain to output (respecting external padding)
             Output* output = get_nearest_output_to_box(toplevel->server, bounds);
             if (output) {
-                bounds = constrain_box(bounds, zone_apply_external_padding(output->workarea));
+                bounds = constrain_box(bounds, zone_apply_external_padding(toplevel->server, output->workarea));
             }
 
             // Update toplevel bounds
@@ -601,12 +607,12 @@ void toplevel_request_maximize(wl_listener* listener, void*)
         if (toplevel->xdg_toplevel()->requested.maximized) {
             toplevel->prev_bounds = surface_get_bounds(toplevel);
             if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-                toplevel_set_bounds(toplevel, zone_apply_external_padding(output->workarea));
+                toplevel_set_bounds(toplevel, zone_apply_external_padding(toplevel->server, output->workarea));
                 wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), true);
             }
         } else {
             if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-                toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, zone_apply_external_padding(output->workarea));
+                toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, zone_apply_external_padding(toplevel->server, output->workarea));
             }
             toplevel_set_bounds(toplevel, toplevel->prev_bounds);
         }
@@ -660,7 +666,7 @@ void toplevel_new(wl_listener* listener, void* data)
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.new_subsurface, server, subsurface_new);
 
     for (int i = 0; i < 4; ++i) {
-        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color_to_wlroots(border_color_unfocused));
+        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color_to_wlroots(server->config.layout.border_color_unfocused));
     }
 
     server->toplevels.emplace_back(toplevel);

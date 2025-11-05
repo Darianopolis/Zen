@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 import subprocess
 import argparse
+import filecmp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-U", "--update", action="store_true", help="Update")
@@ -192,13 +193,17 @@ if configure_ok and (args.build or args.install):
 
 # -----------------------------------------------------------------------------
 
+def install_file(file: Path, target: Path):
+    if filecmp.cmp(file, target):
+        return
+    if target.exists():
+        os.remove(target)
+    print(f"Installing [{file}] to [{target}]")
+    shutil.copy2(file, target)
+
 if args.install:
     local_bin_dir  = ensure_dir(os.path.expanduser("~/.local/bin"))
     xdg_portal_dir = ensure_dir(os.path.expanduser("~/.config/xdg-desktop-portal"))
 
-    exe_dst = local_bin_dir / program_name
-    if exe_dst.exists():
-        os.remove(exe_dst)
-    shutil.copy2(cmake_dir / program_name, exe_dst)
-
-    shutil.copy2("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
+    install_file(cmake_dir / program_name, local_bin_dir / program_name)
+    install_file("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")

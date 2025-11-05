@@ -9,27 +9,28 @@
 
 static constexpr uint32_t cursor_size = 24;
 
-static constexpr int   border_width = 2;
-static constexpr fvec4 border_color_unfocused = { 0.3f, 0.3f, 0.3f, 1.0f };
-static constexpr fvec4 border_color_focused   = { 0.4f, 0.4f, 1.0f, 1.0f };
+struct LayoutConfig
+{
+    int border_width = 1;
 
-static constexpr float focus_cycle_unselected_opacity = 0.2;
+    fvec4 background_color = { 0, 0, 0, 1 };
 
-static constexpr fvec4 background_color = { 0.1f, 0.1f, 0.1f, 1.f };
+    float focus_cycle_unselected_opacity = 0.0;
 
-static constexpr fvec4 zone_color_inital = { 0.6f, 0.6f, 0.6f, 0.4f };
-static constexpr fvec4 zone_color_select = { 0.4f, 0.4f, 1.0f, 0.4f };
+    fvec4 border_color_unfocused = { 1, 0, 1, 0.3 };
+    fvec4 border_color_focused   = { 1, 0, 1, 1.0 };
 
-static constexpr uint32_t zone_horizontal_zones = 6;
-static constexpr uint32_t zone_vertical_zones   = 2;
-static constexpr ivec2    zone_selection_leeway = { 200, 200 };
-static constexpr struct {
-    int left   = 7 + border_width;
-    int top    = 7 + border_width;
-    int right  = 7 + border_width;
-    int bottom = 4 + border_width;
-} zone_external_padding;
-static constexpr double zone_internal_padding = 4 +  + border_width * 2;
+    uint32_t zone_horizontal_zones = 2;
+    uint32_t zone_vertical_zones = 2;
+    ivec2 zone_selection_leeway = { 1, 1 };
+    struct {
+        int left = 1, top = 1, right = 1, bottom = 1;
+    } zone_external_padding;
+    int zone_internal_padding = 1;
+
+    fvec4 zone_color_inital = { 1, 0, 1, 0.3 };
+    fvec4 zone_color_select = { 1, 0, 1, 0.6 };
+};
 
 // -----------------------------------------------------------------------------
 
@@ -181,6 +182,10 @@ struct Client;
 
 struct Server
 {
+    struct {
+        LayoutConfig layout;
+    } config;
+
     ListenerSet listeners;
 
     struct {
@@ -614,7 +619,7 @@ void zone_process_cursor_motion(Server*);
 bool zone_process_cursor_button(Server*, const wlr_pointer_button_event&);
 void zone_end_selection(        Server*);
 
-wlr_box zone_apply_external_padding(wlr_box);
+wlr_box zone_apply_external_padding(Server*, wlr_box);
 
 // ---- Output -----------------------------------------------------------------
 
