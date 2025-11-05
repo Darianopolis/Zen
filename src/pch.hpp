@@ -38,6 +38,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#define SOL_PRINT_ERRORS 0
 #include <sol/sol.hpp>
 
 using namespace std::literals;

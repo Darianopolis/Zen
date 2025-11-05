@@ -5,12 +5,27 @@ struct MetatableBuilder
     sol::table metatable;
     sol::table table;
 
-    static constexpr const char* properties_key = "_properties_";
+    static constexpr const char* properties_key = "__properties";
 
     MetatableBuilder(sol::state& lua): metatable(lua.create_table()), table(lua.create_table())
     {
-        metatable["__newindex"] = [](sol::table table, const char* field, sol::object value) {        table[properties_key][field]["set"](value); };
-        metatable["__index"]    = [](sol::table table, const char* field)                    { return table[properties_key][field]["get"]();      };
+        metatable["__newindex"] = [](sol::table table, const char* field, sol::object value) {
+            auto prop = table[properties_key][field];
+            if (prop.is<sol::table>()) {
+                prop["set"](value);
+            } else {
+                luaL_error(table.lua_state(), "no property with name :%s", field);
+            }
+        };
+        metatable["__index"] = [](sol::table table, const char* field) -> sol::object {
+            auto prop = table[properties_key][field];
+            if (prop.is<sol::table>()) {
+                return prop["get"]();
+            } else {
+                luaL_error(table.lua_state(), "no property with name :%s", field);
+                return sol::nil;
+            }
+        };
 
         table[properties_key] = lua.create_table();
     }
@@ -27,6 +42,21 @@ struct MetatableBuilder
         props["get"] = get;
     }
 };
+
+static
+bool script_invoke_safe(auto&& function)
+{
+    try {
+        auto res = function();
+        if (!res.valid()) {
+            auto _ = sol::error(res);
+        }
+        return true;
+    } catch (const sol::error& e) {
+        log_error("Script error: {}", e.what());
+        return false;
+    }
+}
 
 static
 void script_env_set_globals(Server* server)
@@ -54,7 +84,7 @@ void script_env_set_globals(Server* server)
         });
 
         sol::table mt = binds[sol::metatable_key].get_or_create<sol::table>();
-        mt["__newindex"] = [server](sol::table, std::string_view bind_str, std::optional<sol::function> action) {
+        mt["__newindex"] = [server](sol::table, std::string_view bind_str, std::optional<sol::protected_function> action) {
             auto bind = bind_from_string(server, bind_str);
             if (!bind) log_error("Failed to parse bind string: {}", bind_str);
 
@@ -65,10 +95,8 @@ void script_env_set_globals(Server* server)
                     .bind = bind.value(),
                     .function = [bind = bind.value(), server, bind_str = std::string(bind_str), action = std::move(*action)] {
                         log_info("Executing bind: {}", bind_str);
-                        try {
-                            action();
-                        } catch (const sol::error& e) {
-                            log_error("Error while executing bind [{}] unregistering", bind_str);
+                        if (!script_invoke_safe(action)) {
+                            log_error("Exception while executing bind [{}], unregistering", bind_str);
                             bind_erase(server, bind);
                         }
                     },
@@ -215,19 +243,15 @@ sol::environment script_environment_create(Server* server, std::filesystem::path
 void script_run(Server* server, std::string_view source, const std::filesystem::path& source_dir)
 {
     auto e = script_environment_create(server, source_dir);
-    try {
-        server->script.lua.script(source, e);
-    } catch (const sol::error& e) {
-        log_error("Script error: {}", e.what());
-    }
+    script_invoke_safe([&] {
+        return server->script.lua.safe_script(source, e);
+    });
 }
 
 void script_run_file(Server* server, const std::filesystem::path& script_path)
 {
     auto e = script_environment_create(server, script_path.parent_path());
-    try {
-        server->script.lua.script_file(script_path, e);
-    } catch (const sol::error& e) {
-        log_error("Script error: {}", e.what());
-    }
+    script_invoke_safe([&] {
+        return server->script.lua.safe_script_file(script_path, e);
+    });
 }
