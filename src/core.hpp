@@ -493,6 +493,11 @@ struct CursorSurface : Surface
     // Surface::from(struct wlr_surface*) calls are still always safe to make
 };
 
+// ---- Watchdog ---------------------------------------------------------------
+
+void watchdog_init(Server*);
+void watchdog_start_shutdown();
+
 // ---- Binds ------------------------------------------------------------------
 
 Modifiers mod_from_string(std::string_view name);

@@ -110,6 +110,12 @@ void script_env_set_globals(Server* server)
         MetatableBuilder debug(lua);
         lua["debug"] = debug.table;
 
+        // Testing
+
+        debug.table.set_function("force_timeout", [] {
+            std::this_thread::sleep_for(10s);
+        });
+
         // Cursor
 
         debug.add_property("cursor", [server](bool state) {

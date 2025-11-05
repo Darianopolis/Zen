@@ -213,7 +213,12 @@ void run(Server* server, const startup_options& options)
     // Run
 
     log_info("Running Wayland compositor on WAYLAND_DISPLAY={}", socket);
+
+    watchdog_init(server);
+
     wl_display_run(server->display);
+
+    watchdog_start_shutdown();
 }
 
 void cleanup(Server* server)
@@ -232,6 +237,8 @@ void cleanup(Server* server)
     wlr_backend_destroy(server->backend);
     wl_display_destroy(server->display);
     wlr_scene_node_destroy(&server->scene->tree.node);
+
+    log_info("Clean shutdown complete");
 }
 
 constexpr const char* help_prompt = R"(
@@ -297,6 +304,7 @@ int main(int argc, char* argv[])
     // Init
 
     Server server = {};
+
     init(&server, options);
 
     // Run
