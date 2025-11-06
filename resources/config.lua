@@ -1,5 +1,5 @@
 
--- layout
+-- layout ----------------------------------------------------------------------
 
 config.focus_cycle.opacity = 0.2
 
@@ -21,47 +21,47 @@ config.grid.color.selected = "#6666FF66"
 config.grid.leeway.horizontal = 200
 config.grid.leeway.vertical   = 200
 
--- audio control
+-- audio control ---------------------------------------------------------------
 
 config.bind["XF86AudioLowerVolume"] = function() spawn("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01-")  end
 config.bind["XF86AudioRaiseVolume"] = function() spawn("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.01+")  end
 config.bind["XF86AudioMute"]        = function() spawn("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "toggle") end
 
--- playerctl
+-- playerctl -------------------------------------------------------------------
 
 local player = "spotify"
 config.bind["XF86AudioPlay"] = function() spawn("playerctl", "-p", player, "play-pause") end
 config.bind["XF86AudioPrev"] = function() spawn("playerctl", "-p", player, "previous")   end
 config.bind["XF86AudioNext"] = function() spawn("playerctl", "-p", player, "next")       end
 
--- launcher
+-- launcher --------------------------------------------------------------------
 
 config.bind["Mod+d"]       = function() spawn("rofi", "-show", "drun")  end
 config.bind["Mod+Shift+D"] = function() spawn("rofi", "-show", "run")   end
 config.bind["Mod+Ctrl+d"]  = function() spawn("rofi", "-show", "window") end
 
--- applications
+-- applications ----------------------------------------------------------------
 
 config.bind["Mod+t"]       = function() spawn("konsole") end
 config.bind["Mod+Shift+T"] = function() spawn("konsole", "--workdir", process.cwd) end
 config.bind["Mod+g"]       = function() spawn("dolphin") end
 config.bind["Mod+h"]       = function() spawn("kalk")    end
 
--- managers
+-- managers --------------------------------------------------------------------
 
 config.bind["Mod+v"] = function() spawn("pavucontrol")     end
 config.bind["Mod+b"] = function() spawn("blueman-manager") end
 config.bind["Mod+j"] = function() spawn("swaync-client", "--toggle-panel") end
 
--- capture
+-- capture ---------------------------------------------------------------------
 
 config.bind["Print"] = function() spawn("sh", "-c", "grim -g \"$(slurp)\" - | wl-copy") end
 
--- system
+-- system ----------------------------------------------------------------------
 
 config.bind["Mod+n"] = function() spawn("systemctl", "suspend") end
 
--- debug
+-- debug -----------------------------------------------------------------------
 
 config.bind["Mod+i"] = function() spawn("xeyes") end
 

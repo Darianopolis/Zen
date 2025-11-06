@@ -63,16 +63,18 @@ std::string output_to_string(Output* output)
 {
     if (!output) return "nullptr";
 
-    return std::format("Output<{}>(name = {}, desc = {}, pos = ({}, {}), size = ({}, {}), refresh = {:.2f}Hz, primary = {})",
+    wlr_output_layout_output* layout_output = output->layout_output();
+
+    return std::format("Output<{}>(name = {}, desc = {}, pos = ({}, {}), size = ({}, {}), refresh = {:.2f}Hz)",
         (void*)output,
         output->wlr_output->name,
         output->wlr_output->description,
-        output->scene_output ? output->scene_output->x : output->config.pos.value_or({-1, -1}).x,
-        output->scene_output ? output->scene_output->y : output->config.pos.value_or({-1, -1}).y,
+        layout_output ? layout_output->x : -1,
+        layout_output ? layout_output->y : -1,
         output->wlr_output->width,
         output->wlr_output->height,
-        output->wlr_output->refresh / 1000.0,
-        output->config.primary);
+        output->wlr_output->refresh / 1000.0
+        );
 }
 
 // -----------------------------------------------------------------------------

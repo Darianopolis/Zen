@@ -135,6 +135,25 @@ void script_env_set_globals(Server* server)
 
     sol::table config = lua["config"].get_or_create<sol::table>();
 
+    // Output
+
+    {
+        MetatableBuilder output(lua, config["output"]);
+
+        output.add_property("on_add_or_remove", [server](sol::protected_function fn) {
+            log_info("Setting output layout add/remove listener");
+            server->script.on_output_add_or_remove = [fn = std::move(fn)](Output* output, bool added) {
+                log_info("Output added/removed");
+                script_invoke_safe([&] {
+                    return output
+                        ? fn(output->wlr_output->name, added)
+                        : fn();
+                });
+            };
+            server->script.on_output_add_or_remove(nullptr, true);
+        }, [] { return sol::nil; });
+    }
+
     // Focus cycle
 
     {

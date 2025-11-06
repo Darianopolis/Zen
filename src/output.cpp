@@ -1,79 +1,31 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-Output* get_primary_output(Server* server)
+wlr_output_layout_output* Output::layout_output() const
 {
-    Output* first_output = nullptr;
-    for (Output* output : server->outputs) {
-        if (output->config.disabled) continue;
-        if (!first_output) first_output = output;
-        if (output->config.primary) return output;
+    wlr_output_layout_output* layout_output;
+    wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
+        if (layout_output->output == wlr_output) {
+            return layout_output;
+        }
     }
-    return first_output;
+    return nullptr;
 }
 
-bool output_filter_global(Server* server, Client* client, const wl_global* global)
+static
+void output_layout_update_configuration(Server* server)
 {
-    if (client->is_output_aware) return true;
-
-    Output* output = Output::from(static_cast<struct wlr_output*>(wl_global_get_user_data(global)));
-
-    if (output) {
-        if (output == get_primary_output(server)) {
-            log_debug("Passing output [{}] to {}", output->wlr_output->name, client_to_string(client));
-            return true;
-        }
-        log_warn("Hiding output [{}] from {}", output->wlr_output->name, client_to_string(client));
-        return false;
-    } else {
-        return true;
-    }
-}
-
-void update_output_states(Server* server)
-{
-    // First, remove all outputs from layout. This destroys all output globals
-    //  and forces new globals to be re-filtered, so that primary output changes
-    //  are made effective
-    // TODO: Do this *only* for outputs that are no longer primary outputs
+    wlr_output_configuration_v1* config = wlr_output_configuration_v1_create();
 
     for (Output* output : server->outputs) {
-        if (output->scene_output) {
-            wlr_scene_output_destroy(output->scene_output);
-            output->scene_output = nullptr;
-        }
-        if (output->layout_output) {
-            wlr_output_layout_remove(server->output_layout, output->wlr_output);
-            output->layout_output = nullptr;
-        }
-        if (output->config.disabled && output->wlr_output->enabled) {
-            log_warn("Disabling output: {}", output->wlr_output->name);
-            wlr_output_state state;
-            wlr_output_state_init(&state);
-            wlr_output_state_set_enabled(&state, false);
-            wlr_output_commit_state(output->wlr_output, &state);
-            wlr_output_state_finish(&state);
+        auto* head = wlr_output_configuration_head_v1_create(config, output->wlr_output);
+        if (auto* layout_output = output->layout_output()) {
+            head->state.x = layout_output->x;
+            head->state.y = layout_output->y;
         }
     }
 
-    for (Output* output : server->outputs) {
-        if (output->config.disabled) continue;
-
-        if (!output->wlr_output->enabled) {
-            log_warn("Enabling output: {}", output->wlr_output->name);
-            wlr_output_state state;
-            wlr_output_state_init(&state);
-            wlr_output_state_set_enabled(&state, true);
-            wlr_output_commit_state(output->wlr_output, &state);
-            wlr_output_state_finish(&state);
-        }
-
-        output->layout_output = output->config.pos
-            ? wlr_output_layout_add(server->output_layout, output->wlr_output, output->config.pos->x, output->config.pos->y)
-            : wlr_output_layout_add_auto(server->output_layout, output->wlr_output);
-        output->scene_output = wlr_scene_output_create(server->scene, output->wlr_output);
-        wlr_scene_output_layout_add_output(server->scene_output_layout, output->layout_output, output->scene_output);
-    }
+    wlr_output_manager_v1_set_configuration(server->output_manager, config);
 }
 
 Output* get_output_at(Server* server, vec2 point)
@@ -112,9 +64,7 @@ Output* get_nearest_output_to_box(Server* server, wlr_box box)
 Output* get_output_for_surface(Surface* surface)
 {
     if (surface->role == SurfaceRole::layer_surface) {
-        wlr_output_layout_output* layout_output;
-        wl_list_for_each(layout_output, &surface->server->output_layout->outputs, link) {
-            Output* output = Output::from(layout_output->output);
+        for (Output* output : surface->server->outputs) {
             for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
                 for (LayerSurface* ls : output->layers[layer]) {
                     if (ls == surface) return output;
@@ -180,6 +130,8 @@ void output_destroy(wl_listener* listener, void*)
 
     std::erase(output->server->outputs, output);
 
+    output->server->script.on_output_add_or_remove(output, false);
+
     delete output;
 }
 
@@ -196,73 +148,57 @@ void output_new(wl_listener* listener, void* data)
 
     server->outputs.emplace_back(output);
 
-    for (const OutputRule& rule : output_rules) {
-        if (std::string_view(rule.name) == wlr_output->name) {
-            output->config = rule.config;
-            break;
-        }
-    }
-
     log_info("Output [{}] added", wlr_output->name);
-
-    if (output->config.pos) {
-        log_info("  position = {}", glm::to_string(*output->config.pos));
-    } else {
-        log_info("  position = auto");
-    }
-    if (output->config.primary) {
-        log_info("  rule.primary = true");
-    }
 
     wlr_output_init_render(wlr_output, server->allocator, server->renderer);
 
-    wlr_output_state state;
-    wlr_output_state_init(&state);
-    wlr_output_state_set_enabled(&state, !output->config.disabled);
+    {
+        wlr_output_state state;
+        wlr_output_state_init(&state);
+        wlr_output_state_set_enabled(&state, true);
 
-    wlr_output_mode* mode = wlr_output_preferred_mode(wlr_output);
-    if (mode != nullptr) {
-        wlr_output_state_set_mode(&state, mode);
+        if (wlr_output_mode* mode = wlr_output_preferred_mode(wlr_output)) {
+            wlr_output_state_set_mode(&state, mode);
+        }
+
+        if (wlr_output->adaptive_sync_supported) {
+            wlr_output_state_set_adaptive_sync_enabled(&state, true);
+        }
+
+        wlr_output_commit_state(wlr_output, &state);
+        wlr_output_state_finish(&state);
     }
-
-    if (wlr_output->adaptive_sync_supported) {
-        log_trace("Requesting adaptive sync for {}", wlr_output->description);
-        wlr_output_state_set_adaptive_sync_enabled(&state, true);
-    } else {
-        log_trace("Adaptive sync not supported for {}", wlr_output->description);
-    }
-
-    wlr_output_commit_state(wlr_output, &state);
-    wlr_output_state_finish(&state);
 
     output->listeners.listen(&wlr_output->events.frame,         output, output_frame);
     output->listeners.listen(&wlr_output->events.request_state, output, output_request_state);
     output->listeners.listen(&wlr_output->events.destroy,       output, output_destroy);
 
-    log_warn("  Adaptive sync: {}", wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED);
-
     output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, color_to_wlroots(server->config.layout.background_color));
 
-    update_output_states(server);
+    wlr_output_layout_add_auto(server->output_layout, output->wlr_output);
 
-    if (output->config.primary && !server->session.is_nested) {
-        wlr_box bounds = output_get_bounds(output);
-        vec2 pos = vec2(box_origin(bounds)) + vec2(box_extent(bounds)) / 2.0;
-        log_info("Output is primary, warping cursor to center ({}, {})", pos.x, pos.y);
-        wlr_cursor_warp(server->cursor, nullptr, pos.x, pos.y);
-    }
+    server->script.on_output_add_or_remove(output, true);
 }
 
 void output_layout_change(wl_listener* listener, void*)
 {
     Server* server = listener_userdata<Server*>(listener);
 
-    // TODO: Handled output removal, addition
-
-    wlr_output_layout_output* layout_output;
-    wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
-        output_reconfigure(Output::from(layout_output->output));
+    for (Output* output : server->outputs) {
+        if (auto* layout_output = output->layout_output()) {
+            if (!output->scene_output()) {
+                log_warn("Adding output [{}] to scene", output->wlr_output->name);
+                auto scene_output = wlr_scene_output_create(server->scene, output->wlr_output);
+                wlr_scene_output_layout_add_output(server->scene_output_layout, layout_output, scene_output);
+            }
+        } else if (wlr_scene_output* scene_output = output->scene_output()) {
+            log_warn("Removing output [{}] from scene", output->wlr_output->name);
+            wlr_scene_output_destroy(scene_output);
+        }
+        output_reconfigure(output);
     }
+
+    output_layout_update_configuration(server);
 }
 
 // -----------------------------------------------------------------------------
@@ -277,6 +213,71 @@ void output_reconfigure(Output* output)
     wlr_scene_rect_set_size(output->background, output->workarea.width, output->workarea.height);
 
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
-        output_layout_layer(output, layer);
+        output_reconfigure_layer(output, layer);
     }
+}
+
+// -----------------------------------------------------------------------------
+
+static
+void output_manager_apply_or_test(Server* server, wlr_output_configuration_v1* config, bool test)
+{
+    defer { wlr_output_configuration_v1_destroy(config); };
+    bool ok = true;
+
+    wlr_output_configuration_head_v1* head;
+    wl_list_for_each(head, &config->heads, link) {
+        Output* output = Output::from(head->state.output);
+
+        wlr_output_state state;
+        defer { wlr_output_state_finish(&state); };
+        wlr_output_state_init(&state);
+        wlr_output_state_set_enabled(&state, head->state.enabled);
+        if (head->state.enabled) {
+            if (head->state.mode) {
+                wlr_output_state_set_mode(&state, head->state.mode);
+            } else {
+                wlr_output_state_set_custom_mode(&state,
+                    head->state.custom_mode.width,
+                    head->state.custom_mode.height,
+                    head->state.custom_mode.refresh);
+            }
+
+            wlr_output_state_set_transform(&state, head->state.transform);
+            wlr_output_state_set_scale(&state, head->state.scale);
+            wlr_output_state_set_adaptive_sync_enabled(&state, head->state.adaptive_sync_enabled);
+
+            if (!test) {
+                auto* layout_output = output->layout_output();
+                if (!layout_output || head->state.x != layout_output->x || head->state.y != layout_output->y) {
+                    // TODO: We want to preserve "auto" layout status when re-enabling outputs
+                    wlr_output_layout_add(output->server->output_layout, output->wlr_output, head->state.x, head->state.y);
+                }
+            }
+        }
+
+        ok &= test ? wlr_output_test_state(  output->wlr_output, &state)
+                   : wlr_output_commit_state(output->wlr_output, &state);
+
+        if (!test && !head->state.enabled) {
+            wlr_output_layout_remove(server->output_layout, output->wlr_output);
+        }
+    }
+
+    if (ok) wlr_output_configuration_v1_send_succeeded(config);
+    else    wlr_output_configuration_v1_send_failed(   config);
+}
+
+void output_manager_apply(wl_listener* listener, void* data)
+{
+    Server* server = listener_userdata<Server*>(listener);
+    wlr_output_configuration_v1* config = static_cast<wlr_output_configuration_v1*>(data);
+    output_manager_apply_or_test(server, config, false);
+}
+
+void output_manager_test( wl_listener* listener, void* data)
+{
+    Server* server = listener_userdata<Server*>(listener);
+    wlr_output_configuration_v1* config = static_cast<wlr_output_configuration_v1*>(data);
+    output_manager_apply_or_test(server, config, true);
 }

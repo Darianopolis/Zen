@@ -56,27 +56,6 @@ static constexpr uint32_t pointer_modifier_button = BTN_SIDE;
 
 // -----------------------------------------------------------------------------
 
-struct OutputConfig
-{
-    std::optional<ivec2> pos;
-    bool primary;
-    bool disabled;
-};
-
-struct OutputRule { const char* name; OutputConfig config; };
-static constexpr OutputRule output_rules[] = {
-    { .name = "DP-1", .config = { .pos = ivec2{    0, 0}, .primary = true } },
-    { .name = "DP-2", .config = { .pos = ivec2{-3840, 0}                  } },
-};
-
-// -----------------------------------------------------------------------------
-
-static constexpr std::string_view output_unaware_clients[] = {
-    "xwayland-satellite",
-};
-
-// -----------------------------------------------------------------------------
-
 struct WindowQuirks
 {
     bool force_pointer_constraint = false;
@@ -191,6 +170,8 @@ struct Server
     struct {
         sol::state lua;
         std::filesystem::path current_script_dir;
+
+        std::function<void(Output*, bool)> on_output_add_or_remove = [](Output*, bool){};
     } script;
 
     wl_display* display;
@@ -214,6 +195,7 @@ struct Server
     wlr_output_layout* output_layout;
     wlr_scene_output_layout* scene_output_layout;
     std::vector<Output*> outputs;
+    wlr_output_manager_v1* output_manager;
 
     wlr_compositor* compositor;
     wlr_subcompositor* subcompositor;
@@ -319,8 +301,6 @@ struct Client
 #endif
     std::string process_name;
 
-    bool is_output_aware = false;
-
     static Client* from(Server* server, const struct wl_client*);
 };
 
@@ -355,8 +335,8 @@ struct Output
 
     Server* server;
     struct wlr_output* wlr_output;
-    wlr_output_layout_output* layout_output;
-    wlr_scene_output* scene_output;
+    wlr_output_layout_output* layout_output() const;
+    wlr_scene_output*         scene_output()  const { return wlr_scene_get_scene_output(server->scene, wlr_output); }
 
     wlr_scene_rect* background;
 
@@ -366,8 +346,6 @@ struct Output
 
     FrameTimeReporter frame_reporter;
     bool report_stats;
-
-    OutputConfig config;
 };
 
 // -----------------------------------------------------------------------------
@@ -627,9 +605,8 @@ wlr_box zone_apply_external_padding(Server*, wlr_box);
 
 // ---- Output -----------------------------------------------------------------
 
-Output* get_primary_output(  Server*);
-bool    output_filter_global(Server*, Client*, const wl_global*);
-void    update_output_states(Server*);
+void output_manager_apply(wl_listener*, void*);
+void output_manager_test( wl_listener*, void*);
 
 Output* get_output_at(              Server*, vec2);
 Output* get_nearest_output_to_point(Server*, vec2);
@@ -673,7 +650,7 @@ void subsurface_destroy(wl_listener*, void*);
 
 // ---- Surface.LayerSurface ---------------------------------------------------
 
-void output_layout_layer(Output*, zwlr_layer_shell_v1_layer);
+void output_reconfigure_layer(Output*, zwlr_layer_shell_v1_layer);
 
 void layer_surface_commit( wl_listener*, void*);
 void layer_surface_map(    wl_listener*, void*);

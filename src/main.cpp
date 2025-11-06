@@ -101,6 +101,10 @@ void init(Server* server, const startup_options& options)
     wlr_presentation_create(server->display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->display);
 
+    server->output_manager = wlr_output_manager_v1_create(server->display);
+    server->listeners.listen(&server->output_manager->events.apply, server, output_manager_apply);
+    server->listeners.listen(&server->output_manager->events.test,  server, output_manager_test);
+
 #if USE_SYNCOBJ
     wlr_tearing_control_manager_v1_create(server->display, 1);
     wlr_linux_drm_syncobj_manager_v1_create(server->display, 1, wlr_backend_get_drm_fd(server->backend));

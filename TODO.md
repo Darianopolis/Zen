@@ -116,27 +116,15 @@
    - Track log message origins
    - Use standard logging format with available log view/analysis tooling?
 - Surface positions should remain fixed relative to output position when resizing other outputs
-- Compositor interaction state management
-   - Newly spawned windows should not take focus when in the middle of an interaction (e.g. zone/move/size)
-   - Unify input processing into single callback + state machine?
-   - Interlocks to prevent invalid interaction interactions
-      - While cursor is hidden, should be considered to not exist - add centralised way of querying cursor position/state
 - Use updated protocol version
    - xdg_shell -> version 7
    - tell clients that all edges are constrained
-- Add IPC with messaging client
-   - Spawn message
 - Idle protocol
-- Consolidate interaction logic
-   - Move input binding logic to `interaction.cpp`
-   - Separate zoning logic from zone interaction binds
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
    - Readjust all toplevel zone constraint on workspace/output configuration change
 - Output management
-   - Dynamic output removal/creation/configuration
    - Output scaling
-   - wlr_output_configuration_v1 protocol?
 
 ### Portals
 

@@ -816,7 +816,7 @@ void decoration_new(wl_listener*, void* data)
 
 // -----------------------------------------------------------------------------
 
-void output_layout_layer(Output* output, zwlr_layer_shell_v1_layer layer)
+void output_reconfigure_layer(Output* output, zwlr_layer_shell_v1_layer layer)
 {
     wlr_box full_area = output_get_bounds(output);
 

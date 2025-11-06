@@ -8,14 +8,10 @@ Client* Client::from(Server* server, const struct wl_client* wl_client)
     return nullptr;
 }
 
-bool client_filter_globals(const struct wl_client* wl_client, const wl_global* global, void* data)
+bool client_filter_globals(const struct wl_client* wl_client, const wl_global* /* global */, void* data)
 {
-    Server* server = static_cast<Server*>(data);
-    Client* client = Client::from(server, wl_client);
-
-    if (&wl_output_interface == wl_global_get_interface(global)) {
-        return output_filter_global(server, client, global);
-    }
+    [[maybe_unused]] Server* server = static_cast<Server*>(data);
+    [[maybe_unused]] Client* client = Client::from(server, wl_client);
 
     return true;
 }
@@ -61,22 +57,6 @@ void client_new(wl_listener* listener, void* data)
         }
     }
 #endif
-
-    client->is_output_aware = true;
-    for (auto allowed : output_unaware_clients) {
-        // TODO: Should we allow or deny full output information by default?
-        //       Really almost all applications don't actually care about outputs
-        //        *OR* only want to see one primary output.
-        //       The only exceptions are layer shell components like waybar that need
-        //        to produce per-output surfaces, and multi-monitor games
-        //       Additionally problematic for XWayland clients, as we can only filter at the
-        //        xwayland-satellite level. We'd need multiple xwayland-satellite instances
-        //        to filter more granularly.
-        if (allowed == client->path.filename()) {
-            client->is_output_aware = false;
-            break;
-        }
-    }
 
     server->clients.emplace_back(client);
 

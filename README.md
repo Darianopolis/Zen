@@ -79,7 +79,8 @@ python build.py -I
 - `swaync` - Notifications
 - `swaybg` - Background
 - `waybar` - System bar
-- `kanshi` - Dynamic output profile management (required protocol not hooked up yet)
+- `wlr-randr` - Output management
+- `kanshi` - Dynamic profile-based output management
 - `lxqt-sudo` - GUI frontend for `sudo`
 - `grim` - Screenshot
 - `slurp` - Region selection
