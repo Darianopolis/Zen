@@ -498,6 +498,10 @@ struct CursorSurface : Surface
     // Surface::from(struct wlr_surface*) calls are still always safe to make
 };
 
+// ---- Server -----------------------------------------------------------------
+
+void server_request_quit(Server*, bool force);
+
 // ---- Watchdog ---------------------------------------------------------------
 
 void watchdog_init(Server*);
@@ -517,7 +521,7 @@ bool                bind_trigger(    Server*, Bind);
 void ipc_server_init(   Server*);
 void ipc_server_cleanup(Server*);
 
-void ipc_client_run(std::span<const std::string_view>);
+int ipc_client_run(std::span<const std::string_view>);
 
 void ipc_send_string(int fd, MessageType type, std::string_view str);
 

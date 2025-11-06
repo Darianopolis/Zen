@@ -155,7 +155,7 @@ void ipc_server_cleanup(Server* server)
         wl_event_source_remove(server->ipc_connection_event_source);
 }
 
-void ipc_client_run(std::span<const std::string_view> args)
+int ipc_client_run(std::span<const std::string_view> args)
 {
     const char* socket_name = getenv(ipc_socket_env.c_str());
     auto addr = ipc_socket_path_from_name(socket_name);
@@ -163,7 +163,7 @@ void ipc_client_run(std::span<const std::string_view> args)
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
         perror("connect");
-        return;
+        return EXIT_FAILURE;
     }
 
     for (auto arg : args) {
@@ -180,4 +180,6 @@ void ipc_client_run(std::span<const std::string_view> args)
     }
 
     close(fd);
+
+    return EXIT_SUCCESS;
 }

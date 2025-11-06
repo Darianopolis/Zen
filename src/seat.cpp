@@ -800,7 +800,7 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
         switch (sym)
         {
             case XKB_KEY_Escape:
-                wl_display_terminate(server->display);
+                server_request_quit(server, check_mods(server, Modifiers::Shift));
                 break;
             case XKB_KEY_Tab:
             case XKB_KEY_ISO_Left_Tab: {

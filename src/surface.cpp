@@ -737,7 +737,7 @@ void subsurface_new(wl_listener* listener, void* data)
     subsurface->wlr_surface = surface->surface;
     subsurface->wlr_surface->data = subsurface;
 
-    log_debug("Subsurface created: {}", surface_to_string(subsurface));
+    // log_debug("Subsurface created: {}", surface_to_string(subsurface));
 
     subsurface->listeners.listen(&surface->surface->events.new_subsurface, server,     subsurface_new);
     subsurface->listeners.listen(&surface->surface->events.commit,         subsurface, subsurface_commit);
@@ -764,7 +764,7 @@ void subsurface_destroy(wl_listener* listener, void*)
 {
     Subsurface* subsurface = listener_userdata<Subsurface*>(listener);
 
-    log_debug("Subsurface destroyed: {}", surface_to_string(subsurface));
+    // log_debug("Subsurface destroyed: {}", surface_to_string(subsurface));
 
     surface_cleanup(subsurface);
 

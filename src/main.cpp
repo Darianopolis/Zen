@@ -12,8 +12,28 @@ struct startup_options
     bool ctrl_mod;
 };
 
-#define USE_SYNCOBJ 0
-#define USE_VULKAN 0
+#define USE_SYNCOBJ 1
+#define USE_VULKAN  1
+
+void server_request_quit(Server* server, bool force)
+{
+    if (server->clients.empty()) {
+        wl_display_terminate(server->display);
+    } else {
+        if (force) {
+            log_error("Forcing shutdown with still running clients:");
+            for (Client* client : server->clients) {
+                log_error(" - {}", client_to_string(client));
+            }
+            wl_display_terminate(server->display);
+        } else {
+            for (Client* client : server->clients) {
+                log_info("Waiting for client to quit: {}", client_to_string(client));
+                kill(client->pid, SIGTERM);
+            }
+        }
+    }
+}
 
 static
 void init(Server* server, const startup_options& options)
@@ -224,7 +244,6 @@ void run(Server* server, const startup_options& options)
 void cleanup(Server* server)
 {
     wl_display_destroy_clients(server->display);
-    // TODO: Wait for clients to die properly
 
     server->listeners.clear();
 
@@ -269,8 +288,7 @@ int main(int argc, char* argv[])
     CommandParser cmd{args};
 
     if (cmd.match("msg")) {
-        ipc_client_run(cmd.peek_rest());
-        return 0;
+        return ipc_client_run(cmd.peek_rest());
     }
 
     startup_options options = {};

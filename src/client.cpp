@@ -89,5 +89,7 @@ void client_destroy(wl_listener* listener, void*)
 
     std::erase(client->server->clients, client);
 
+    log_info("Client disconnected: {}", client_to_string(client));
+
     delete client;
 }
