@@ -123,8 +123,6 @@
 - Improved zone logic
    - Have toplevels remember what zones edges they are constrained to
    - Readjust all toplevel zone constraint on workspace/output configuration change
-- Output management
-   - Output scaling
 
 ### Portals
 

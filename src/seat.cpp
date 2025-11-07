@@ -718,7 +718,9 @@ void cursor_motion_absolute(wl_listener* listener, void* data)
         wlr_output_layout_output* layout_output;
         wl_list_for_each(layout_output, &server->output_layout->outputs, link) {
             if (strcmp(layout_output->output->name, event->pointer->output_name) == 0) {
-                layout_pos = vec2{layout_output->x, layout_output->y} + vec2{layout_output->output->width, layout_output->output->height} * vec2{event->x, event->y};
+                layout_pos = vec2{layout_output->x, layout_output->y}
+                    + (vec2{layout_output->output->width, layout_output->output->height}
+                        * vec2{event->x, event->y} / vec2(layout_output->output->scale));
                 break;
             }
         }

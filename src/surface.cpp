@@ -11,6 +11,25 @@ Surface* get_focused_surface(Server* server)
     return Surface::from(server->seat->keyboard_state.focused_surface);
 }
 
+void surface_update_scale(Surface* surface)
+{
+    float scale = 0.f;
+
+    wlr_surface_output* surface_output;
+    wl_list_for_each(surface_output, &surface->wlr_surface->current_outputs, link) {
+        scale = std::max(scale, surface_output->output->scale);
+    }
+
+    if (!scale) scale = 1.f;
+
+    if (scale != surface->last_scale) {
+        surface->last_scale = scale;
+        log_debug("Setting preferred scale ({:.2f}) for: {}", scale, surface_to_string(surface));
+        wlr_fractional_scale_v1_notify_scale(surface->wlr_surface, scale);
+        wlr_surface_set_preferred_buffer_scale(surface->wlr_surface, int32_t(std::ceil(scale)));
+    }
+}
+
 static
 float toplevel_get_opacity(Toplevel* toplevel)
 {
@@ -176,6 +195,8 @@ void toplevel_update_position_for_anchor(Toplevel* toplevel)
     int x = (toplevel->anchor_edges & WLR_EDGE_RIGHT)  ? toplevel->anchor.x - geom.width  : toplevel->anchor.x;
     int y = (toplevel->anchor_edges & WLR_EDGE_BOTTOM) ? toplevel->anchor.y - geom.height : toplevel->anchor.y;
     wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
+
+    surface_update_scale(toplevel);
 }
 
 void toplevel_set_bounds(Toplevel* toplevel, wlr_box box, wlr_edges locked_edges)
@@ -837,6 +858,8 @@ void layer_surface_commit(wl_listener* listener, void*)
     update_focus(layer_surface->server);
 
     output_reconfigure(get_output_for_surface(layer_surface));
+
+    surface_update_scale(layer_surface);
 }
 
 void layer_surface_map(wl_listener* listener, void*)

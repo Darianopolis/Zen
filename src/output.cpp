@@ -13,7 +13,7 @@ wlr_output_layout_output* Output::layout_output() const
 }
 
 static
-void output_layout_update_configuration(Server* server)
+void output_layout_report_configuration(Server* server)
 {
     wlr_output_configuration_v1* config = wlr_output_configuration_v1_create();
 
@@ -198,7 +198,7 @@ void output_layout_change(wl_listener* listener, void*)
         output_reconfigure(output);
     }
 
-    output_layout_update_configuration(server);
+    output_layout_report_configuration(server);
 }
 
 // -----------------------------------------------------------------------------

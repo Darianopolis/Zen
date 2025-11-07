@@ -370,6 +370,8 @@ struct Surface : WeaklyReferenceable
     wlr_scene_tree* popup_tree;
     struct wlr_surface* wlr_surface;
 
+    float last_scale = 0.f;
+
     struct {
         bool surface_set;
         Weak<CursorSurface> surface;
@@ -624,6 +626,8 @@ void output_new(          wl_listener*, void*);
 void output_layout_change(wl_listener*, void*);
 
 // ---- Surface ----------------------------------------------------------------
+
+void surface_update_scale(Surface*);
 
 Surface* get_surface_accepting_input_at(Server*, vec2 layout_pos, wlr_surface** p_surface, vec2* surface_pos);
 Surface* get_focused_surface(           Server*);
