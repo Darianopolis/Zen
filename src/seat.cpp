@@ -923,16 +923,12 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
     // Check for move/size interaction begin, or close-under-cursor
 
     if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && check_mods(server, Modifiers::Mod) && server->interaction_mode == InteractionMode::passthrough) {
-        if (is_cursor_visible(server)) {
-            if (event.button == BTN_LEFT && check_mods(server, Modifiers::Shift)) {
-                toplevel_begin_interactive(toplevel, InteractionMode::move);
-            } else if (event.button == BTN_RIGHT) {
-                toplevel_begin_interactive(toplevel, InteractionMode::resize);
-            } else if (event.button == BTN_MIDDLE) {
-                toplevel_close(toplevel);
-            }
-        } else {
-            log_warn("Compositor button pressed while cursor is hidden");
+        if (event.button == BTN_LEFT && check_mods(server, Modifiers::Shift)) {
+            toplevel_begin_interactive(toplevel, InteractionMode::move);
+        } else if (event.button == BTN_RIGHT) {
+            toplevel_begin_interactive(toplevel, InteractionMode::resize);
+        } else if (event.button == BTN_MIDDLE) {
+            toplevel_close(toplevel);
         }
         return true;
     }

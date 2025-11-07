@@ -1,16 +1,11 @@
 # Zen
 
-A minimalistic, opinionated, stacking zone-based Wayland compositor built on wlroots.
-
-### Why?
-
-This is a project to find a happy medium between the absolute limit of code minimalism and a reasonably functional forward-looking compositor that is most importantly as trivial as possible to maintain.
+A minimalistic, opinionated, stacking grid-based Wayland compositor built on wlroots.
 
 ### Goals
 
 - Focused
-    - Handle only compositor related concerns
-    - Anything substantial that is orthogonal to the compositor should be handled in separate projects and compose together.
+    - Keep as little responsibility in the compositor binary. Prefer to shift responsibilty to composable client applications.
 - Simple
     - The codebase should be as small and simple as possible without sacrificing clarity or functionality
     - Easily hackable (the good kind) and maintainable

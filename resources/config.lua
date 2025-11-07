@@ -36,9 +36,9 @@ config.bind["XF86AudioNext"] = function() spawn("playerctl", "-p", player, "next
 
 -- launcher --------------------------------------------------------------------
 
-config.bind["Mod+d"]       = function() spawn("rofi", "-show", "drun")  end
-config.bind["Mod+Shift+D"] = function() spawn("rofi", "-show", "run")   end
-config.bind["Mod+Ctrl+d"]  = function() spawn("rofi", "-show", "window") end
+config.bind["Mod+d"]       = function() spawn("rofi", "-show-icons", "-show", "drun")   end
+config.bind["Mod+Shift+D"] = function() spawn("rofi", "-show-icons", "-show", "run")    end
+config.bind["Mod+Ctrl+d"]  = function() spawn("rofi", "-show-icons", "-show", "window") end
 
 -- applications ----------------------------------------------------------------
 
