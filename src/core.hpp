@@ -3,7 +3,6 @@
 #include "pch.hpp"
 #include "util.hpp"
 #include "log.hpp"
-#include "debug.hpp"
 
 // -----------------------------------------------------------------------------
 
@@ -326,9 +325,6 @@ struct Output
     wlr_box workarea;
 
     EnumMap<std::vector<LayerSurface*>, zwlr_layer_shell_v1_layer> layers;
-
-    FrameTimeReporter frame_reporter;
-    bool report_stats;
 };
 
 // -----------------------------------------------------------------------------
@@ -369,9 +365,6 @@ struct Surface : WeaklyReferenceable
     }
     static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from_data(surface->data) : nullptr; }
     static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from_data(node->data)    : nullptr; }
-
-    FrameTimeReporter frame_commit_reporter;
-    bool report_stats;
 };
 
 struct Subsurface : Surface

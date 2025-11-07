@@ -96,10 +96,6 @@ void output_frame(wl_listener* listener, void*)
     timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(scene_output, &now);
-
-    if (output->report_stats) {
-        output->frame_reporter.frame(output->wlr_output->name);
-    }
 }
 
 void output_request_state(wl_listener* listener, void* data)

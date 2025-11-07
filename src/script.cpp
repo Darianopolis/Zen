@@ -380,32 +380,6 @@ void script_env_set_globals(Server* server)
                 }
             });
         }
-
-        // Statistics
-
-        {
-            MetatableBuilder stats(lua, debug.table["stats"]);
-
-            stats.add_property("window", [server](bool state) {
-                if (Toplevel* toplevel = Toplevel::from(get_focused_surface(server))) {
-                    toplevel->report_stats = state;
-                    log_info("{} statistics for {}", state ? "Enabling" : "Disabling", surface_to_string(toplevel));
-                }
-            }, [server] {
-                Toplevel* toplevel = Toplevel::from(get_focused_surface(server));
-                return toplevel && toplevel->report_stats;
-            });
-
-            stats.add_property("output", [server](bool state) {
-                if (Output* output = get_nearest_output_to_point(server, get_cursor_pos(server))) {
-                    output->report_stats = state;
-                    log_info("{} statistics for {}", state ? "Enabling" : "Disabling",  output->wlr_output->name);
-                }
-            }, [server] {
-                Output* output = get_nearest_output_to_point(server, get_cursor_pos(server));
-                return output && output->report_stats;
-            });
-        }
     }
 }
 

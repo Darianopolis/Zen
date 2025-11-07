@@ -328,3 +328,7 @@ struct CommandParser
     std::optional<int> get_int()    { return get_from_chars<int>(); }
     std::optional<int> get_double() { return get_from_chars<double>(); }
 };
+
+// -----------------------------------------------------------------------------
+
+std::string duration_to_string(std::chrono::duration<double, std::nano> dur);

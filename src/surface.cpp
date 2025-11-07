@@ -595,8 +595,6 @@ void toplevel_commit(wl_listener* listener, void*)
             toplevel_update_opacity(toplevel);
         }
     }
-
-    surface_profiler_report_commit(toplevel);
 }
 
 void toplevel_destroy(wl_listener* listener, void*)
@@ -760,8 +758,6 @@ void subsurface_new(wl_listener* listener, void* data)
 void subsurface_commit(wl_listener* listener, void*)
 {
     Subsurface* subsurface = listener_userdata<Subsurface*>(listener);
-
-    surface_profiler_report_commit(subsurface);
 
     if (subsurface->server->interaction_mode == InteractionMode::focus_cycle) {
         for (Surface* current = subsurface; (current = subsurface->parent());) {
