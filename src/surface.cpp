@@ -555,14 +555,6 @@ void toplevel_commit(wl_listener* listener, void*)
 
         log_info("Toplevel initial commit: {}", surface_to_string(toplevel));
 
-        for (const WindowRule& rule : window_rules) {
-            if (rule.app_id && (!toplevel->xdg_toplevel()->app_id || !std::string_view(toplevel->xdg_toplevel()->app_id).starts_with(rule.app_id))) continue;
-            if (rule.title && (!toplevel->xdg_toplevel()->title || !std::string_view(toplevel->xdg_toplevel()->title).starts_with(rule.title))) continue;
-
-            log_warn("  Applying quirks to window");
-            toplevel->quirks = rule.quirks;
-        }
-
         decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), 0, 0);
     } else {

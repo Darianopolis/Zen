@@ -609,9 +609,6 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
                 region = &constraint->region;
                 type = constraint->type;
-            } else if (Toplevel* toplevel = Toplevel::from(focused_surface); toplevel && toplevel->quirks.force_pointer_constraint) {
-                region = &toplevel->wlr_surface->input_region;
-                type = WLR_POINTER_CONSTRAINT_V1_CONFINED;
             }
 
             if (region) {
@@ -942,10 +939,6 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
                 surface_try_focus(server, surface_under_cursor);
                 if (!is_cursor_visible(server)) {
                     log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
-                    return true;
-                }
-                if (Toplevel* new_focus = Toplevel::from(get_focused_surface(server)); new_focus && new_focus->quirks.force_pointer_constraint) {
-                    log_warn("Button press event suppressed (reason: focused moved to window with pointer constraint quirk)");
                     return true;
                 }
             }

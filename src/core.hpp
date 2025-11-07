@@ -56,23 +56,6 @@ static constexpr uint32_t pointer_modifier_button = BTN_SIDE;
 
 // -----------------------------------------------------------------------------
 
-struct WindowQuirks
-{
-    bool force_pointer_constraint = false;
-};
-struct WindowRule
-{
-    const char* app_id;
-    const char* title;
-    WindowQuirks quirks;
-};
-static const WindowRule window_rules[] = {
-    { .app_id = "Minecraft",  .quirks{.force_pointer_constraint = true} },
-    { .app_id = "steam_app_", .quirks{.force_pointer_constraint = true} },
-};
-
-// -----------------------------------------------------------------------------
-
 enum class Modifiers : uint32_t
 {
     Mod   = 1 << 0,
@@ -437,8 +420,6 @@ struct Toplevel : Surface
         uint32_t last_resize_serial = 0;
         uint32_t last_commited_serial = 0;
     } resize;
-
-    WindowQuirks quirks;
 
     wlr_foreign_toplevel_handle_v1* foreign_handle;
     ListenerSet foreign_listeners;
