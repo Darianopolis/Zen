@@ -71,8 +71,8 @@ build_luajit()
 wlroots_src_dir = vendor_dir / "wlroots"
 
 def build_wlroots():
-    version = "0.20"
-    git_ref = "master"
+    version = "0.19"   # "0.20"
+    git_ref = "0.19.2" #"master"
 
     git_fetch(wlroots_src_dir, "https://gitlab.freedesktop.org/wlroots/wlroots.git", git_ref)
 
@@ -194,9 +194,9 @@ if configure_ok and (args.build or args.install):
 # -----------------------------------------------------------------------------
 
 def install_file(file: Path, target: Path):
-    if filecmp.cmp(file, target):
-        return
     if target.exists():
+        if filecmp.cmp(file, target):
+            return
         os.remove(target)
     print(f"Installing [{file}] to [{target}]")
     shutil.copy2(file, target)

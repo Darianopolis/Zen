@@ -11,7 +11,7 @@ using namespace std::literals;
 static struct {
     LogLevel log_level = LogLevel::trace;
     wlr_log_importance wlr_level = WLR_INFO;
-    std::ofstream log_file;
+    bool is_tty = false;
     MessageConnection* ipc_sink = {};
 } log_state = {};
 
@@ -43,10 +43,7 @@ void log(LogLevel level, std::string_view message)
         case LogLevel::fatal: fmt = { "[" VT_color(91, "FATAL") "] {}\n",                     "[FATAL] {}\n" }; break;
     }
 
-    std::cout << std::vformat(fmt.vt, std::make_format_args(message));
-    if (log_state.log_file.is_open()) {
-        log_state.log_file << std::vformat(fmt.plain, std::make_format_args(message)) << std::flush;
-    }
+    std::cout << std::vformat(log_state.is_tty ? fmt.vt : fmt.plain, std::make_format_args(message));
     if (log_state.ipc_sink) {
         ipc_send_string(log_state.ipc_sink->fd, MessageType::StdErr,
             std::vformat(fmt.vt, std::make_format_args(message)));
@@ -91,7 +88,13 @@ void log_wlr_callback(wlr_log_importance importance, const char* fmt, va_list ar
 void init_log(LogLevel log_level, wlr_log_importance importance, const char* log_file)
 {
     log_state.log_level = log_level;
-    if (log_file) log_state.log_file = std::ofstream(log_file);
+    if (log_file) {
+        int fd = open(log_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        close(fd);
+    }
+    log_state.is_tty = isatty(STDOUT_FILENO);
 
     log_state.wlr_level = importance;
     wlr_log_init(importance, log_wlr_callback);

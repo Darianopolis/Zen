@@ -1,13 +1,13 @@
 #include "core.hpp"
 
 namespace {
-    constexpr auto heartbeat_rate_ms  = 100;
-    constexpr auto watchdog_ping_rate = 100ms;
-    constexpr auto watchdog_timeout   = 1000ms;
+    constexpr auto watchdog_ping_interval_ms = 500;
+    constexpr auto watchdog_check_interval   = 500ms;
+    constexpr auto watchdog_timeout          = 5000ms;
 
     struct {
         wl_event_source* timer;
-        std::atomic<std::chrono::steady_clock::time_point> last_heartbeat;
+        std::atomic<std::chrono::steady_clock::time_point> last_ping;
     } watchdog_state;
 
     void watchdog_dump(std::chrono::steady_clock::duration dur)
@@ -35,10 +35,10 @@ namespace {
     void watchdog_run()
     {
         for (;;) {
-            std::this_thread::sleep_for(watchdog_ping_rate);
+            std::this_thread::sleep_for(watchdog_check_interval);
             auto now = std::chrono::steady_clock::now();
 
-            auto dur = now - watchdog_state.last_heartbeat.load();
+            auto dur = now - watchdog_state.last_ping.load();
             if (dur > watchdog_timeout) {
                 watchdog_dump(dur);
                 return;
@@ -50,21 +50,21 @@ namespace {
 // -----------------------------------------------------------------------------
 
 static
-void watchdog_heartbeat()
+void watchdog_ping()
 {
     auto now = std::chrono::steady_clock::now();
-    watchdog_state.last_heartbeat = now;
+    watchdog_state.last_ping = now;
 
-    wl_event_source_timer_update(watchdog_state.timer, heartbeat_rate_ms);
+    wl_event_source_timer_update(watchdog_state.timer, watchdog_ping_interval_ms);
 }
 
 void watchdog_init(Server* server)
 {
     watchdog_state.timer = wl_event_loop_add_timer(wl_display_get_event_loop(server->display), [](void*) {
-        watchdog_heartbeat();
+        watchdog_ping();
         return 0;
     }, nullptr);
-    watchdog_heartbeat();
+    watchdog_ping();
     std::thread(watchdog_run).detach();
 }
 
@@ -73,5 +73,5 @@ void watchdog_start_shutdown()
     if (watchdog_state.timer) {
         wl_event_source_remove(watchdog_state.timer);
     }
-    watchdog_heartbeat();
+    watchdog_ping();
 }

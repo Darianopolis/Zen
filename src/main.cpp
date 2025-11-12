@@ -12,8 +12,8 @@ struct startup_options
     bool ctrl_mod;
 };
 
-#define USE_SYNCOBJ 1
-#define USE_VULKAN  1
+#define USE_SYNCOBJ 0
+#define USE_VULKAN  0
 
 void server_request_quit(Server* server, bool force)
 {
