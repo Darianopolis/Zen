@@ -21,24 +21,48 @@ program_name = "zen"
 
 # -----------------------------------------------------------------------------
 
-def ensure_dir(path):
+def ensure_dir(path: Path | str):
     os.makedirs(path, exist_ok=True)
     return Path(path)
 
+cwd = Path(os.curdir).absolute()
 build_dir  = ensure_dir(".build")
 vendor_dir = ensure_dir(build_dir / "3rdparty")
 
 # -----------------------------------------------------------------------------
 
-def git_fetch(dir, repo, branch, dumb=False):
+def run(cmd, cwd=None, allow_error=False):
+    if cwd:
+        print(f"{cmd} @ {cwd}")
+    else:
+        print(f"{cmd}")
+
+    res = subprocess.run(cmd, cwd=cwd)
+
+    ok = res.returncode == 0
+
+    if not (allow_error or ok):
+        raise RuntimeError(f"cmd failed with code: {res.returncode}")
+
+    return ok
+
+# -----------------------------------------------------------------------------
+
+def git_fetch(dir, repo, branch, dumb=False, patches: list[Path]=[]):
     if not dir.exists():
-        cmd = ["git", "clone", repo, "--branch", branch, dir]
-        print(cmd)
-        subprocess.run(cmd)
+        cmd  = ["git", "clone", repo, "--branch", branch]
+        if not dumb:
+            cmd += ["--depth", "1"]
+        cmd += [dir]
+        run(cmd)
     elif args.update:
-        cmd = ["git", "pull"]
-        print(f"{cmd} @ {dir}")
-        subprocess.run(cmd, cwd = dir)
+        run(["git", "reset", "--hard"], cwd = dir)
+        run(["git", "checkout", branch], cwd = dir)
+        run(["git", "pull", "origin", branch], cwd = dir)
+
+    if args.update or not dir.exists():
+        for patch in patches:
+            run(["git", "apply", patch], cwd = dir)
 
 # -----------------------------------------------------------------------------
 
@@ -62,7 +86,7 @@ def build_luajit():
     git_fetch(source_dir, "https://luajit.org/git/luajit.git", "v2.1", dumb=True)
 
     if not (source_dir / "src/libluajit.a").exists() or args.update:
-        subprocess.run(["make", "-j"], cwd = source_dir)
+        run(["make", "-j"], cwd = source_dir)
 
 build_luajit()
 
@@ -74,30 +98,27 @@ def build_wlroots():
     version = "0.19"   # "0.20"
     git_ref = "0.19.2" #"master"
 
-    git_fetch(wlroots_src_dir, "https://gitlab.freedesktop.org/wlroots/wlroots.git", git_ref)
+    git_fetch(wlroots_src_dir, "https://gitlab.freedesktop.org/wlroots/wlroots.git", git_ref, patches = [
+        cwd / "patches/wlroots/keyboard_enter.patch"
+    ])
 
     build_dir   = vendor_dir.absolute() / "wlroots-build"
     install_dir = vendor_dir.absolute() / "wlroots-install"
 
     if not build_dir.exists() or not install_dir.exists() or args.update:
         cmd = ["meson", "setup", "--reconfigure", "--default-library", "static", "--prefix", install_dir, build_dir]
-        print(cmd)
-        subprocess.run(cmd, cwd=wlroots_src_dir)
+        run(cmd, cwd=wlroots_src_dir)
 
-        cmd = ["meson", "compile", "-C", build_dir]
-        print(cmd)
-        subprocess.run(cmd)
+        run(["meson", "compile", "-C", build_dir])
 
-        cmd = ["meson", "install", "-q", "-C", build_dir]
-        print(cmd)
-        subprocess.run(cmd)
+        run(["meson", "install", "-q", "-C", build_dir])
 
         with open(install_dir / "CMakeLists.txt", "w") as cmakelists:
             cmakelists.write("add_library(               wlroots INTERFACE)\n")
 
             cmd = ["pkg-config", "--static", "--libs", f"wlroots-{version}"]
             env = os.environ.copy()
-            env["PKG_CONFIG_PATH"] = install_dir / "lib/pkgconfig"
+            env["PKG_CONFIG_PATH"] = str(install_dir / "lib/pkgconfig")
             res = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
             cmakelists.write(f"target_include_directories(wlroots INTERFACE include/wlroots-{version})\n")
@@ -148,17 +169,15 @@ def generate_wayland_protocols():
             header_name = f"{name}-protocol.h"
             header_path = wayland_include / header_name
             if not header_path.exists():
-                cmd = [wayland_scanner, "server-header", xml_path, header_name]
                 print(f"Generating wayland header: {header_name}")
-                subprocess.run(cmd, cwd = wayland_include)
+                run([wayland_scanner, "server-header", xml_path, header_name], cwd = wayland_include)
 
             # Generate source
             source_name = f"{name}-protocol.c"
             source_path = wayland_src / source_name
             if not source_path.exists():
-                cmd = [wayland_scanner, "private-code", xml_path, source_name]
                 print(f"Generating wayland source: {source_name}")
-                subprocess.run(cmd, cwd = wayland_src)
+                run([wayland_scanner, "private-code", xml_path, source_name], cwd = wayland_src)
 
             # Add source to CMakeLists
             cmakelists.write(f"    \"src/{source_name}\"\n")
@@ -177,19 +196,16 @@ linker_type  = "MOLD"
 
 cmake_dir = build_dir / build_type.lower()
 
-configure_ok = True
-
 if ((args.build or args.install) and not cmake_dir.exists()) or args.configure:
     cmd  = ["cmake", "-B", cmake_dir, "-G", "Ninja", f"-DVENDOR_DIR={vendor_dir}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
     cmd += [f"-DCMAKE_C_COMPILER={c_compiler}", f"-DCMAKE_CXX_COMPILER={cxx_compiler}", f"-DCMAKE_LINKER_TYPE={linker_type}"]
     cmd += [f"-DCMAKE_BUILD_TYPE={build_type}"]
     cmd += [f"-DPROJECT_NAME={program_name}"]
 
-    print(cmd)
-    configure_ok = 0 == subprocess.run(cmd).returncode
+    run(cmd)
 
-if configure_ok and (args.build or args.install):
-    subprocess.run(["cmake", "--build", cmake_dir])
+if (args.build or args.install):
+    run(["cmake", "--build", cmake_dir])
 
 # -----------------------------------------------------------------------------
 
@@ -206,4 +222,4 @@ if args.install:
     xdg_portal_dir = ensure_dir(os.path.expanduser("~/.config/xdg-desktop-portal"))
 
     install_file(cmake_dir / program_name, local_bin_dir / program_name)
-    install_file("resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
+    install_file(cwd / "resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")

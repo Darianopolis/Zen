@@ -1,0 +1,13 @@
+diff --git a/backend/wayland/seat.c b/backend/wayland/seat.c
+index a66357bf..17d6cb88 100644
+--- a/backend/wayland/seat.c
++++ b/backend/wayland/seat.c
+@@ -33,7 +33,7 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *wl_keyboard,
+ 	wl_array_for_each(keycode_ptr, keys) {
+ 		struct wlr_keyboard_key_event event = {
+ 			.keycode = *keycode_ptr,
+-			.state = WL_KEYBOARD_KEY_STATE_PRESSED,
++			.state = WL_KEYBOARD_KEY_STATE_REPEATED,
+ 			.time_msec = time_msec,
+ 			.update_state = false,
+ 		};

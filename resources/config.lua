@@ -61,6 +61,6 @@ config.bind["Mod+n"] = function() spawn("systemctl", "suspend") end
 
 -- debug -----------------------------------------------------------------------
 
-config.bind["Mod+i"]  = function() spawn("xeyes")     end
-config.bind["Mod+o^"] = function() debug.output.new() end
-config.bind["Mod+k"]  = function() debug.cursor = not debug.cursor end
+config.bind["Mod+i"] = function() spawn("xeyes")     end
+config.bind["Mod+o"] = function() debug.output.new() end
+config.bind["Mod+k"] = function() debug.cursor = not debug.cursor end

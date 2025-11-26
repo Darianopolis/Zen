@@ -63,21 +63,26 @@ void keyboard_handle_key(wl_listener* listener, void* data)
     wlr_seat* seat = server->seat;
     wlr_keyboard_key_event* event = static_cast<wlr_keyboard_key_event*>(data);
 
-    // Translate libinput keycode -> xkbcommon
-    uint32_t keycode = event->keycode + 8;
+    // NOTE: We patch wlroots to return REPEATED on keyboard enter, so that we can
+    //       ignore these events for triggering compositor key shortcuts
 
-    const xkb_keysym_t* syms;
-    int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
+    if (event->state != WL_KEYBOARD_KEY_STATE_REPEATED) {
 
-    bool handled = false;
-    for (int i = 0; i < nsyms; ++i) {
-        xkb_keysym_t sym = syms[i];
-        if ((handled = input_handle_key(server, *event, sym))) {
-            break;
+        // Translate libinput keycode -> xkbcommon
+        uint32_t keycode = event->keycode + 8;
+
+        const xkb_keysym_t* syms;
+        int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
+
+        for (int i = 0; i < nsyms; ++i) {
+            xkb_keysym_t sym = syms[i];
+            if (input_handle_key(server, *event, sym)) {
+                return;
+            }
         }
+    } else {
+        event->state = WL_KEYBOARD_KEY_STATE_PRESSED;
     }
-
-    if (handled) return;
 
     wlr_seat_set_keyboard(seat, keyboard->wlr_keyboard);
     wlr_seat_keyboard_notify_key(seat, event->time_msec, event->keycode, event->state);

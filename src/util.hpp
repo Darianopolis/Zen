@@ -23,7 +23,8 @@ struct overload_set : Ts... {
     using Ts::operator()...;
 };
 
-template<typename... Ts> overload_set(Ts...) -> overload_set<Ts...>;
+template<typename... Ts>
+overload_set(Ts...) -> overload_set<Ts...>;
 
 // -----------------------------------------------------------------------------
 
@@ -49,7 +50,6 @@ constexpr auto ptr(auto&& value) { return &value; }
     inline constexpr EnumType operator| (EnumType  l, EnumType r) { return EnumType(std::to_underlying(l) | std::to_underlying(r));                  } \
     inline constexpr EnumType operator|=(EnumType& l, EnumType r) { return l = l | r;                                                                } \
     inline constexpr bool     operator>=(EnumType  l, EnumType r) { return std::to_underlying(r) == (std::to_underlying(l) & std::to_underlying(r)); } \
-    inline constexpr bool     operator< (EnumType  l, EnumType r) { return !(l >= r);                                                                } \
     inline constexpr EnumType operator& (EnumType  l, EnumType r) { return EnumType(std::to_underlying(l) & std::to_underlying(r));                  } \
     inline constexpr EnumType operator~ (EnumType  v)             { return EnumType(~std::to_underlying(v));                                         }
 
