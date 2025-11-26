@@ -12,8 +12,8 @@ struct startup_options
     bool ctrl_mod;
 };
 
-#define USE_SYNCOBJ 0
-#define USE_VULKAN  0
+#define USE_SYNCOBJ 1
+#define USE_VULKAN  1
 
 void server_request_quit(Server* server, bool force)
 {
@@ -105,8 +105,8 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->output_manager->events.apply, server, output_manager_apply);
     server->listeners.listen(&server->output_manager->events.test,  server, output_manager_test);
 
-#if USE_SYNCOBJ
     wlr_tearing_control_manager_v1_create(server->display, 1);
+#if USE_SYNCOBJ
     wlr_linux_drm_syncobj_manager_v1_create(server->display, 1, wlr_backend_get_drm_fd(server->backend));
 #endif
 

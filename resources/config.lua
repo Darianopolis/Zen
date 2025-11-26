@@ -3,8 +3,6 @@
 
 config.focus_cycle.opacity = 0.2
 
-config.background.color = "#191919"
-
 config.border.width = 2
 config.border.color.default = "#4C4C4C"
 config.border.color.focused = "#6666FF"

@@ -176,7 +176,7 @@ void script_env_set_globals(Server* server)
                 server->config.layout.background_color = script_object_to_color(color);
                 log_info("Setting background.color = {}", glm::to_string(server->config.layout.background_color));
                 for (auto* output : server->outputs) {
-                    wlr_scene_rect_set_color(output->background, color_to_wlroots(server->config.layout.background_color));
+                    wlr_scene_rect_set_color(output->background_color, color_to_wlroots(server->config.layout.background_color));
                 }
             }, [] { return sol::nil; /* TODO */ });
         }

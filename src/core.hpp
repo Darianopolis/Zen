@@ -67,7 +67,8 @@ DECORATE_FLAG_ENUM(Modifiers)
 
 // -----------------------------------------------------------------------------
 
-enum class MouseButton : uint32_t {
+enum class MouseButton : uint32_t
+{
     Left    = BTN_LEFT,
     Right   = BTN_RIGHT,
     Middle  = BTN_MIDDLE,
@@ -78,7 +79,8 @@ enum class MouseButton : uint32_t {
     Task    = BTN_TASK,
 };
 
-enum class ScrollDirection : uint32_t {
+enum class ScrollDirection : uint32_t
+{
     Up,
     Down,
     Left,
@@ -320,7 +322,8 @@ struct Output
     wlr_output_layout_output* layout_output() const;
     wlr_scene_output*         scene_output()  const { return wlr_scene_get_scene_output(server->scene, wlr_output); }
 
-    wlr_scene_rect* background;
+    wlr_scene_rect* background_base;
+    wlr_scene_rect* background_color;
 
     wlr_box workarea;
 

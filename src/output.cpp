@@ -114,7 +114,9 @@ void output_destroy(wl_listener* listener, void*)
 
     log_info("Output [{}] destroyed", output->wlr_output->name);
 
-    wlr_scene_node_destroy(&output->background->node);
+    wlr_scene_node_destroy(&output->background_base->node);
+
+    wlr_scene_node_destroy(&output->background_color->node);
 
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         for (LayerSurface* layer_surface : output->layers[layer]) {
@@ -169,7 +171,10 @@ void output_new(wl_listener* listener, void* data)
     output->listeners.listen(&wlr_output->events.request_state, output, output_request_state);
     output->listeners.listen(&wlr_output->events.destroy,       output, output_destroy);
 
-    output->background = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, color_to_wlroots(server->config.layout.background_color));
+    output->background_base = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height,
+        color_to_wlroots({1, 0, 1, 1}));
+
+    output->background_color = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, color_to_wlroots(server->config.layout.background_color));
 
     wlr_output_layout_add_auto(server->output_layout, output->wlr_output);
 
@@ -205,8 +210,11 @@ void output_reconfigure(Output* output)
 
     output->workarea = output_get_bounds(output);
 
-    wlr_scene_node_set_position(&output->background->node, output->workarea.x, output->workarea.y);
-    wlr_scene_rect_set_size(output->background, output->workarea.width, output->workarea.height);
+    wlr_scene_node_set_position(&output->background_base->node, output->workarea.x, output->workarea.y);
+    wlr_scene_rect_set_size(output->background_base, output->workarea.width, output->workarea.height);
+
+    wlr_scene_node_set_position(&output->background_color->node, output->workarea.x, output->workarea.y);
+    wlr_scene_rect_set_size(output->background_color, output->workarea.width, output->workarea.height);
 
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         output_reconfigure_layer(output, layer);
