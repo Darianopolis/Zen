@@ -63,6 +63,8 @@ void spawn(Server* server, std::string_view file, std::span<const std::string_vi
                 unsetenv(env_action.name);
             }
         }
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
         execv(path.c_str(), argv_cstr.data());
         _Exit(0);
     }
