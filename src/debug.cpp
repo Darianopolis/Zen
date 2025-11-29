@@ -47,13 +47,6 @@ std::string client_to_string(Client* client)
     return std::format("Client<{}>(pid = {}, name = {}, path = {})", (void*)client, client->pid, client->process_name, client->path.c_str());
 }
 
-std::string cursor_surface_to_string(CursorSurface* cursor_surface)
-{
-    if (!cursor_surface) return "nullptr";
-
-    return std::format("CursorSurface<{}>(wlr_surface = {}, visible = {})", (void*)cursor_surface, (void*)cursor_surface->wlr_surface, cursor_surface_is_visible(cursor_surface));
-}
-
 std::string pointer_to_string(Pointer* pointer)
 {
     return pointer ? std::format("Pointer<{}>", (void*)pointer) : "nullptr";

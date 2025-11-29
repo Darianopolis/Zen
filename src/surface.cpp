@@ -248,7 +248,6 @@ Toplevel* focus_cycle_end(Server* server)
 {
     if (server->interaction_mode != InteractionMode::focus_cycle) return nullptr;
     server->interaction_mode = InteractionMode::passthrough;
-    update_cursor_state(server);
 
     Toplevel* selected = server->focus_cycle.current.get();
     server->focus_cycle.current.reset();
@@ -343,7 +342,6 @@ void surface_impl_set_focus(Server* server, Surface* surface)
     }
 
     process_cursor_motion(server, 0, nullptr, {}, {}, {});
-    update_cursor_state(server);
 }
 
 static

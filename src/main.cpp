@@ -153,7 +153,6 @@ void init(Server* server, const startup_options& options)
 
     server->seat = wlr_seat_create(server->display, "seat0");
     server->listeners.listen(&               server->seat->events.request_set_cursor,    server, seat_request_set_cursor);
-    server->listeners.listen(& server->seat->pointer_state.events.focus_change,          server, seat_pointer_focus_change);
     server->listeners.listen(&               server->seat->events.request_set_selection, server, seat_request_set_selection);
     server->listeners.listen(&               server->seat->events.request_start_drag,    server, seat_request_start_drag);
     server->listeners.listen(&               server->seat->events.start_drag,            server, seat_start_drag);
@@ -181,8 +180,9 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->cursor->events.frame,           server, cursor_frame);
 
     server->pointer.debug_visual_half_extent = 4;
+    server->pointer.debug_visual_color = fvec4{1.f, 0.f, 1.f, 1.f};
 
-    update_cursor_state(server);
+    wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
 
     // Scripting
 

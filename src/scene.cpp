@@ -331,9 +331,10 @@ void scene_output_frame(Output* output, timespec now)
         //     scene_render_surface(&frame, cursor_surface, 1.f, ivec2(get_cursor_pos(server)) - cursor_surface->hotspot);
         // }
 
-        int he = server->pointer.debug_visual_half_extent;
+        int offset = -server->pointer.debug_visual_half_extent * 2;
+        int extent =  server->pointer.debug_visual_half_extent * 2;
         scene_render_color_rect(&frame, ColorRect{
-            .box = wlr_box { int(server->cursor->x - he), int(server->cursor->y - he), he * 2, he * 2 },
+            .box = wlr_box { int(server->cursor->x + offset), int(server->cursor->y + offset), extent, extent },
             .color = server->pointer.debug_visual_color,
         });
     }
@@ -350,7 +351,7 @@ void scene_output_frame(Output* output, timespec now)
         wlr_surface_send_frame_done(surface->wlr_surface, &now);
     }
 
-    if (auto* cursor_surface = server->cursor_surface.get()) {
-        wlr_surface_send_frame_done(cursor_surface->wlr_surface, &now);
-    }
+    // if (auto* cursor_surface = server->cursor_surface.get()) {
+    //     wlr_surface_send_frame_done(cursor_surface->wlr_surface, &now);
+    // }
 }

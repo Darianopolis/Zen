@@ -340,7 +340,6 @@ void script_env_set_globals(Server* server)
         debug.add_property("cursor", [server](bool state) {
             server->pointer.debug_visual_enabled = state;
             log_info("Debug cursor visual: {}", server->pointer.debug_visual_enabled ? "enabled" : "disabled");
-            update_cursor_state(server);
         }, [server] { return server->pointer.debug_visual_enabled; });
 
         // Pointer

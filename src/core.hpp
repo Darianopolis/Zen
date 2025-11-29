@@ -119,7 +119,6 @@ struct DragIcon;
 struct Toplevel;
 struct Popup;
 struct LayerSurface;
-struct CursorSurface;
 struct Output;
 struct Keyboard;
 struct Pointer;
@@ -197,11 +196,11 @@ struct Server
         wlr_pointer_constraints_v1* pointer_constraints;
         wlr_pointer_constraint_v1* active_constraint;
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
-        bool            debug_visual_enabled = false;
-        uint32_t        debug_visual_half_extent;
-        fvec4           debug_visual_color;
-        bool            cursor_is_visible;
-        bool            debug_accel_rate = false;
+        bool     debug_visual_enabled = false;
+        uint32_t debug_visual_half_extent;
+        fvec4    debug_visual_color;
+        bool     cursor_is_visible;
+        bool     debug_accel_rate = false;
     } pointer;
 
     InteractionMode interaction_mode;
@@ -222,7 +221,7 @@ struct Server
     xkb_keysym_t main_modifier_keysym_right;
 
     Weak<DragIcon> drag_icon;
-    Weak<CursorSurface> cursor_surface;
+    // Weak<CursorSurface> cursor_surface;
 
     struct {
         Weak<Toplevel> toplevel;
@@ -342,11 +341,6 @@ struct Surface : WeaklyReferenceable
 
     std::vector<Popup*> popups;
 
-    struct {
-        bool surface_set;
-        Weak<CursorSurface> surface;
-    } cursor;
-
     static Surface* from_data(void* data)
     {
         Surface* surface = static_cast<Surface*>(data);
@@ -434,14 +428,6 @@ struct DragIcon : Surface
 
 };
 
-struct CursorSurface : Surface
-{
-    // This listener inherits from Surface with an `invalid` role so that
-    // Surface::from(struct wlr_surface*) calls are still always safe to make
-
-    ivec2 hotspot;
-};
-
 // ---- Server -----------------------------------------------------------------
 
 void server_request_quit(Server*, bool force);
@@ -518,14 +504,6 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 
 // ---- Pointer ----------------------------------------------------------------
 
-bool is_cursor_visible(  Server*);
-void update_cursor_state(Server*, bool from_commit = false);
-
-void cursor_surface_commit( wl_listener*, void*);
-void cursor_surface_destroy(wl_listener*, void*);
-
-bool cursor_surface_is_visible(CursorSurface*);
-
 vec2 get_cursor_pos(Server*);
 
 uint32_t get_num_pointer_buttons_down(Server*);
@@ -534,7 +512,6 @@ void process_cursor_resize(Server*);
 void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, vec2 delta, vec2 rel, vec2 rel_unaccel);
 
 void seat_request_set_cursor(  wl_listener*, void*);
-void seat_pointer_focus_change(wl_listener*, void*);
 
 void cursor_motion(         wl_listener*, void*);
 void cursor_motion_absolute(wl_listener*, void*);
@@ -662,6 +639,5 @@ void popup_new(    wl_listener*, void*);
 std::string surface_to_string(           Surface*                  );
 std::string pointer_constraint_to_string(wlr_pointer_constraint_v1*);
 std::string client_to_string(            Client*                   );
-std::string cursor_surface_to_string(    CursorSurface*            );
 std::string pointer_to_string(           Pointer*                  );
 std::string output_to_string(            Output*                   );
