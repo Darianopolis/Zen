@@ -222,7 +222,7 @@ struct Server
     xkb_keysym_t main_modifier_keysym_right;
 
     Weak<DragIcon> drag_icon;
-    Weak<CursorSurface> cursor_surface;
+    // Weak<CursorSurface> cursor_surface;
 
     struct {
         Weak<Toplevel> toplevel;

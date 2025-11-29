@@ -181,8 +181,10 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->cursor->events.frame,           server, cursor_frame);
 
     server->pointer.debug_visual_half_extent = 4;
+    server->pointer.debug_visual_color = fvec4{1.f, 0.f, 1.f, 1.f};
 
     update_cursor_state(server);
+    wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
 
     // Scripting
 
