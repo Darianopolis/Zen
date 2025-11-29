@@ -87,15 +87,11 @@ wlr_box output_get_bounds(Output* output)
 void output_frame(wl_listener* listener, void*)
 {
     Output* output = listener_userdata<Output*>(listener);
-    wlr_scene* scene = output->server->scene;
-
-    wlr_scene_output* scene_output = wlr_scene_get_scene_output(scene, output->wlr_output);
-
-    wlr_scene_output_commit(scene_output, nullptr);
 
     timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
-    wlr_scene_output_send_frame_done(scene_output, &now);
+
+    scene_output_frame(output, now);
 }
 
 void output_request_state(wl_listener* listener, void* data)
@@ -113,10 +109,6 @@ void output_destroy(wl_listener* listener, void*)
     Output* output = listener_userdata<Output*>(listener);
 
     log_info("Output [{}] destroyed", output->wlr_output->name);
-
-    wlr_scene_node_destroy(&output->background_base->node);
-
-    wlr_scene_node_destroy(&output->background_color->node);
 
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         for (LayerSurface* layer_surface : output->layers[layer]) {
@@ -171,11 +163,6 @@ void output_new(wl_listener* listener, void* data)
     output->listeners.listen(&wlr_output->events.request_state, output, output_request_state);
     output->listeners.listen(&wlr_output->events.destroy,       output, output_destroy);
 
-    output->background_base = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height,
-        color_to_wlroots({1, 0, 1, 1}));
-
-    output->background_color = wlr_scene_rect_create(server->layers[Strata::background], wlr_output->width, wlr_output->height, color_to_wlroots(server->config.layout.background_color));
-
     wlr_output_layout_add_auto(server->output_layout, output->wlr_output);
 
     server->script.on_output_add_or_remove(output, true);
@@ -186,16 +173,6 @@ void output_layout_change(wl_listener* listener, void*)
     Server* server = listener_userdata<Server*>(listener);
 
     for (Output* output : server->outputs) {
-        if (auto* layout_output = output->layout_output()) {
-            if (!output->scene_output()) {
-                log_warn("Adding output [{}] to scene", output->wlr_output->name);
-                auto scene_output = wlr_scene_output_create(server->scene, output->wlr_output);
-                wlr_scene_output_layout_add_output(server->scene_output_layout, layout_output, scene_output);
-            }
-        } else if (wlr_scene_output* scene_output = output->scene_output()) {
-            log_warn("Removing output [{}] from scene", output->wlr_output->name);
-            wlr_scene_output_destroy(scene_output);
-        }
         output_reconfigure(output);
     }
 
@@ -209,12 +186,6 @@ void output_reconfigure(Output* output)
     if (!output) return;
 
     output->workarea = output_get_bounds(output);
-
-    wlr_scene_node_set_position(&output->background_base->node, output->workarea.x, output->workarea.y);
-    wlr_scene_rect_set_size(output->background_base, output->workarea.width, output->workarea.height);
-
-    wlr_scene_node_set_position(&output->background_color->node, output->workarea.x, output->workarea.y);
-    wlr_scene_rect_set_size(output->background_color, output->workarea.width, output->workarea.height);
 
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         output_reconfigure_layer(output, layer);

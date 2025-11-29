@@ -105,27 +105,6 @@ struct CommandBind
     std::function<void()> function;
 };
 
-enum class Strata : uint32_t
-{
-    background,
-    floating,
-    bottom,
-    focused,
-    top,
-    overlay,
-    debug,
-};
-
-constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
-{
-    switch (layer) {
-        case ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND: return Strata::background;
-        case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:     return Strata::bottom;
-        case ZWLR_LAYER_SHELL_V1_LAYER_TOP:        return Strata::top;
-        case ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY:    return Strata::overlay;
-    }
-}
-
 enum class InteractionMode : uint32_t
 {
     passthrough,
@@ -135,13 +114,22 @@ enum class InteractionMode : uint32_t
     focus_cycle,
 };
 
+struct Surface;
+struct DragIcon;
 struct Toplevel;
+struct Popup;
 struct LayerSurface;
 struct CursorSurface;
 struct Output;
 struct Keyboard;
 struct Pointer;
 struct Client;
+
+struct ColorRect
+{
+    wlr_box box;
+    fvec4 color;
+};
 
 struct Server
 {
@@ -167,6 +155,10 @@ struct Server
     std::vector<Client*> clients;
 
     std::vector<Toplevel*> toplevels;
+    std::vector<LayerSurface*> layer_surfaces;
+
+    Weak<Toplevel> toplevel_under_cursor;
+    Weak<Surface> surface_under_cursor;
 
     struct {
         std::filesystem::path home_dir;
@@ -174,10 +166,7 @@ struct Server
         wlr_backend* window_backend;
     } session;
 
-    wlr_scene* scene;
-    EnumMap<wlr_scene_tree*, Strata> layers;
     wlr_output_layout* output_layout;
-    wlr_scene_output_layout* scene_output_layout;
     std::vector<Output*> outputs;
     wlr_output_manager_v1* output_manager;
 
@@ -209,8 +198,8 @@ struct Server
         wlr_pointer_constraint_v1* active_constraint;
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
         bool            debug_visual_enabled = false;
-        wlr_scene_rect* debug_visual;
         uint32_t        debug_visual_half_extent;
+        fvec4           debug_visual_color;
         bool            cursor_is_visible;
         bool            debug_accel_rate = false;
     } pointer;
@@ -218,7 +207,6 @@ struct Server
     InteractionMode interaction_mode;
 
     struct {
-        // TODO: This needs to be cleaned up on Toplevel destroy to avoid dangling
         Weak<Toplevel> grabbed_toplevel;
         vec2 grab;
         wlr_box grab_bounds;
@@ -233,12 +221,13 @@ struct Server
     xkb_keysym_t main_modifier_keysym_left;
     xkb_keysym_t main_modifier_keysym_right;
 
-    wlr_scene_tree* drag_icon_parent;
+    Weak<DragIcon> drag_icon;
+    Weak<CursorSurface> cursor_surface;
 
     struct {
         Weak<Toplevel> toplevel;
         wlr_box selection;
-        wlr_scene_rect* selector;
+        ColorRect selector;
         wlr_box initial_zone = {};
         wlr_box final_zone   = {};
         bool selecting = false;
@@ -320,10 +309,6 @@ struct Output
     Server* server;
     struct wlr_output* wlr_output;
     wlr_output_layout_output* layout_output() const;
-    wlr_scene_output*         scene_output()  const { return wlr_scene_get_scene_output(server->scene, wlr_output); }
-
-    wlr_scene_rect* background_base;
-    wlr_scene_rect* background_color;
 
     wlr_box workarea;
 
@@ -339,6 +324,7 @@ enum class SurfaceRole : uint32_t
     popup,
     layer_surface,
     subsurface,
+    drag_icon,
 };
 
 struct Surface : WeaklyReferenceable
@@ -348,17 +334,17 @@ struct Surface : WeaklyReferenceable
     ListenerSet listeners;
 
     Server* server;
-    wlr_scene_tree* scene_tree;
-    wlr_scene_tree* popup_tree;
     struct wlr_surface* wlr_surface;
 
+    ivec2 cached_position;
+
     float last_scale = 0.f;
+
+    std::vector<Popup*> popups;
 
     struct {
         bool surface_set;
         Weak<CursorSurface> surface;
-        int32_t hotspot_x;
-        int32_t hotspot_y;
     } cursor;
 
     static Surface* from_data(void* data)
@@ -367,7 +353,6 @@ struct Surface : WeaklyReferenceable
         return (surface && surface->role != SurfaceRole::invalid) ? surface : nullptr;
     }
     static Surface* from(struct wlr_surface* surface) { return surface ? Surface::from_data(surface->data) : nullptr; }
-    static Surface* from(    wlr_scene_node* node)    { return node    ? Surface::from_data(node->data)    : nullptr; }
 };
 
 struct Subsurface : Surface
@@ -377,7 +362,6 @@ struct Subsurface : Surface
         return (surface && surface->role == SurfaceRole::subsurface) ? static_cast<Subsurface*>(surface) : nullptr;
     }
     static Subsurface* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static Subsurface* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
 
     wlr_subsurface* subsurface() const { return wlr_subsurface_try_from_wlr_surface(wlr_surface); }
     Surface* parent() const { return Surface::from(subsurface()->parent); }
@@ -390,12 +374,10 @@ struct Toplevel : Surface
         return (surface && surface->role == SurfaceRole::toplevel) ? static_cast<Toplevel*>(surface) : nullptr;
     }
     static Toplevel* from(struct wlr_surface* wlr_surface)  { return from(Surface::from(wlr_surface)); }
-    static Toplevel* from(wlr_scene_node*     node)         { return from(Surface::from(node));        }
     static Toplevel* from(wlr_xdg_toplevel*   xdg_toplevel) { return xdg_toplevel ? Toplevel::from(xdg_toplevel->base->surface) : nullptr; }
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
 
-    wlr_scene_rect* border[4];
     struct {
         wlr_xdg_toplevel_decoration_v1* xdg_decoration;
         ListenerSet listeners;
@@ -430,7 +412,6 @@ struct Popup : Surface
         return (surface && surface->role == SurfaceRole::popup) ? static_cast<Popup*>(surface) : nullptr;
     }
     static Popup* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static Popup* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
 
     wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
 };
@@ -442,17 +423,23 @@ struct LayerSurface : Surface
         return (surface && surface->role == SurfaceRole::layer_surface) ? static_cast<LayerSurface*>(surface) : nullptr;
     }
     static LayerSurface* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
-    static LayerSurface* from(wlr_scene_node*     node)        { return from(Surface::from(node));        }
 
     wlr_layer_surface_v1* wlr_layer_surface() const { return wlr_layer_surface_v1_try_from_wlr_surface(wlr_surface); }
 
-    wlr_scene_layer_surface_v1* scene_layer_surface;
+    ivec2 position;
+};
+
+struct DragIcon : Surface
+{
+
 };
 
 struct CursorSurface : Surface
 {
     // This listener inherits from Surface with an `invalid` role so that
     // Surface::from(struct wlr_surface*) calls are still always safe to make
+
+    ivec2 hotspot;
 };
 
 // ---- Server -----------------------------------------------------------------
@@ -512,7 +499,7 @@ bool      check_mods(   Server*, Modifiers);
 
 // ---- Scene ------------------------------------------------------------------
 
-void scene_reconfigure(Server* server);
+void scene_output_frame(Output* output, timespec now);
 
 // ---- Client -----------------------------------------------------------------
 
@@ -525,8 +512,6 @@ bool client_filter_globals(const wl_client*, const wl_global*, void*);
 
 void keyboard_new(Server*, wlr_input_device*);
 
-void seat_keyboard_focus_change(wl_listener*, void*);
-
 void keyboard_handle_modifiers(wl_listener*, void*);
 void keyboard_handle_key(      wl_listener*, void*);
 void keyboard_handle_destroy(  wl_listener*, void*);
@@ -534,7 +519,7 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 // ---- Pointer ----------------------------------------------------------------
 
 bool is_cursor_visible(  Server*);
-void update_cursor_state(Server*);
+void update_cursor_state(Server*, bool from_commit = false);
 
 void cursor_surface_commit( wl_listener*, void*);
 void cursor_surface_destroy(wl_listener*, void*);
@@ -575,7 +560,6 @@ void seat_start_drag(           wl_listener*, void*);
 
 // ---- Zone -------------------------------------------------------------------
 
-void zone_init(                 Server*);
 void zone_process_cursor_motion(Server*);
 bool zone_process_cursor_button(Server*, const wlr_pointer_button_event&);
 void zone_end_selection(        Server*);
@@ -626,7 +610,6 @@ void request_activate(wl_listener*, void*);
 // ---- Surface.Subsurface -----------------------------------------------------
 
 void subsurface_new(    wl_listener*, void*);
-void subsurface_commit( wl_listener*, void*);
 void subsurface_destroy(wl_listener*, void*);
 
 // ---- Surface.LayerSurface ---------------------------------------------------
@@ -641,8 +624,7 @@ void layer_surface_new(    wl_listener*, void*);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
-void toplevel_update_opacity(   Toplevel*);
-void toplevel_update_borders(   Toplevel*);
+float toplevel_get_opacity(Toplevel*);
 
 void toplevel_set_bounds(       Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);

@@ -16,13 +16,6 @@ wlr_box zone_apply_external_padding(Server* server, wlr_box box)
     return box;
 }
 
-void zone_init(Server* server)
-{
-    auto& c = server->config.layout;
-    server->zone.selector = wlr_scene_rect_create(server->layers[Strata::overlay], 0, 0, color_to_wlroots(c.zone_color_inital));
-    wlr_scene_node_set_enabled(&server->zone.selector->node, false);
-}
-
 bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& event)
 {
     bool pressed = event.state == WL_POINTER_BUTTON_STATE_PRESSED;
@@ -40,8 +33,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
                     server->zone.toplevel = weak_from(toplevel);
 
                     if (toplevel_is_interactable(toplevel)) {
-                        wlr_scene_rect_set_color(server->zone.selector, color_to_wlroots(c.zone_color_inital));
-                        wlr_scene_node_set_enabled(&server->zone.selector->node, true);
+                        server->zone.selector.color = c.zone_color_inital;
                         server->zone.selecting = false;
                         set_interaction_mode(server, InteractionMode::zone);
                         zone_process_cursor_motion(server);
@@ -58,7 +50,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
                     surface_try_focus(server, toplevel);
                 }
             }
-            wlr_scene_node_set_enabled(&server->zone.selector->node, false);
+            server->zone.selector.box.width = 0;
             set_interaction_mode(server, InteractionMode::passthrough);
             return true;
         }
@@ -66,9 +58,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     else if (event.button == BTN_RIGHT && server->interaction_mode == InteractionMode::zone) {
         if (pressed) {
             server->zone.selecting = !server->zone.selecting;
-            wlr_scene_rect_set_color(server->zone.selector, server->zone.selecting
-                                                                ? color_to_wlroots(c.zone_color_select)
-                                                                : color_to_wlroots(c.zone_color_inital));
+            server->zone.selector.color = server->zone.selecting ? c.zone_color_select : c.zone_color_inital;
         }
         return true;
     }
@@ -130,16 +120,13 @@ void zone_process_cursor_motion(Server* server)
             server->zone.final_zone = server->zone.initial_zone = pointer_zone;
         }
 
-        wlr_box b = server->zone.final_zone;
-
-        wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
-        wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);
+        server->zone.selector.box = server->zone.final_zone;
     }
 }
 
 void zone_end_selection(Server* server)
 {
     if (server->interaction_mode != InteractionMode::zone) return;
-    wlr_scene_node_set_enabled(&server->zone.selector->node, false);
+    server->zone.selector.box.width = 0;
     server->interaction_mode = InteractionMode::passthrough;
 }

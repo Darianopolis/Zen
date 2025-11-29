@@ -162,7 +162,6 @@ void script_env_set_globals(Server* server)
         focus_cycle.add_property("opacity", [server](float opacity) {
             server->config.layout.focus_cycle_unselected_opacity = opacity;
             log_info("Setting focus_cycle.opacity = {}", opacity);
-            scene_reconfigure(server);
         }, [server] { return server->config.layout.focus_cycle_unselected_opacity; });
     }
 
@@ -175,9 +174,6 @@ void script_env_set_globals(Server* server)
             background.add_property("color", [server](sol::object color) {
                 server->config.layout.background_color = script_object_to_color(color);
                 log_info("Setting background.color = {}", glm::to_string(server->config.layout.background_color));
-                for (auto* output : server->outputs) {
-                    wlr_scene_rect_set_color(output->background_color, color_to_wlroots(server->config.layout.background_color));
-                }
             }, [] { return sol::nil; /* TODO */ });
         }
 
@@ -187,7 +183,6 @@ void script_env_set_globals(Server* server)
             border.add_property("width", [server](int width) {
                 log_info("Setting border width: {}", width);
                 server->config.layout.border_width = width;
-                scene_reconfigure(server);
             }, [server] { return server->config.layout.border_width; });
 
             {
@@ -358,15 +353,6 @@ void script_env_set_globals(Server* server)
                 log_info("Debug pointer acceleration: {}", state ? "enabled" : "disabled");
             }, [server] { return server->pointer.debug_accel_rate; });
         }
-
-        // Damage
-
-        debug.add_property("damage", [server](bool state) {
-            server->scene->WLR_PRIVATE.debug_damage_option = state ? WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT : WLR_SCENE_DEBUG_DAMAGE_NONE;
-            log_info("Debug damage visual: {}", state ? "enabled" : "disabled");
-        }, [server] {
-            return server->scene->WLR_PRIVATE.debug_damage_option == WLR_SCENE_DEBUG_DAMAGE_HIGHLIGHT;
-        });
 
         // Outputs
 

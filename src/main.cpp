@@ -12,7 +12,7 @@ struct startup_options
     bool ctrl_mod;
 };
 
-#define USE_SYNCOBJ 1
+#define USE_SYNCOBJ 0
 #define USE_VULKAN  1
 
 void server_request_quit(Server* server, bool force)
@@ -97,7 +97,7 @@ void init(Server* server, const startup_options& options)
     wlr_data_control_manager_v1_create(server->display);
     wlr_viewporter_create(server->display);
     wlr_single_pixel_buffer_manager_v1_create(server->display);
-    wlr_fractional_scale_manager_v1_create(server->display, 1);
+    // wlr_fractional_scale_manager_v1_create(server->display, 1);
     wlr_presentation_create(server->display, server->backend, 2);
     wlr_alpha_modifier_v1_create(server->display);
 
@@ -105,7 +105,7 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->output_manager->events.apply, server, output_manager_apply);
     server->listeners.listen(&server->output_manager->events.test,  server, output_manager_test);
 
-    wlr_tearing_control_manager_v1_create(server->display, 1);
+    // wlr_tearing_control_manager_v1_create(server->display, 1);
 #if USE_SYNCOBJ
     wlr_linux_drm_syncobj_manager_v1_create(server->display, 1, wlr_backend_get_drm_fd(server->backend));
 #endif
@@ -130,16 +130,6 @@ void init(Server* server, const startup_options& options)
 
     wlr_xdg_output_manager_v1_create(server->display, server->output_layout);
 
-    // Scene
-
-    server->scene = wlr_scene_create();
-    for (Strata strata : server->layers.enum_values) {
-        server->layers[strata] = wlr_scene_tree_create(&server->scene->tree);
-    }
-
-    server->scene_output_layout = wlr_scene_attach_output_layout(server->scene, server->output_layout);
-    server->drag_icon_parent = wlr_scene_tree_create(server->layers[Strata::overlay]);
-
     // XDG Shell
 
     server->xdg_shell = wlr_xdg_shell_create(server->display, 3);
@@ -163,7 +153,6 @@ void init(Server* server, const startup_options& options)
 
     server->seat = wlr_seat_create(server->display, "seat0");
     server->listeners.listen(&               server->seat->events.request_set_cursor,    server, seat_request_set_cursor);
-    server->listeners.listen(&server->seat->keyboard_state.events.focus_change,          server, seat_keyboard_focus_change);
     server->listeners.listen(& server->seat->pointer_state.events.focus_change,          server, seat_pointer_focus_change);
     server->listeners.listen(&               server->seat->events.request_set_selection, server, seat_request_set_selection);
     server->listeners.listen(&               server->seat->events.request_start_drag,    server, seat_request_start_drag);
@@ -192,14 +181,8 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->cursor->events.frame,           server, cursor_frame);
 
     server->pointer.debug_visual_half_extent = 4;
-    server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, color_to_wlroots(fvec4{}));
-    wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
     update_cursor_state(server);
-
-    // Zone window management
-
-    zone_init(server);
 
     // Scripting
 
@@ -259,7 +242,6 @@ void cleanup(Server* server)
     wlr_renderer_destroy(server->renderer);
     wlr_backend_destroy(server->backend);
     wl_display_destroy(server->display);
-    wlr_scene_node_destroy(&server->scene->tree.node);
 
     log_info("Clean shutdown complete");
 }

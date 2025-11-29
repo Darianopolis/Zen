@@ -1,7 +1,7 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-#define NOISY_POINTERS 0
+#define NOISY_POINTERS 1
 
 static
 void update_seat_caps(Server* server)
@@ -99,14 +99,6 @@ void keyboard_handle_destroy(wl_listener* listener, void*)
     delete keyboard;
 
     // TODO: We need to unset wl_seat capabilities if this was the only keyboard
-}
-
-void seat_keyboard_focus_change(wl_listener*, void* data)
-{
-    wlr_seat_keyboard_focus_change_event* event = static_cast<wlr_seat_keyboard_focus_change_event*>(data);
-
-    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) toplevel_update_borders(toplevel);
-    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_borders(toplevel);
 }
 
 void keyboard_new(Server* server, wlr_input_device* device)
@@ -226,13 +218,18 @@ bool is_cursor_visible(Server* server)
 
 bool cursor_surface_is_visible(CursorSurface* cursor_surface)
 {
+    if (!cursor_surface->wlr_surface->mapped) return false;
     return cursor_surface->wlr_surface->current.width && cursor_surface->wlr_surface->current.height;
 }
 
 void cursor_surface_commit(wl_listener* listener, void*)
 {
-    CursorSurface* cursor_listener = listener_userdata<CursorSurface*>(listener);
-    update_cursor_state(cursor_listener->server);
+    CursorSurface* cursor_surface = listener_userdata<CursorSurface*>(listener);
+    update_cursor_state(cursor_surface->server, true);
+
+#if NOISY_POINTERS
+    log_info("Cursor committed: {}", cursor_surface_to_string(cursor_surface));
+#endif
 }
 
 void cursor_surface_destroy(wl_listener* listener, void*)
@@ -250,54 +247,52 @@ void cursor_surface_destroy(wl_listener* listener, void*)
     update_cursor_state(server);
 }
 
-static
-void update_cursor_debug_visual_position(Server* server)
+void update_cursor_state(Server* server, bool from_commit)
 {
-    if (!server->pointer.debug_visual_enabled) return;
-
-    int32_t he = server->pointer.debug_visual_half_extent;
-    wlr_scene_node_set_position(&server->pointer.debug_visual->node,
-        get_cursor_pos(server).x + (server->session.is_nested ? 0 : -he*2),
-        get_cursor_pos(server).y - he*2);
-}
-
-void update_cursor_state(Server* server)
-{
-    fvec4 debug_visual_color;
-
+    server->cursor_surface.reset();
     server->pointer.cursor_is_visible = true;
     if (server->interaction_mode == InteractionMode::passthrough) {
         if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
             CursorSurface* cursor_surface = focused_surface->cursor.surface.get();
             bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
             if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
-                // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
+                log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
+                if (cursor_surface) {
+                    log_debug("  hotspot = ({}, {})", cursor_surface->hotspot.x, cursor_surface->hotspot.y);
+                    log_debug("  offset =  ({}, {})", cursor_surface->wlr_surface->current.dx, cursor_surface->wlr_surface->current.dy);
+                    log_debug("  surface size = ({}, {})", cursor_surface->wlr_surface->current.width, cursor_surface->wlr_surface->current.height);
+                    log_debug("  buffer size = ({}, {})", cursor_surface->wlr_surface->current.buffer_width, cursor_surface->wlr_surface->current.buffer_height);
+                    wlr_fbox box;
+                    wlr_surface_get_buffer_source_box(cursor_surface->wlr_surface, &box);
+                    log_debug("  source box = ({}, {}), ({} {})", box.x, box.y, box.width, box.height);
+                }
                 server->pointer.cursor_is_visible = visible;
 
-                wlr_cursor_set_surface(server->cursor, cursor_surface ? cursor_surface->wlr_surface : nullptr, focused_surface->cursor.hotspot_x, focused_surface->cursor.hotspot_y);
-                debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
+                server->cursor_surface = weak_from(cursor_surface);
+                if (cursor_surface) {
+                    wlr_cursor_set_surface(server->cursor,
+                        cursor_surface->wlr_surface,
+                        cursor_surface->hotspot.x,
+                        cursor_surface->hotspot.y);
+                } else {
+                    wlr_cursor_unset_image(server->cursor);
+                }
+                server->pointer.debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
             } else {
                 // log_debug("Cursor state: Client not allowed to hide cursor, using default");
                 wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-                debug_visual_color = {1, 1, 0, 0.5};
+                server->pointer.debug_visual_color = {1, 1, 0, 0.5};
             }
         } else {
             // log_debug("Cursor state: No surface focus or surface cursor unset, using default");
             wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-            debug_visual_color = {1, 0, 1, 0.5};
+
+            server->pointer.debug_visual_color = {1, 0, 1, 0.5};
         }
     }  else {
         // log_debug("Cursor state: Interaction mode is not passthrough, using default");
         wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
-        debug_visual_color = {0, 1, 1, 0.5};
-    }
-
-    // Update debug visual
-
-    wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, server->pointer.debug_visual_enabled);
-    if (server->pointer.debug_visual_enabled) {
-        wlr_scene_rect_set_color(server->pointer.debug_visual, color_to_wlroots(debug_visual_color));
-        update_cursor_debug_visual_position(server);
+        server->pointer.debug_visual_color = {0, 1, 1, 0.5};
     }
 }
 
@@ -310,10 +305,15 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
 
     if (server->seat->pointer_state.focused_client != event->seat_client || !requestee_surface) {
 #if NOISY_POINTERS
-        log_warn("Cursor request from unfocused client {}, ignoring...", client_to_string(event->seat_client->client));
+        log_warn("Cursor request from unfocused client {}, ignoring...", client_to_string(Client::from(server, event->seat_client->client)));
 #endif
         return;
     }
+
+#if NOISY_POINTERS
+    log_debug("Cursor requested from client {}", client_to_string(Client::from(server, event->seat_client->client)));
+    log_debug("    hotspot = ({}, {})", event->hotspot_x, event->hotspot_y);
+#endif
 
     CursorSurface* cursor_surface = nullptr;
     if (event->surface) {
@@ -336,9 +336,11 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
         }
     }
 
+    if (cursor_surface) {
+        cursor_surface->hotspot = {event->hotspot_x, event->hotspot_y};
+    }
+
     requestee_surface->cursor.surface = weak_from(cursor_surface);
-    requestee_surface->cursor.hotspot_x = event->hotspot_x;
-    requestee_surface->cursor.hotspot_y = event->hotspot_y;
     requestee_surface->cursor.surface_set = true;
 
     update_cursor_state(server);
@@ -378,13 +380,13 @@ void seat_request_start_drag(wl_listener* listener, void* data)
 static
 void seat_drag_icon_destroy(wl_listener* listener, void*)
 {
-    Server* server = listener_userdata<Server*>(listener);
+    DragIcon* drag_icon = listener_userdata<DragIcon*>(listener);
 
     // TODO: Refocus last focused toplevel
 
-    process_cursor_motion(server, 0, nullptr, {}, {}, {});
+    process_cursor_motion(drag_icon->server, 0, nullptr, {}, {}, {});
 
-    unlisten(listener_from(listener));
+    delete drag_icon;
 }
 
 void seat_start_drag(wl_listener* listener, void* data)
@@ -393,14 +395,15 @@ void seat_start_drag(wl_listener* listener, void* data)
     wlr_drag* drag = static_cast<wlr_drag*>(data);
     if (!drag->icon) return;
 
-    drag->icon->data = &wlr_scene_drag_icon_create(server->drag_icon_parent, drag->icon)->node;
-    listen(&drag->icon->events.destroy, server, seat_drag_icon_destroy);
-}
+    DragIcon* drag_icon = new DragIcon {};
+    drag_icon->role = SurfaceRole::drag_icon;
+    drag_icon->server = server;
+    drag_icon->wlr_surface = drag->icon->surface;
+    drag_icon->wlr_surface->data = drag_icon;
 
-static
-void seat_drag_update_position(Server* server)
-{
-    wlr_scene_node_set_position(&server->drag_icon_parent->node, get_cursor_pos(server).x, get_cursor_pos(server).y);
+    drag_icon->listeners.listen(&drag->icon->events.destroy, drag_icon, seat_drag_icon_destroy);
+
+    server->drag_icon = weak_from(drag_icon);
 }
 
 // -----------------------------------------------------------------------------
@@ -441,7 +444,7 @@ void pointer_constraint_new(wl_listener* listener, void* data)
     wlr_pointer_constraint_v1* constraint = static_cast<wlr_pointer_constraint_v1*>(data);
 
 #if NOISY_POINTERS
-    log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), toplevel_to_string(Toplevel::from(constraint->surface)));
+    log_info("Pointer constraint created: {} for {}", pointer_constraint_to_string(constraint), surface_to_string(Toplevel::from(constraint->surface)));
 #endif
 
     PointerConstraint* pointer_constraint = new PointerConstraint{};
@@ -528,10 +531,6 @@ void process_cursor_resize(Server* server)
 
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, vec2 delta, vec2 rel, vec2 rel_unaccel)
 {
-    defer {
-        update_cursor_debug_visual_position(server);
-    };
-
     // Handle compositor interactions
 
     if (time_msecs) {
@@ -637,7 +636,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 
                 if (!was_inside) {
 #if NOISY_POINTERS
-                    log_warn("Warping from ({}, {}) to ({}, {})", sx, sy, constrained.x, constrained.y);
+                    log_warn("Warping from ({}, {}) to ({}, {})", surface_pos.x, surface_pos.y, constrained.x, constrained.y);
 #endif
 
                     wlr_seat_pointer_clear_focus(server->seat);
@@ -670,10 +669,6 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
     } else {
         wlr_seat_pointer_notify_clear_focus(seat);
     }
-
-    // Update drag
-
-    seat_drag_update_position(server);
 }
 
 static

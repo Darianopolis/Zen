@@ -60,6 +60,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-unknown-pragmas
     -Wno-gnu-conditional-omitted-operand
     -Wno-zero-length-array
+    -Wno-unused-parameter
     -Wimplicit-fallthrough
     -Wshadow
     )
@@ -82,6 +83,7 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/script.cpp
     src/bind.cpp
     src/watchdog.cpp
+    src/scene.cpp
     )
 if(USE_ASAN)
     target_link_libraries(${PROJECT_NAME} PUBLIC asan)

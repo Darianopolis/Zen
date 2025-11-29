@@ -79,9 +79,14 @@ constexpr vec2 round_to_zero(vec2 v)         { return copysign(glm::floor(glm::a
 
 // -----------------------------------------------------------------------------
 
-constexpr const float* color_to_wlroots(fvec4 v, fvec4&& temp = {})
+constexpr wlr_render_color color_to_premult_wlr(fvec4 v)
 {
-    return glm::value_ptr(temp = {glm::fvec3{v} * v.w, v.w});
+    return {
+        .r = v.r * v.a,
+        .g = v.g * v.a,
+        .b = v.b * v.a,
+        .a = v.a,
+    };
 }
 
 // -----------------------------------------------------------------------------
@@ -205,11 +210,6 @@ struct ListenerSet
         return add(::listen(signal, userdata, notify_func));
     }
 };
-
-// -----------------------------------------------------------------------------
-
-bool walk_scene_tree_back_to_front(wlr_scene_node* node, ivec2 node_pos, bool(*for_each)(void*, wlr_scene_node*, ivec2), void* for_each_data, bool filter_disabled);
-bool walk_scene_tree_front_to_back(wlr_scene_node* node, ivec2 node_pos, bool(*for_each)(void*, wlr_scene_node*, ivec2), void* for_each_data, bool filter_disabled);
 
 // -----------------------------------------------------------------------------
 
