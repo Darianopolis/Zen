@@ -8,11 +8,11 @@ import argparse
 import filecmp
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-U", "--update", action="store_true", help="Update")
+parser.add_argument("-U", "--update",    action="store_true", help="Update")
 parser.add_argument("-C", "--configure", action="store_true", help="Force configure")
-parser.add_argument("-B", "--build", action="store_true", help="Build")
-parser.add_argument("-R", "--release", action="store_true", help="Release")
-parser.add_argument("-I", "--install", action="store_true", help="Install")
+parser.add_argument("-B", "--build",     action="store_true", help="Build")
+parser.add_argument("-R", "--release",   action="store_true", help="Release")
+parser.add_argument("-I", "--install",   action="store_true", help="Install")
 args = parser.parse_args()
 
 # -----------------------------------------------------------------------------
@@ -25,13 +25,22 @@ def ensure_dir(path: Path | str):
     os.makedirs(path, exist_ok=True)
     return Path(path)
 
-cwd = Path(os.curdir).absolute()
-build_dir  = ensure_dir(".build")
-vendor_dir = ensure_dir(build_dir / "3rdparty")
+user_dir    = Path(os.path.expanduser("~"))
+current_dir = Path(os.curdir).absolute()
+build_dir   = ensure_dir(".build")
+vendor_dir  = ensure_dir(build_dir / "3rdparty")
 
 # -----------------------------------------------------------------------------
 
-def run(cmd, cwd=None, allow_error=False):
+def check_process(returncode: int):
+    ok = returncode == 0
+
+    if not ok:
+        raise RuntimeError(f"cmd failed with code: {returncode}")
+
+    return ok
+
+def run(cmd, cwd: Path = None):
     if cwd:
         print(f"{cmd} @ {cwd}")
     else:
@@ -39,12 +48,7 @@ def run(cmd, cwd=None, allow_error=False):
 
     res = subprocess.run(cmd, cwd=cwd)
 
-    ok = res.returncode == 0
-
-    if not (allow_error or ok):
-        raise RuntimeError(f"cmd failed with code: {res.returncode}")
-
-    return ok
+    return check_process(res.returncode)
 
 # -----------------------------------------------------------------------------
 
@@ -96,10 +100,10 @@ wlroots_src_dir = vendor_dir / "wlroots"
 
 def build_wlroots():
     version = "0.19"   # "0.20"
-    git_ref = "0.19.2" #"master"
+    git_ref = "0.19.2" # "master"
 
     git_fetch(wlroots_src_dir, "https://gitlab.freedesktop.org/wlroots/wlroots.git", git_ref, patches = [
-        cwd / "patches/wlroots/keyboard_enter.patch"
+        current_dir / "patches/wlroots/keyboard_enter.patch"
     ])
 
     build_dir   = vendor_dir.absolute() / "wlroots-build"
@@ -120,6 +124,7 @@ def build_wlroots():
             env = os.environ.copy()
             env["PKG_CONFIG_PATH"] = str(install_dir / "lib/pkgconfig")
             res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            check_process(res.returncode)
 
             cmakelists.write(f"target_include_directories(wlroots INTERFACE include/wlroots-{version})\n")
             cmakelists.write(f"target_link_options(       wlroots INTERFACE {res.stdout.strip()})\n")
@@ -218,8 +223,8 @@ def install_file(file: Path, target: Path):
     shutil.copy2(file, target)
 
 if args.install:
-    local_bin_dir  = ensure_dir(os.path.expanduser("~/.local/bin"))
-    xdg_portal_dir = ensure_dir(os.path.expanduser("~/.config/xdg-desktop-portal"))
+    local_bin_dir  = ensure_dir(user_dir / ".local/bin")
+    xdg_portal_dir = ensure_dir(user_dir / ".config/xdg-desktop-portal")
 
     install_file(cmake_dir / program_name, local_bin_dir / program_name)
-    install_file(cwd / "resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
+    install_file(current_dir / "resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
