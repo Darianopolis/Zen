@@ -1,27 +1,27 @@
 #include "core.hpp"
 
+using RenderEntryOptions = std::variant<wlr_render_rect_options, wlr_render_texture_options>;
+
+struct TransparentEntry
+{
+    pixman_region32 clip;
+    float opacity = 1.f;
+    RenderEntryOptions options;
+};
+
 struct SceneFrame
 {
     Output* output;
+    bool contains_cursor;
     wlr_render_pass* renderpass;
+    pixman_region32 clip_region;
     std::vector<Surface*> renderered;
+
+    pixman_region32 scratch_clipped_opaque;
+    pixman_region32 scratch_clipped_opaque_transparent;
+
+    std::vector<TransparentEntry> transparent_entries;
 };
-
-static
-void scene_render_color_rect(SceneFrame* frame, ColorRect rect)
-{
-    if (rect.box.width == 0 || rect.box.height == 0) return;
-
-    auto layer_output = frame->output->layout_output();
-    auto dst_box = rect.box;
-    dst_box.x -= layer_output->x;
-    dst_box.y -= layer_output->y;
-    wlr_render_pass_add_rect(frame->renderpass, ptr(wlr_render_rect_options {
-        .box = dst_box,
-        .color = color_to_premult_wlr(rect.color),
-        .blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED,
-    }));
-}
 
 static
 void scene_update_under_cursor(Surface* surface)
@@ -37,18 +37,116 @@ void scene_update_under_cursor(Surface* surface)
     bool contained = pixman_region32_contains_point(ir, sx, sy, &box);
 
     if (contained) {
-        server->surface_under_cursor = weak_from(surface);
-        if (Toplevel* toplevel = Toplevel::from(surface)) {
+        if (!server->surface_under_cursor.get()) {
+            server->surface_under_cursor = weak_from(surface);
+        }
+        if (Toplevel* toplevel = Toplevel::from(surface); toplevel && !server->toplevel_under_cursor.get()) {
             server->toplevel_under_cursor = weak_from(toplevel);
         }
     }
 }
 
 static
+void scene_compute_clip_regions(SceneFrame* frame, wlr_box box, const pixman_region32* opaque_region)
+{
+    auto* clipped_opaque = &frame->scratch_clipped_opaque;
+    auto* clipped_transparent = &frame->scratch_clipped_opaque_transparent;
+
+    pixman_region32_clear(clipped_opaque);
+    if (opaque_region) {
+        pixman_region32_intersect(clipped_opaque, &frame->clip_region, opaque_region);
+    }
+
+    pixman_region32_clear(clipped_transparent);
+    pixman_region32_union_rect(clipped_transparent, clipped_transparent, box.x, box.y, box.width, box.height);
+    if (opaque_region) {
+        pixman_region32_subtract(clipped_transparent, clipped_transparent, opaque_region);
+    }
+    pixman_region32_intersect(clipped_transparent, clipped_transparent, &frame->clip_region);
+}
+
+static
+void scene_clip_opaque_region(SceneFrame* frame, const pixman_region32* clipped_opaque)
+{
+    pixman_region32_union(&frame->clip_region, &frame->clip_region, clipped_opaque);
+    pixman_region32_subtract(&frame->clip_region, &frame->clip_region, clipped_opaque);
+}
+
+void scene_render_transparent_entry(SceneFrame* frame, const TransparentEntry& entry, wlr_render_rect_options options)
+{
+    options.clip = &entry.clip;
+    options.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED;
+    wlr_render_pass_add_rect(frame->renderpass, &options);
+}
+
+void scene_render_transparent_entry(SceneFrame* frame, const TransparentEntry& entry, wlr_render_texture_options options)
+{
+    options.clip = &entry.clip;
+    options.alpha = &entry.opacity;
+    options.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED;
+    wlr_render_pass_add_texture(frame->renderpass, &options);
+}
+
+static
+void scene_render_transparent_entries(SceneFrame* frame)
+{
+    for (auto& entry : iterate<TransparentEntry>(frame->transparent_entries, true)) {
+        std::visit([&](auto& options) {
+            scene_render_transparent_entry(frame, entry, options);
+        }, entry.options);
+    }
+}
+
+static
+void scene_render_color_rect(SceneFrame* frame, ColorRect rect)
+{
+    if (rect.box.width == 0 || rect.box.height == 0) return;
+
+    auto layer_output = frame->output->layout_output();
+    auto dst_box = rect.box;
+    dst_box.x -= layer_output->x;
+    dst_box.y -= layer_output->y;
+
+    pixman_region32 opaque_region = {};
+    if (rect.color.a == 1.f) {
+        pixman_region32_init_rect(&opaque_region, dst_box.x, dst_box.y, dst_box.width, dst_box.height);
+    } else {
+        pixman_region32_init(&opaque_region);
+    }
+    defer {
+        pixman_region32_fini(&opaque_region);
+    };
+
+    scene_compute_clip_regions(frame, dst_box, &opaque_region);
+
+    wlr_render_rect_options options {
+        .box = dst_box,
+        .color = color_to_premult_wlr(rect.color),
+        .clip = &frame->scratch_clipped_opaque,
+        .blend_mode = WLR_RENDER_BLEND_MODE_NONE,
+    };
+
+    if (!pixman_region32_empty(&frame->scratch_clipped_opaque)) {
+        wlr_render_pass_add_rect(frame->renderpass, &options);
+    }
+
+    if (!pixman_region32_empty(&frame->scratch_clipped_opaque_transparent))
+    {
+        auto& entry = frame->transparent_entries.emplace_back(TransparentEntry{
+            .options = options,
+        });
+        pixman_region32_init(&entry.clip);
+        pixman_region32_copy(&entry.clip, &frame->scratch_clipped_opaque_transparent);
+    }
+
+    scene_clip_opaque_region(frame, &opaque_region);
+}
+
+static
 void scene_render_subsurfaces(SceneFrame* frame, wl_list* subsurfaces, float opacity, ivec2 parent_pos);
 
 static
-void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, ivec2 position)
+void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, ivec2 position, bool force_opaque = false)
 {
     auto* wlr_surface = surface->wlr_surface;
     auto x = position.x;
@@ -59,7 +157,7 @@ void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, iv
 
     surface->cached_position = {x, y};
 
-    scene_update_under_cursor(surface);
+    scene_render_subsurfaces(frame, &surface->wlr_surface->current.subsurfaces_above, opacity, {x, y});
 
     // log_trace("rendering subsurface @ ({}, {})", x, y);
 
@@ -71,25 +169,74 @@ void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, iv
         wlr_box dst_box = { buffer_pos.x, buffer_pos.y, surface->wlr_surface->current.buffer_width, surface->wlr_surface->current.buffer_height };
 
         if (wlr_output_layout_intersects(surface->server->output_layout, frame->output->wlr_output, &dst_box)) {
-            wlr_render_pass_add_texture(frame->renderpass, ptr(wlr_render_texture_options {
+            dst_box.x -= layer_output->x;
+            dst_box.y -= layer_output->y;
+
+            pixman_region32 opaque_region;
+            pixman_region32_init(&opaque_region);
+            defer {
+                pixman_region32_fini(&opaque_region);
+            };
+            if (opacity == 1.f) {
+                if (force_opaque) {
+                    pixman_region32_init_rect(&opaque_region, dst_box.x, dst_box.y, dst_box.width, dst_box.height);
+                } else {
+                    pixman_region32_copy(&opaque_region, &wlr_surface->opaque_region);
+                    pixman_region32_translate(&opaque_region, dst_box.x, dst_box.y);
+                }
+            }
+
+            scene_compute_clip_regions(frame, dst_box, &opaque_region);
+
+            wlr_render_texture_options options {
                 .texture = wlr_surface->buffer->texture,
-                .dst_box = { buffer_pos.x - layer_output->x, buffer_pos.y - layer_output->y },
-                .alpha = opacity < 1.f ? &opacity : nullptr,
+                .dst_box = dst_box,
+                .clip = &frame->clip_region,
                 .filter_mode = WLR_SCALE_FILTER_NEAREST,
-                .blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED,
-            }));
+                .blend_mode = WLR_RENDER_BLEND_MODE_NONE,
+            };
+
+            {
+                auto cursor_pos = get_cursor_pos(frame->output->server);
+                pixman_box32 box;
+                if (pixman_region32_contains_point(&frame->scratch_clipped_opaque, cursor_pos.x, cursor_pos.y, &box)
+                        || pixman_region32_contains_point(&frame->scratch_clipped_opaque_transparent, cursor_pos.x, cursor_pos.y, &box)) {
+                    scene_update_under_cursor(surface);
+                }
+            }
+
+            if (!pixman_region32_empty(&frame->scratch_clipped_opaque)) {
+                wlr_render_pass_add_texture(frame->renderpass, &options);
+            }
+
+            if (!pixman_region32_empty(&frame->scratch_clipped_opaque_transparent))
+            {
+                auto& entry = frame->transparent_entries.emplace_back(TransparentEntry{
+                    .opacity = opacity,
+                    .options = options,
+                });
+                pixman_region32_init(&entry.clip);
+                pixman_region32_copy(&entry.clip, &frame->scratch_clipped_opaque_transparent);
+            }
+
+            scene_clip_opaque_region(frame, &opaque_region);
+
             wlr_surface_send_enter(surface->wlr_surface, frame->output->wlr_output);
             wlr_presentation_surface_textured_on_output(surface->wlr_surface, frame->output->wlr_output);
 
-            // TODO: We should only send frame callbacks for the "primary" monitor of a surface
-            //       That is - the output that contains the largest portion of the surface
-            frame->renderered.emplace_back(surface);
+            if (!pixman_region32_empty(&frame->scratch_clipped_opaque) || !pixman_region32_empty(&frame->scratch_clipped_opaque_transparent)) {
+                if (get_output_for_surface(surface) == frame->output) {
+                    // TODO: In the case that the surface is completely occluded on its primary output but visible elsewhere,
+                    //       we should instead send frame done events for that output.
+                    frame->renderered.emplace_back(surface);
+                }
+            }
         } else {
             wlr_surface_send_leave(surface->wlr_surface, frame->output->wlr_output);
         }
     }
 
-    scene_render_subsurfaces(frame, &surface->wlr_surface->current.subsurfaces_above, opacity, {x, y});
+    scene_render_subsurfaces(frame, &surface->wlr_surface->current.subsurfaces_below, opacity, {x, y});
 }
 
 static
@@ -128,7 +275,7 @@ static
 void scene_render_subsurfaces(SceneFrame* frame, wl_list* subsurfaces, float opacity, ivec2 parent_pos)
 {
     struct wlr_subsurface* wlr_subsurface;
-    wl_list_for_each(wlr_subsurface, subsurfaces, current.link) {
+    wl_list_for_each_reverse(wlr_subsurface, subsurfaces, current.link) {
         if (auto* subsurface = Subsurface::from(wlr_subsurface->surface)) {
             scene_render_subsurface(frame, subsurface, opacity, parent_pos);
         }
@@ -143,9 +290,9 @@ void scene_render_layer_surface(SceneFrame* frame, LayerSurface* layer_surface)
 }
 
 static
-void scene_render_layer_surfaces(SceneFrame* frame, Server* server, zwlr_layer_shell_v1_layer layer)
+void scene_render_layer_surfaces(SceneFrame* frame, zwlr_layer_shell_v1_layer layer)
 {
-    for (LayerSurface* layer_surface : server->layer_surfaces) {
+    for (LayerSurface* layer_surface : frame->output->server->layer_surfaces) {
         if (layer_surface->wlr_layer_surface()->current.layer == layer) {
             scene_render_layer_surface(frame, layer_surface);
         }
@@ -153,8 +300,10 @@ void scene_render_layer_surfaces(SceneFrame* frame, Server* server, zwlr_layer_s
 }
 
 static
-void scene_render_drag_icon(SceneFrame* frame, Server* server)
+void scene_render_drag_icon(SceneFrame* frame)
 {
+    Server* server = frame->output->server;
+
     DragIcon* drag_icon = server->drag_icon.get();
     if (!drag_icon) return;
 
@@ -193,16 +342,24 @@ void scene_render_toplevel(SceneFrame* frame, Toplevel* toplevel)
 
     auto opacity = toplevel_get_opacity(toplevel);
 
-    // Surface texture
+    bool fullscreen = toplevel_is_fullscreen(toplevel);
 
-    scene_render_surface(frame, toplevel, opacity, {x, y});
+    if (fullscreen) {
+        if (get_output_for_surface(toplevel) != frame->output) {
+            return;
+        }
+    }
+
+    // Popups
+
+    scene_render_popups(frame, toplevel, opacity, {gx, gy});
+
+    // Borders
 
     bool show_borders = true;
-    if (toplevel_is_fullscreen(toplevel)) show_borders = false;
+    if (fullscreen) show_borders = false;
 
     if (show_borders) {
-        // Borders
-
         fvec4 border_color = get_focused_surface(toplevel->server) == toplevel ? c.border_color_focused : c.border_color_unfocused;
         border_color.a *= opacity;
 
@@ -227,9 +384,21 @@ void scene_render_toplevel(SceneFrame* frame, Toplevel* toplevel)
         }
     }
 
-    // Popups
+    // Surface texture
 
-    scene_render_popups(frame, toplevel, opacity, {gx, gy});
+    bool force_opaque = fullscreen;
+    scene_render_surface(frame, toplevel, opacity, {x, y}, force_opaque);
+
+    // Fullscreen backing rectangle
+
+    if (fullscreen) {
+        auto* o = frame->output->wlr_output;
+        auto* lo = frame->output->layout_output();
+        scene_render_color_rect(frame, ColorRect {
+            .box = { lo->x, lo->y, o->width, o->height },
+            .color = {0, 0, 0, 1},
+        });
+    }
 }
 
 static
@@ -255,8 +424,12 @@ void scene_output_frame(Output* output, timespec now)
 {
     Server* server = output->server;
 
-    server->toplevel_under_cursor.reset();
-    server->surface_under_cursor.reset();
+    bool contains_cursor = wlr_output_layout_contains_point(server->output_layout, output->wlr_output, server->cursor->x, server->cursor->y);
+    if (contains_cursor) {
+        log_debug("scene output {} contains cursor", output->wlr_output->name);
+        server->toplevel_under_cursor.reset();
+        server->surface_under_cursor.reset();
+    }
 
     // log_debug("Output frame [{}]", now.tv_sec * 1000 + now.tv_nsec / 1000'000);
 
@@ -272,65 +445,30 @@ void scene_output_frame(Output* output, timespec now)
 
     SceneFrame frame {
         .output = output,
+        .contains_cursor = contains_cursor,
         .renderpass = renderpass,
     };
 
-    // Background clear
-
-    wlr_render_pass_add_rect(renderpass, ptr(wlr_render_rect_options {
-        .box = { 0, 0, output->wlr_output->width, output->wlr_output->height },
-        .color = color_to_premult_wlr(c.background_color),
-        .blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED,
-    }));
-
-    // Layer surfaces below
-
-    scene_render_layer_surfaces(&frame, server, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND);
-
-    // Toplevels
+    pixman_region32_init_rect(&frame.clip_region, 0, 0, output->wlr_output->width, output->wlr_output->height);
+    pixman_region32_init(&frame.scratch_clipped_opaque);
+    pixman_region32_init(&frame.scratch_clipped_opaque_transparent);
+    defer {
+        pixman_region32_fini(&frame.clip_region);
+        pixman_region32_fini(&frame.scratch_clipped_opaque);
+        pixman_region32_fini(&frame.scratch_clipped_opaque_transparent);
+    };
 
     // TODO: Ensure parent/child windows are layered next to each other
-
     std::vector<Toplevel*> lower_toplevels;
     Toplevel* topmost = nullptr;
     scene_list_toplevels(server, lower_toplevels, topmost);
 
-    // Lower toplevels
-
-    for (Toplevel* toplevel : lower_toplevels) {
-        scene_render_toplevel(&frame, toplevel);
-    }
-
-    // Layer surfaces between
-
-    scene_render_layer_surfaces(&frame, server, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM);
-
-    // Topmost toplevel
-
-    if (topmost) {
-        scene_render_toplevel(&frame, topmost);
-    }
-
-    // Layer surfaces above
-
-    scene_render_layer_surfaces(&frame, server, ZWLR_LAYER_SHELL_V1_LAYER_TOP);
-    scene_render_layer_surfaces(&frame, server, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY);
-
-    // Zone selection rectangle
-
-    scene_render_color_rect(&frame, server->zone.selector);
-
-    // Drag Icon
-
-    scene_render_drag_icon(&frame, server);
+    // NOTE: Items here are listed FRONT-TO-BACK, as we first render opaque regions clipped front-to-back,
+    //       then unobstructed transparent regions back-to-front
 
     // Cursor debug visual
 
     if (server->pointer.debug_visual_enabled) {
-        // if (auto* cursor_surface = server->cursor_surface.get()) {
-        //     scene_render_surface(&frame, cursor_surface, 1.f, ivec2(get_cursor_pos(server)) - cursor_surface->hotspot);
-        // }
-
         int offset = -server->pointer.debug_visual_half_extent * 2;
         int extent =  server->pointer.debug_visual_half_extent * 2;
         scene_render_color_rect(&frame, ColorRect{
@@ -339,7 +477,52 @@ void scene_output_frame(Output* output, timespec now)
         });
     }
 
-    // Submit
+    // Drag Icon
+
+    scene_render_drag_icon(&frame);
+
+    // Zone selection rectangle
+
+    scene_render_color_rect(&frame, server->zone.selector);
+
+    // Layer surfaces above
+
+    scene_render_layer_surfaces(&frame, ZWLR_LAYER_SHELL_V1_LAYER_TOP);
+    scene_render_layer_surfaces(&frame, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY);
+
+    // Topmost toplevel
+
+    if (topmost) {
+        scene_render_toplevel(&frame, topmost);
+    }
+
+    // Layer surfaces between
+
+    scene_render_layer_surfaces(&frame, ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM);
+
+    // Lower toplevels
+
+    for (Toplevel* toplevel : iterate<Toplevel*>(lower_toplevels, true)) {
+        scene_render_toplevel(&frame, toplevel);
+    }
+
+    // Layer surfaces below
+
+    scene_render_layer_surfaces(&frame, ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND);
+
+    // Background clear
+
+    auto* lo = output->layout_output();
+    scene_render_color_rect(&frame, ColorRect {
+        .box = { lo->x, lo->y, output->wlr_output->width, output->wlr_output->height },
+        .color = c.background_color,
+    });
+
+    // Render transparent entries back-to-front
+
+    scene_render_transparent_entries(&frame);
+
+    // ---- Submit ----
 
     wlr_render_pass_submit(renderpass);
     wlr_output_commit_state(output->wlr_output, &output_state);
@@ -350,8 +533,4 @@ void scene_output_frame(Output* output, timespec now)
     for (Surface* surface : frame.renderered) {
         wlr_surface_send_frame_done(surface->wlr_surface, &now);
     }
-
-    // if (auto* cursor_surface = server->cursor_surface.get()) {
-    //     wlr_surface_send_frame_done(cursor_surface->wlr_surface, &now);
-    // }
 }
