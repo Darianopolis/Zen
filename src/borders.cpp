@@ -17,8 +17,10 @@ void border_manager_create(Server* server)
 
     {
         auto& radii = server->border_manager->corner_radius_rules["firefox"];
-        radii[BorderCorners::TopLeft] = 5;
+        radii[BorderCorners::TopLeft]  = 5;
         radii[BorderCorners::TopRight] = 5;
+        radii[BorderCorners::BottomLeft]  = BorderUnset;
+        radii[BorderCorners::BottomRight] = BorderUnset;
     }
 }
 
@@ -109,8 +111,15 @@ void border_apply_rules(Toplevel* toplevel)
     auto radius_rules = m->corner_radius_rules.find(app_id);
     if (radius_rules != m->corner_radius_rules.end()) {
         toplevel->border.radius = radius_rules->second;
+        for (auto& e : toplevel->border.radius._data) {
+            if (e == BorderUnset) e = m->border_radius;
+        }
     } else {
         toplevel->border.radius = {m->border_radius, m->border_radius, m->border_radius, m->border_radius};
+    }
+
+    for (auto& e : toplevel->border.radius._data) {
+        if (e == BorderUnset) e = BorderSharp;
     }
 }
 
@@ -153,25 +162,45 @@ void borders_update(Toplevel* toplevel)
     positions[BorderEdges::Top]    = {  0, -border_width, geom.width,   border_width };
     positions[BorderEdges::Bottom] = {  0,  geom.height,  geom.width,   border_width };
 
-    {
-        // Adjust for corner radius
+    // Adjust edges for corner radii
 
-        auto tl = toplevel->border.radius[BorderCorners::TopLeft];
-        auto tr = toplevel->border.radius[BorderCorners::TopRight];
-        auto br = toplevel->border.radius[BorderCorners::BottomRight];
-        auto bl = toplevel->border.radius[BorderCorners::BottomLeft];
+    auto tl = toplevel->border.radius[BorderCorners::TopLeft];
+    auto tr = toplevel->border.radius[BorderCorners::TopRight];
+    auto bl = toplevel->border.radius[BorderCorners::BottomLeft];
+    auto br = toplevel->border.radius[BorderCorners::BottomRight];
 
+    if (tl != BorderSharp) {
         positions[BorderEdges::Left].y += tl;
-        positions[BorderEdges::Left].height -= tl + bl;
-
-        positions[BorderEdges::Right].y += tr;
-        positions[BorderEdges::Right].height -= tr + br;
-
+        positions[BorderEdges::Left].height -= tl;
         positions[BorderEdges::Top].x += tl;
-        positions[BorderEdges::Top].width -= (tl + tr);
+        positions[BorderEdges::Top].width -= tl;
+    } else {
+        positions[BorderEdges::Left].y -= border_width;
+        positions[BorderEdges::Left].height += border_width;
+    }
 
+    if (tr != BorderSharp) {
+        positions[BorderEdges::Right].y += tr;
+        positions[BorderEdges::Right].height -= tr;
+        positions[BorderEdges::Top].width -= tr;
+    } else {
+        positions[BorderEdges::Right].y -= border_width;
+        positions[BorderEdges::Right].height += border_width;
+    }
+
+    if (bl != BorderSharp) {
+        positions[BorderEdges::Left].height -= bl;
         positions[BorderEdges::Bottom].x += bl;
-        positions[BorderEdges::Bottom].width -= (bl + br);
+        positions[BorderEdges::Bottom].width -= bl;
+    } else {
+        positions[BorderEdges::Left].height += border_width;
+    }
+
+    if (br != BorderSharp) {
+        positions[BorderEdges::Right].height -= br;
+        positions[BorderEdges::Bottom].width -= br;
+    } else {
+        positions[BorderEdges::Right].height += border_width;
     }
 
     for (BorderEdges edge : toplevel->border.edges.enum_values) {
@@ -187,31 +216,22 @@ void borders_update(Toplevel* toplevel)
 
     // Corners
 
-    // Inner radii
-    auto i_tr = toplevel->border.radius[BorderCorners::TopRight];
-    auto i_br = toplevel->border.radius[BorderCorners::BottomRight];
-    auto i_bl = toplevel->border.radius[BorderCorners::BottomLeft];
-
-    // Outer radii
-    auto o_tr = i_tr + border_width;
-    auto o_br = i_br + border_width;
-    auto o_bl = i_bl + border_width;
-
     EnumMap<ivec2, BorderCorners> src;
-    src[BorderCorners::TopLeft]     = { 0,    0    };
-    src[BorderCorners::TopRight]    = { o_tr, 0    };
-    src[BorderCorners::BottomRight] = { o_br, o_br };
-    src[BorderCorners::BottomLeft]  = { 0,    o_bl };
+    src[BorderCorners::TopLeft]     = { 0,                 0                 };
+    src[BorderCorners::TopRight]    = { tr + border_width, 0                 };
+    src[BorderCorners::BottomLeft]  = { 0,                 bl + border_width };
+    src[BorderCorners::BottomRight] = { br + border_width, br + border_width };
 
     EnumMap<ivec2, BorderCorners> dst;
-    dst[BorderCorners::TopLeft]     = { -border_width,      -border_width       };
-    dst[BorderCorners::TopRight]    = {  geom.width - i_tr, -border_width       };
-    dst[BorderCorners::BottomRight] = {  geom.width - i_br,  geom.height - i_br };
-    dst[BorderCorners::BottomLeft]  = { -border_width,       geom.height - i_bl };
+    dst[BorderCorners::TopLeft]     = { -border_width,    -border_width     };
+    dst[BorderCorners::TopRight]    = {  geom.width - tr, -border_width     };
+    dst[BorderCorners::BottomLeft]  = { -border_width,     geom.height - bl };
+    dst[BorderCorners::BottomRight] = {  geom.width - br,  geom.height - br };
 
     for (BorderCorners corner : toplevel->border.corners.enum_values) {
-        if (show) {
-            auto outer_radius = toplevel->border.radius[corner] + border_width;
+        auto r = toplevel->border.radius[corner];
+        if (show && r != BorderSharp) {
+            auto outer_radius = r + border_width;
 
             auto& cbs = borders_get_corner_buffers(toplevel->server, outer_radius);
             auto& cb = focused ? cbs.focused : cbs.unfocused;

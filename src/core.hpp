@@ -103,8 +103,8 @@ struct CommandBind
 enum class BorderEdges : uint32_t
 {
     Left,
-    Top,
     Right,
+    Top,
     Bottom,
 };
 
@@ -112,8 +112,8 @@ enum class BorderCorners : uint32_t
 {
     TopLeft,
     TopRight,
-    BottomRight,
     BottomLeft,
+    BottomRight,
 };
 
 enum class Strata : uint32_t
@@ -261,10 +261,13 @@ struct Server
     } zone;
 };
 
+static constexpr int BorderSharp = -1;
+static constexpr int BorderUnset = -2;
+
 struct BorderManager
 {
     int border_width = 1;
-    int border_radius = 0;
+    int border_radius = BorderSharp;
 
     fvec4 border_color_unfocused = { 1, 0, 1, 0.3 };
     fvec4 border_color_focused   = { 1, 0, 1, 1.0 };
