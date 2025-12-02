@@ -20,6 +20,10 @@ void server_request_quit(Server* server, bool force)
     if (server->clients.empty()) {
         wl_display_terminate(server->display);
     } else {
+        for (auto* toplevel : server->toplevels) {
+            log_info("Requesting toplevel close: {}", surface_to_string(toplevel));
+            wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
+        }
         if (force) {
             log_error("Forcing shutdown with still running clients:");
             for (Client* client : server->clients) {
