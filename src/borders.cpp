@@ -6,22 +6,20 @@ void border_manager_create(Server* server)
 
     // TODO: Configurable window rules
 
-    for (auto& app_id : {
-        "io.missioncenter.MissionCenter"sv,
-        "org.gnome.Nautilus"sv,
-        "it.mijorus.gearlever"sv,
-    }) {
-        auto& radii = server->border_manager->corner_radius_rules[app_id];
-        for (auto& v : radii._data) v = 15;
-    }
+    auto& rules = server->border_manager->corner_radius_rules;
 
-    {
-        auto& radii = server->border_manager->corner_radius_rules["firefox"];
-        radii[BorderCorners::TopLeft]  = 5;
-        radii[BorderCorners::TopRight] = 5;
-        radii[BorderCorners::BottomLeft]  = BorderUnset;
-        radii[BorderCorners::BottomRight] = BorderUnset;
-    }
+    rules["io.missioncenter.MissionCenter"] = {{15, 15, 15, 15}};
+    rules["org.gnome.Nautilus"]             = {{15, 15, 15, 15}};
+    rules["it.mijorus.gearlever"]           = {{15, 15, 15, 15}};
+
+    rules["zenity"] = {{18, 18, 18, 18}};
+
+    rules["firefox"] = EnumMap<int, BorderCorners>::make({
+        {BorderCorners::TopLeft,  5},
+        {BorderCorners::TopRight, 5},
+        {BorderCorners::BottomLeft,  BorderUnset},
+        {BorderCorners::BottomRight, BorderUnset},
+    });
 }
 
 static
@@ -102,57 +100,68 @@ void border_manager_destroy(Server* server)
 }
 
 static
-void border_apply_rules(Toplevel* toplevel)
+void border_apply_rules(Surface* surface)
 {
-    std::string_view app_id = toplevel->xdg_toplevel()->app_id ?: "";
+    auto* m = surface->server->border_manager;
 
-    auto* m = toplevel->server->border_manager;
+    surface->border.show = false;
+    surface->border.radius = {m->border_radius, m->border_radius, m->border_radius, m->border_radius};
 
-    auto radius_rules = m->corner_radius_rules.find(app_id);
-    if (radius_rules != m->corner_radius_rules.end()) {
-        toplevel->border.radius = radius_rules->second;
-        for (auto& e : toplevel->border.radius._data) {
-            if (e == BorderUnset) e = m->border_radius;
+    if (Toplevel* toplevel = Toplevel::from(surface)) {
+        surface->border.show = true;
+        std::string_view app_id = toplevel->xdg_toplevel()->app_id ?: "";
+
+        auto radius_rules = m->corner_radius_rules.find(app_id);
+        if (radius_rules != m->corner_radius_rules.end()) {
+            surface->border.radius = radius_rules->second;
+            for (auto& e : surface->border.radius._data) {
+                if (e == BorderUnset) e = m->border_radius;
+            }
         }
-    } else {
-        toplevel->border.radius = {m->border_radius, m->border_radius, m->border_radius, m->border_radius};
+    } else if (LayerSurface* layer_surface = LayerSurface::from(surface)) {
+        std::string_view namespace_ = layer_surface->wlr_layer_surface()->namespace_ ?: "";
+        if (namespace_ == "waybar") {
+            surface->border.show = true;
+        }
     }
 
-    for (auto& e : toplevel->border.radius._data) {
+    for (auto& e : surface->border.radius._data) {
         if (e == BorderUnset) e = BorderSharp;
     }
 }
 
-void borders_create(Toplevel* toplevel)
+void borders_create(Surface* surface)
 {
-    auto* m = toplevel->server->border_manager;
+    auto* m = surface->server->border_manager;
 
-    for (BorderEdges edge : toplevel->border.edges.enum_values) {
-        toplevel->border.edges[edge] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color_to_wlroots(m->border_color_unfocused));
+    for (BorderEdges edge : surface->border.edges.enum_values) {
+        surface->border.edges[edge] = wlr_scene_rect_create(surface->scene_tree, 0, 0, color_to_wlroots(m->border_color_unfocused));
     }
 
-    for (BorderCorners corner : toplevel->border.corners.enum_values) {
-        toplevel->border.corners[corner] = wlr_scene_buffer_create(toplevel->scene_tree, nullptr);
+    for (BorderCorners corner : surface->border.corners.enum_values) {
+        surface->border.corners[corner] = wlr_scene_buffer_create(surface->scene_tree, nullptr);
     }
 }
 
-void borders_update(Toplevel* toplevel)
+void borders_update(Surface* surface)
 {
-    auto* m = toplevel->server->border_manager;
+    auto* m = surface->server->border_manager;
 
-    border_apply_rules(toplevel);
+    border_apply_rules(surface);
 
     // Borders
 
-    wlr_box geom = surface_get_geometry(toplevel);
+    wlr_box geom = surface_get_geometry(surface);
 
-    bool show = geom.width && geom.height;
-    show &= !toplevel_is_fullscreen(toplevel);
+    bool focused = get_focused_surface(surface->server) == surface;
 
-    bool focused = get_focused_surface(toplevel->server) == toplevel;
-
+    bool show = surface->border.show && surface->wlr_surface->mapped && geom.width && geom.height;
     fvec4 color = focused ? m->border_color_focused : m->border_color_unfocused;
-    color.a *= toplevel_get_opacity(toplevel);
+
+    if (Toplevel* toplevel = Toplevel::from(surface)) {
+        show &= !toplevel_is_fullscreen(toplevel);
+        color.a *= toplevel_get_opacity(toplevel);
+    }
 
     int border_width = m->border_width;
 
@@ -164,10 +173,10 @@ void borders_update(Toplevel* toplevel)
 
     // Adjust edges for corner radii
 
-    auto tl = toplevel->border.radius[BorderCorners::TopLeft];
-    auto tr = toplevel->border.radius[BorderCorners::TopRight];
-    auto bl = toplevel->border.radius[BorderCorners::BottomLeft];
-    auto br = toplevel->border.radius[BorderCorners::BottomRight];
+    auto tl = surface->border.radius[BorderCorners::TopLeft];
+    auto tr = surface->border.radius[BorderCorners::TopRight];
+    auto bl = surface->border.radius[BorderCorners::BottomLeft];
+    auto br = surface->border.radius[BorderCorners::BottomRight];
 
     if (tl != BorderSharp) {
         positions[BorderEdges::Left].y += tl;
@@ -203,14 +212,14 @@ void borders_update(Toplevel* toplevel)
         positions[BorderEdges::Right].height += border_width;
     }
 
-    for (BorderEdges edge : toplevel->border.edges.enum_values) {
+    for (BorderEdges edge : surface->border.edges.enum_values) {
         if (show) {
-            wlr_scene_node_set_enabled(&toplevel->border.edges[edge]->node, true);
-            wlr_scene_node_set_position(&toplevel->border.edges[edge]->node, positions[edge].x, positions[edge].y);
-            wlr_scene_rect_set_size(toplevel->border.edges[edge], positions[edge].width, positions[edge].height);
-            wlr_scene_rect_set_color(toplevel->border.edges[edge], color_to_wlroots(color));
+            wlr_scene_node_set_enabled(&surface->border.edges[edge]->node, true);
+            wlr_scene_node_set_position(&surface->border.edges[edge]->node, positions[edge].x, positions[edge].y);
+            wlr_scene_rect_set_size(surface->border.edges[edge], positions[edge].width, positions[edge].height);
+            wlr_scene_rect_set_color(surface->border.edges[edge], color_to_wlroots(color));
         } else {
-            wlr_scene_node_set_enabled(&toplevel->border.edges[edge]->node, false);
+            wlr_scene_node_set_enabled(&surface->border.edges[edge]->node, false);
         }
     }
 
@@ -228,26 +237,26 @@ void borders_update(Toplevel* toplevel)
     dst[BorderCorners::BottomLeft]  = { -border_width,     geom.height - bl };
     dst[BorderCorners::BottomRight] = {  geom.width - br,  geom.height - br };
 
-    for (BorderCorners corner : toplevel->border.corners.enum_values) {
-        auto r = toplevel->border.radius[corner];
+    for (BorderCorners corner : surface->border.corners.enum_values) {
+        auto r = surface->border.radius[corner];
         if (show && r != BorderSharp) {
             auto outer_radius = r + border_width;
 
-            auto& cbs = borders_get_corner_buffers(toplevel->server, outer_radius);
+            auto& cbs = borders_get_corner_buffers(surface->server, outer_radius);
             auto& cb = focused ? cbs.focused : cbs.unfocused;
 
-            wlr_scene_node_set_enabled(    &toplevel->border.corners[corner]->node, true);
-            wlr_scene_node_set_position(   &toplevel->border.corners[corner]->node, dst[corner].x, dst[corner].y);
-            wlr_scene_buffer_set_buffer(    toplevel->border.corners[corner], cb.buffer);
-            wlr_scene_buffer_set_dest_size( toplevel->border.corners[corner], outer_radius, outer_radius);
-            wlr_scene_buffer_set_source_box(toplevel->border.corners[corner], ptr(wlr_fbox {
+            wlr_scene_node_set_enabled(    &surface->border.corners[corner]->node, true);
+            wlr_scene_node_set_position(   &surface->border.corners[corner]->node, dst[corner].x, dst[corner].y);
+            wlr_scene_buffer_set_buffer(    surface->border.corners[corner], cb.buffer);
+            wlr_scene_buffer_set_dest_size( surface->border.corners[corner], outer_radius, outer_radius);
+            wlr_scene_buffer_set_source_box(surface->border.corners[corner], ptr(wlr_fbox {
                 .x = float(src[corner].x),
                 .y = float(src[corner].y),
                 .width = float(outer_radius),
                 .height = float(outer_radius),
             }));
         } else {
-            wlr_scene_node_set_enabled(&toplevel->border.corners[corner]->node, false);
+            wlr_scene_node_set_enabled(&surface->border.corners[corner]->node, false);
         }
     }
 }

@@ -291,6 +291,7 @@ struct BorderManager
 
 struct Border
 {
+    bool show = false;
     EnumMap<wlr_scene_rect*, BorderEdges> edges;
     EnumMap<wlr_scene_buffer*, BorderCorners> corners;
     EnumMap<int, BorderCorners> radius;
@@ -404,6 +405,8 @@ struct Surface : WeaklyReferenceable
     wlr_scene_tree* popup_tree;
     struct wlr_surface* wlr_surface;
 
+    Border border;
+
     float last_scale = 0.f;
 
     struct {
@@ -446,8 +449,6 @@ struct Toplevel : Surface
     static Toplevel* from(wlr_xdg_toplevel*   xdg_toplevel) { return xdg_toplevel ? Toplevel::from(xdg_toplevel->base->surface) : nullptr; }
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
-
-    Border border;
 
     struct {
         wlr_xdg_toplevel_decoration_v1* xdg_decoration;
@@ -575,8 +576,8 @@ void background_output_position(Output*);
 
 void border_manager_create(Server*);
 void border_manager_destroy(Server*);
-void borders_create(Toplevel*);
-void borders_update(Toplevel*);
+void borders_create(Surface*);
+void borders_update(Surface*);
 
 // ---- Scene ------------------------------------------------------------------
 
@@ -648,8 +649,6 @@ void zone_process_cursor_motion(Server*);
 bool zone_process_cursor_button(Server*, const wlr_pointer_button_event&);
 void zone_end_selection(        Server*);
 
-wlr_box zone_apply_external_padding(Server*, wlr_box);
-
 // ---- Output -----------------------------------------------------------------
 
 void output_manager_apply(wl_listener*, void*);
@@ -663,6 +662,7 @@ Output* get_output_for_surface(Surface*);
 
 wlr_box output_get_bounds( Output*);
 void    output_reconfigure(Output*);
+void    outputs_reconfigure_all(Server*);
 
 void output_frame(        wl_listener*, void*);
 void output_request_state(wl_listener*, void*);

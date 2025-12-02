@@ -224,8 +224,21 @@ void output_reconfigure(Output* output)
 
     output->workarea = output_get_bounds(output);
 
+    auto pad = output->server->config.layout.zone_external_padding;
+    output->workarea.x      += pad.left;
+    output->workarea.y      += pad.top;
+    output->workarea.width  -= pad.left + pad.right;
+    output->workarea.height -= pad.top + pad.bottom;
+
     for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
         output_reconfigure_layer(output, layer);
+    }
+}
+
+void outputs_reconfigure_all(Server* server)
+{
+    for (auto* output : server->outputs) {
+        output_reconfigure(output);
     }
 }
 

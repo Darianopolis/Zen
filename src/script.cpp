@@ -267,12 +267,14 @@ void script_env_set_globals(Server* server)
                 padding.add_property("inner", [server](uint32_t size) {
                     log_info("Setting grid.pad.inner = {}", size);
                     server->config.layout.zone_internal_padding = size;
+                    scene_reconfigure(server);
                 }, [server] { return server->config.layout.zone_internal_padding; });
 
 #define DIRECTIONAL_PADDING(Name) \
                     padding.add_property(#Name, [server](uint32_t size) { \
                         log_info("Setting grid.pad."#Name" = {}", size); \
                         server->config.layout.zone_external_padding.Name = size; \
+                        scene_reconfigure(server); \
                     }, [server] { return server->config.layout.zone_external_padding.Name; });
 
                 DIRECTIONAL_PADDING(left)

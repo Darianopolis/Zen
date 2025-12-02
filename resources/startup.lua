@@ -2,12 +2,10 @@ source("config.lua")
 
 -- Clients ---------------------------------------------------------------------
 
-spawn("swaync")
+spawn("dunst")
 spawn("blueman-applet")
 spawn("1password", "--silent")
-
 spawn("waybar")
-config.grid.pad.bottom = 4 + config.border.width
 
 -- Outputs ---------------------------------------------------------------------
 

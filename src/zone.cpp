@@ -1,21 +1,6 @@
 #include "pch.hpp"
 #include "core.hpp"
 
-wlr_box zone_apply_external_padding(Server* server, wlr_box box)
-{
-    auto pad = server->config.layout.zone_external_padding;
-
-    if (box.width > pad.left + pad.right) {
-        box.x += pad.left;
-        box.width -= pad.left + pad.right;
-    }
-    if (box.height > pad.top + pad.bottom) {
-        box.y += pad.top;
-        box.height -= pad.top + pad.bottom;
-    }
-    return box;
-}
-
 void zone_init(Server* server)
 {
     auto& c = server->config.layout;
@@ -76,13 +61,13 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     return false;
 }
 
-void get_zone_axis(int start, int total_length, int start_pad, int inner_pad, int end_pad, int num_zones, int i, int* offset, int* size)
+void get_zone_axis(int start, int total_length, int inner_pad, int num_zones, int i, int* offset, int* size)
 {
-    int usable_length = total_length - start_pad - end_pad - (inner_pad * (num_zones - 1));
+    int usable_length = total_length - (inner_pad * (num_zones - 1));
     double ideal_zone_size = double(usable_length) / num_zones;
     *offset  = std::round(ideal_zone_size *  i     );
     *size    = std::round(ideal_zone_size * (i + 1)) - *offset;
-    *offset += start + start_pad + inner_pad * i;
+    *offset += start + inner_pad * i;
 }
 
 wlr_box get_zone_box(Server* server, wlr_box workarea, int zone_x, int zone_y)
@@ -90,8 +75,8 @@ wlr_box get_zone_box(Server* server, wlr_box workarea, int zone_x, int zone_y)
     auto& c = server->config.layout;
 
     wlr_box zone;
-    get_zone_axis(workarea.x, workarea.width,  c.zone_external_padding.left, c.zone_internal_padding, c.zone_external_padding.right,  c.zone_horizontal_zones, zone_x, &zone.x, &zone.width);
-    get_zone_axis(workarea.y, workarea.height, c.zone_external_padding.top,  c.zone_internal_padding, c.zone_external_padding.bottom, c.zone_vertical_zones,   zone_y, &zone.y, &zone.height);
+    get_zone_axis(workarea.x, workarea.width,  c.zone_internal_padding, c.zone_horizontal_zones, zone_x, &zone.x, &zone.width);
+    get_zone_axis(workarea.y, workarea.height, c.zone_internal_padding, c.zone_vertical_zones,   zone_y, &zone.y, &zone.height);
     return zone;
 }
 
@@ -132,8 +117,11 @@ void zone_process_cursor_motion(Server* server)
 
         wlr_box b = server->zone.final_zone;
 
+        wlr_scene_node_set_enabled(&server->zone.selector->node, true);
         wlr_scene_rect_set_size(server->zone.selector, b.width, b.height);
         wlr_scene_node_set_position(&server->zone.selector->node, b.x, b.y);
+    } else {
+        wlr_scene_node_set_enabled(&server->zone.selector->node, false);
     }
 }
 

@@ -50,7 +50,6 @@ config.bind["Mod+h"]       = function() spawn("kalk")    end
 
 config.bind["Mod+v"] = function() spawn("pavucontrol")     end
 config.bind["Mod+b"] = function() spawn("blueman-manager") end
-config.bind["Mod+j"] = function() spawn("swaync-client", "--toggle-panel") end
 
 -- capture ---------------------------------------------------------------------
 

@@ -60,6 +60,16 @@ struct EnumMap
 {
     T _data[magic_enum::enum_count<E>()];
 
+    static
+    EnumMap make(std::initializer_list<const std::pair<E, T>> values)
+    {
+        EnumMap map;
+        for (auto[k, v] : values) {
+            map[k] = v;
+        }
+        return map;
+    }
+
     static constexpr auto enum_values = magic_enum::enum_values<E>();
 
     constexpr       T& operator[](E value)       { return _data[magic_enum::enum_index(value).value()]; }

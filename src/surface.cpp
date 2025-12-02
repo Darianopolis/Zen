@@ -199,8 +199,7 @@ void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen, Output* output
         // Constrain prev bounds to output when exiting fullscreen to avoid the case
         // where the window is still full size and the borders are now hidden.
         if (Output* prev_output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-            wlr_box output_bounds = zone_apply_external_padding(toplevel->server, prev_output->workarea);
-            toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, output_bounds);
+            toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, prev_output->workarea);
         }
         toplevel_set_bounds(toplevel, toplevel->prev_bounds);
     }
@@ -537,7 +536,7 @@ void toplevel_commit(wl_listener* listener, void*)
             // Constrain to output (respecting external padding)
             Output* output = get_nearest_output_to_box(toplevel->server, bounds);
             if (output) {
-                bounds = constrain_box(bounds, zone_apply_external_padding(toplevel->server, output->workarea));
+                bounds = constrain_box(bounds, output->workarea);
             }
 
             // Update toplevel bounds
@@ -630,12 +629,12 @@ void toplevel_request_maximize(wl_listener* listener, void*)
         if (toplevel->xdg_toplevel()->requested.maximized) {
             toplevel->prev_bounds = surface_get_bounds(toplevel);
             if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-                toplevel_set_bounds(toplevel, zone_apply_external_padding(toplevel->server, output->workarea));
+                toplevel_set_bounds(toplevel, output->workarea);
                 wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), true);
             }
         } else {
             if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-                toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, zone_apply_external_padding(toplevel->server, output->workarea));
+                toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, output->workarea);
             }
             toplevel_set_bounds(toplevel, toplevel->prev_bounds);
         }
@@ -783,6 +782,104 @@ void decoration_new(wl_listener*, void* data)
 
 // -----------------------------------------------------------------------------
 
+static
+void layer_surface_exclusive_zone(Server* server, const wlr_layer_surface_v1_state& state, wlr_box& usable_area)
+{
+    // Extend exclusive zone by internal padding
+    auto exclusive_zone = state.exclusive_zone + server->config.layout.zone_internal_padding;
+
+	switch (state.anchor) {
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+            // Anchor top
+            usable_area.y += exclusive_zone + state.margin.top;
+            usable_area.height -= exclusive_zone + state.margin.top;
+            break;
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM:
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+            // Anchor bottom
+            usable_area.height -= exclusive_zone + state.margin.bottom;
+            break;
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT:
+            // Anchor left
+            usable_area.x += exclusive_zone + state.margin.left;
+            usable_area.width -= exclusive_zone + state.margin.left;
+            break;
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+        case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
+            // Anchor right
+            usable_area.width -= exclusive_zone + state.margin.right;
+            break;
+	}
+
+    if (usable_area.width  < 0) usable_area.width  = 0;
+    if (usable_area.height < 0) usable_area.height = 0;
+}
+
+static
+void layer_surface_configure(LayerSurface* surface, wlr_box full_area, wlr_box& usable_area)
+{
+    wlr_layer_surface_v1* layer_surface = surface->wlr_layer_surface();
+    wlr_layer_surface_v1_state state = layer_surface->current;
+
+    // If the exclusive zone is set to -1, the layer surface will use the
+    // full area of the output, otherwise it is constrained to the
+    // remaining usable area.
+    wlr_box bounds;
+    if (state.exclusive_zone == -1) {
+        bounds = full_area;
+    } else {
+        bounds = usable_area;
+    }
+
+    wlr_box box = {
+        .width = int(state.desired_width),
+        .height = int(state.desired_height),
+    };
+
+    // Horizontal positioning
+
+    if (box.width == 0) {
+        box.x = bounds.x + state.margin.left;
+        box.width = bounds.width - (state.margin.left + state.margin.right);
+    } else if (state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT && state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) {
+        box.x = bounds.x + bounds.width / 2 - box.width / 2;
+    } else if (state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT) {
+        box.x = bounds.x + state.margin.left;
+    } else if (state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT) {
+        box.x = bounds.x + bounds.width - box.width - state.margin.right;
+    } else {
+        box.x = bounds.x + bounds.width / 2 - box.width / 2;
+    }
+
+    // Vertical positioning
+
+    if (box.height == 0) {
+        box.y = bounds.y + state.margin.top;
+        box.height = bounds.height - (state.margin.top + state.margin.bottom);
+    } else if (state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP && state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) {
+        box.y = bounds.y + bounds.height / 2 - box.height / 2;
+    } else if (state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP) {
+        box.y = bounds.y + state.margin.top;
+    } else if (state.anchor & ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM) {
+        box.y = bounds.y + bounds.height - box.height - state.margin.bottom;
+    } else {
+        box.y = bounds.y + bounds.height / 2 - box.height / 2;
+    }
+
+    wlr_scene_node_set_position(&surface->scene_tree->node, box.x, box.y);
+    wlr_scene_node_set_position(&surface->popup_tree->node, box.x, box.y);
+
+    wlr_layer_surface_v1_configure(layer_surface, box.width, box.height);
+
+    if (layer_surface->surface->mapped && state.exclusive_zone > 0) {
+        layer_surface_exclusive_zone(surface->server, state, usable_area);
+    }
+
+    borders_update(surface);
+}
+
 void output_reconfigure_layer(Output* output, zwlr_layer_shell_v1_layer layer)
 {
     wlr_box full_area = output_get_bounds(output);
@@ -790,8 +887,7 @@ void output_reconfigure_layer(Output* output, zwlr_layer_shell_v1_layer layer)
     for (LayerSurface* layer_surface : output->layers[layer]) {
         if (!layer_surface->wlr_layer_surface()->initialized) continue;
 
-        wlr_scene_layer_surface_v1_configure(layer_surface->scene_layer_surface, &full_area, &output->workarea);
-        wlr_scene_node_set_position(&layer_surface->popup_tree->node, layer_surface->scene_tree->node.x, layer_surface->scene_tree->node.y);
+        layer_surface_configure(layer_surface, full_area, output->workarea);
     }
 }
 
@@ -870,6 +966,8 @@ void layer_surface_new(wl_listener* listener, void* data)
     layer_surface->scene_tree->node.data = layer_surface;
 
     layer_surface->popup_tree = wlr_scene_tree_create(server->layers[Strata::top]);
+
+    borders_create(layer_surface);
 
     output->layers[wlr_layer_surface->pending.layer].emplace_back(layer_surface);
 
@@ -981,4 +1079,6 @@ void scene_reconfigure(Server* server)
     if (Toplevel* toplevel  = server->focus_cycle.current.get()) {
         raise(toplevel, server->layers[Strata::focused]);
     }
+
+    outputs_reconfigure_all(server);
 }
