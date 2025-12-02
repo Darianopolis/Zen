@@ -10,14 +10,9 @@ static constexpr uint32_t cursor_size = 24;
 
 struct LayoutConfig
 {
-    int border_width = 1;
-
     fvec4 background_color = { 0, 0, 0, 1 };
 
     float focus_cycle_unselected_opacity = 0.0;
-
-    fvec4 border_color_unfocused = { 1, 0, 1, 0.3 };
-    fvec4 border_color_focused   = { 1, 0, 1, 1.0 };
 
     uint32_t zone_horizontal_zones = 2;
     uint32_t zone_vertical_zones = 2;
@@ -105,6 +100,22 @@ struct CommandBind
     std::function<void()> function;
 };
 
+enum class BorderEdges : uint32_t
+{
+    Left,
+    Top,
+    Right,
+    Bottom,
+};
+
+enum class BorderCorners : uint32_t
+{
+    TopLeft,
+    TopRight,
+    BottomRight,
+    BottomLeft,
+};
+
 enum class Strata : uint32_t
 {
     background,
@@ -142,6 +153,7 @@ struct Output;
 struct Keyboard;
 struct Pointer;
 struct Client;
+struct BorderManager;
 
 struct Server
 {
@@ -237,6 +249,8 @@ struct Server
 
     wlr_buffer* background;
 
+    BorderManager* border_manager;
+
     struct {
         Weak<Toplevel> toplevel;
         wlr_box selection;
@@ -245,6 +259,38 @@ struct Server
         wlr_box final_zone   = {};
         bool selecting = false;
     } zone;
+};
+
+struct BorderManager
+{
+    int border_width = 1;
+    int border_radius = 0;
+
+    fvec4 border_color_unfocused = { 1, 0, 1, 0.3 };
+    fvec4 border_color_focused   = { 1, 0, 1, 1.0 };
+
+    struct CornerBuffer
+    {
+        fvec4 color;
+        int width;
+        wlr_buffer* buffer;
+    };
+
+    struct CornerBuffers
+    {
+        CornerBuffer focused;
+        CornerBuffer unfocused;
+    };
+
+    ankerl::unordered_dense::map<int, CornerBuffers> corner_cache;
+    ankerl::unordered_dense::map<std::string_view, EnumMap<int, BorderCorners>> corner_radius_rules;
+};
+
+struct Border
+{
+    EnumMap<wlr_scene_rect*, BorderEdges> edges;
+    EnumMap<wlr_scene_buffer*, BorderCorners> corners;
+    EnumMap<int, BorderCorners> radius;
 };
 
 struct MessageConnection
@@ -398,7 +444,8 @@ struct Toplevel : Surface
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
 
-    wlr_scene_rect* border[4];
+    Border border;
+
     struct {
         wlr_xdg_toplevel_decoration_v1* xdg_decoration;
         ListenerSet listeners;
@@ -513,11 +560,20 @@ bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 Modifiers get_modifiers(Server*);
 bool      check_mods(   Server*, Modifiers);
 
+// ---- Background -------------------------------------------------------------
+
 void background_set(Server*, const char* path);
 void background_destroy(Server*);
 void background_output_set(Output*);
 void background_output_destroy(Output*);
 void background_output_position(Output*);
+
+// ---- Borders ----------------------------------------------------------------
+
+void border_manager_create(Server*);
+void border_manager_destroy(Server*);
+void borders_create(Toplevel*);
+void borders_update(Toplevel*);
 
 // ---- Scene ------------------------------------------------------------------
 
@@ -651,7 +707,8 @@ void layer_surface_new(    wl_listener*, void*);
 // ---- Surface.Toplevel -------------------------------------------------------
 
 void toplevel_update_opacity(   Toplevel*);
-void toplevel_update_borders(   Toplevel*);
+
+float toplevel_get_opacity(Toplevel* toplevel);
 
 void toplevel_set_bounds(       Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);

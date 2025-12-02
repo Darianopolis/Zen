@@ -45,4 +45,6 @@
 
 #include <stb_image.h>
 
+#include <ankerl/unordered_dense.h>
+
 using namespace std::literals;

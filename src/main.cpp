@@ -204,6 +204,10 @@ void init(Server* server, const startup_options& options)
     // Scripting
 
     script_system_init(server);
+
+    // Borders
+
+    border_manager_create(server);
 }
 
 void run(Server* server, const startup_options& options)
@@ -247,6 +251,7 @@ void run(Server* server, const startup_options& options)
 
 void cleanup(Server* server)
 {
+    border_manager_destroy(server);
     background_destroy(server);
 
     wl_display_destroy_clients(server->display);

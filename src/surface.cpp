@@ -30,7 +30,6 @@ void surface_update_scale(Surface* surface)
     }
 }
 
-static
 float toplevel_get_opacity(Toplevel* toplevel)
 {
     return (toplevel->server->interaction_mode != InteractionMode::focus_cycle
@@ -47,45 +46,6 @@ void toplevel_update_opacity(Toplevel* toplevel)
         return true;
     };
     walk_scene_tree_back_to_front(&toplevel->scene_tree->node, {}, FUNC_REF(set_opacity), false);
-}
-
-void toplevel_update_borders(Toplevel* toplevel)
-{
-    // Borders
-
-    static constexpr uint32_t left = 0;
-    static constexpr uint32_t top = 1;
-    static constexpr uint32_t right = 2;
-    static constexpr uint32_t bottom = 3;
-
-    wlr_box geom = surface_get_geometry(toplevel);
-
-    bool show = geom.width && geom.height;
-    show &= !toplevel_is_fullscreen(toplevel);
-
-    auto& c = toplevel->server->config.layout;
-
-    fvec4 color = get_focused_surface(toplevel->server) == toplevel ? c.border_color_focused : c.border_color_unfocused;
-    color.a *= toplevel_get_opacity(toplevel);
-
-    int border_width = c.border_width;
-
-    wlr_box positions[4];
-    positions[left]   = { -border_width, -border_width, border_width, geom.height + border_width * 2 };
-    positions[right]  = {  geom.width,   -border_width, border_width, geom.height + border_width * 2 };
-    positions[top]    = {  0,            -border_width, geom.width,   border_width                   };
-    positions[bottom] = {  0,             geom.height,  geom.width,   border_width                   };
-
-    for (uint32_t i = 0; i < 4; ++i) {
-        if (show) {
-            wlr_scene_node_set_enabled(&toplevel->border[i]->node, true);
-            wlr_scene_node_set_position(&toplevel->border[i]->node, positions[i].x, positions[i].y);
-            wlr_scene_rect_set_size(toplevel->border[i], positions[i].width, positions[i].height);
-            wlr_scene_rect_set_color(toplevel->border[i], color_to_wlroots(color));
-        } else {
-            wlr_scene_node_set_enabled(&toplevel->border[i]->node, false);
-        }
-    }
 }
 
 wlr_box surface_get_geometry(Surface* surface)
@@ -590,7 +550,7 @@ void toplevel_commit(wl_listener* listener, void*)
 
         toplevel_resize_handle_commit(toplevel);
         toplevel_update_position_for_anchor(toplevel);
-        toplevel_update_borders(toplevel);
+        borders_update(toplevel);
         if (toplevel->server->interaction_mode == InteractionMode::focus_cycle) {
             toplevel_update_opacity(toplevel);
         }
@@ -728,9 +688,7 @@ void toplevel_new(wl_listener* listener, void* data)
 
     toplevel->listeners.listen(&xdg_toplevel->base->surface->events.new_subsurface, server, subsurface_new);
 
-    for (int i = 0; i < 4; ++i) {
-        toplevel->border[i] = wlr_scene_rect_create(toplevel->scene_tree, 0, 0, color_to_wlroots(server->config.layout.border_color_unfocused));
-    }
+    borders_create(toplevel);
 
     server->toplevels.emplace_back(toplevel);
 }
@@ -1016,7 +974,7 @@ void scene_reconfigure(Server* server)
         }
 
         raise(toplevel, get_layer_for(toplevel));
-        toplevel_update_borders(toplevel);
+        borders_update(toplevel);
         toplevel_update_opacity(toplevel);
     }
 

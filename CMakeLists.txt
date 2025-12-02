@@ -31,6 +31,10 @@ add_subdirectory(${VENDOR_DIR}/magic-enum EXCLUDE_FROM_ALL)
 
 # ------------------------------------------------------------------------------
 
+add_subdirectory(${VENDOR_DIR}/unordered-dense EXCLUDE_FROM_ALL)
+
+# ------------------------------------------------------------------------------
+
 add_library(                stb-image ${VENDOR_DIR}/stb/stb_image.h)
 set_source_files_properties(stb-image PUBLIC ${VENDOR_DIR}/stb/stb_image.h PROPERTIES LANGUAGE C)
 target_include_directories( stb-image PUBLIC ${VENDOR_DIR}/stb)
@@ -67,6 +71,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-unknown-pragmas
     -Wno-gnu-conditional-omitted-operand
     -Wno-zero-length-array
+    -Wno-unused-function
     -Wimplicit-fallthrough
     -Wshadow
     )
@@ -90,6 +95,7 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/bind.cpp
     src/watchdog.cpp
     src/background.cpp
+    src/borders.cpp
     )
 if(USE_ASAN)
     target_link_libraries(${PROJECT_NAME} PUBLIC asan)
@@ -109,4 +115,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     sol2::sol2
     luajit
     stb-image
+    unordered_dense::unordered_dense
     )

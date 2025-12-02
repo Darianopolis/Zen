@@ -191,21 +191,29 @@ void script_env_set_globals(Server* server)
 
             border.add_property("width", [server](int width) {
                 log_info("Setting border width: {}", width);
-                server->config.layout.border_width = width;
+                server->border_manager->border_width = width;
                 scene_reconfigure(server);
-            }, [server] { return server->config.layout.border_width; });
+            }, [server] { return server->border_manager->border_width; });
+
+            border.add_property("radius", [server](int radius) {
+                log_info("Setting border radius: {}", radius);
+                server->border_manager->border_radius = radius;
+                scene_reconfigure(server);
+            }, [server] { return server->border_manager->border_radius; });
 
             {
                 MetatableBuilder color(lua, border.table["color"]);
 
                 color.add_property("focused", [server](sol::object color) {
-                    server->config.layout.border_color_focused = script_object_to_color(color);
-                    log_info("Setting border.color.focused = {}", glm::to_string(server->config.layout.border_color_focused));
+                    server->border_manager->border_color_focused = script_object_to_color(color);
+                    log_info("Setting border.color.focused = {}", glm::to_string(server->border_manager->border_color_focused));
+                    scene_reconfigure(server);
                 }, [] { return sol::nil; /* TODO */ });
 
                 color.add_property("default", [server](sol::object color) {
-                    server->config.layout.border_color_unfocused = script_object_to_color(color);
-                    log_info("Setting border.color.default = {}", glm::to_string(server->config.layout.border_color_unfocused));
+                    server->border_manager->border_color_unfocused = script_object_to_color(color);
+                    log_info("Setting border.color.default = {}", glm::to_string(server->border_manager->border_color_unfocused));
+                    scene_reconfigure(server);
                 }, [] { return sol::nil; /* TODO */ });
             }
         }

@@ -81,6 +81,10 @@ git_fetch(vendor_dir / "magic-enum", "https://github.com/Neargye/magic_enum.git"
 
 # -----------------------------------------------------------------------------
 
+git_fetch(vendor_dir / "unordered-dense", "https://github.com/martinus/unordered_dense.git", "main")
+
+# -----------------------------------------------------------------------------
+
 git_fetch(vendor_dir / "stb", "https://github.com/nothings/stb.git", "master")
 
 # -----------------------------------------------------------------------------

@@ -19,7 +19,7 @@ A minimalistic, opinionated, stacking grid-based Wayland compositor built on wlr
 
 - Customization/configuration for everything
     - To keep things simple, this is an opinionated compositor built around workflows I use. It would never be practical to write something configurable enough for everyone, and no one would use it even if it was.
-- Visual effects: Animations, rounded corners, blurs
+- Visual effects: Animations, blurs
     - These add substantial complexity to the scene code, and more importantly - I don't use them.
 - Multiple layout systems
     - There are already many quality tiling (and scrolling) wayland compositors out there, and I don't want to maintain a layout system that I'm not dogfooding myself.

@@ -105,8 +105,8 @@ void seat_keyboard_focus_change(wl_listener*, void* data)
 {
     wlr_seat_keyboard_focus_change_event* event = static_cast<wlr_seat_keyboard_focus_change_event*>(data);
 
-    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) toplevel_update_borders(toplevel);
-    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) toplevel_update_borders(toplevel);
+    if (Toplevel* toplevel = Toplevel::from(event->old_surface)) borders_update(toplevel);
+    if (Toplevel* toplevel = Toplevel::from(event->new_surface)) borders_update(toplevel);
 }
 
 void keyboard_new(Server* server, wlr_input_device* device)
