@@ -332,3 +332,43 @@ struct CommandParser
 // -----------------------------------------------------------------------------
 
 std::string duration_to_string(std::chrono::duration<double, std::nano> dur);
+
+
+// -----------------------------------------------------------------------------
+
+template<typename T>
+struct Region;
+
+template<>
+struct Region<int>
+{
+    pixman_region32 region;
+
+    Region();
+    Region(wlr_box);
+    Region(const pixman_region32*);
+
+    Region(const Region&);
+    Region& operator=(const Region&);
+
+    Region(Region&&);
+    Region& operator=(Region&&);
+
+    ~Region();
+
+    void translate(ivec2 delta);
+    void clear();
+
+    bool empty() const;
+    std::span<const pixman_box32_t> rectangles() const;
+    bool contains(ivec2 point) const;
+};
+
+template<typename T>
+void region_union(Region<T>& out, const Region<T>& a, const Region<T>& b);
+
+template<typename T>
+void region_subtract(Region<T>& out, const Region<T>& a, const Region<T>& b);
+
+template<typename T>
+void region_intersect(Region<T>& out, const Region<T>& a, const Region<T>& b);

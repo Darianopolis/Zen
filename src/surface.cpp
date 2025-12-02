@@ -113,11 +113,30 @@ wlr_box surface_get_bounds(Surface* surface)
     } else if (LayerSurface* layer_surface = LayerSurface::from(surface)) {
         box.x = layer_surface->position.x;
         box.y = layer_surface->position.y;
+    } else if (Subsurface* subsurface = Subsurface::from(surface)) {
+        Surface* parent = subsurface->parent();
+        auto parent_bounds = surface_get_bounds(parent);
+        auto parent_geom = surface_get_geometry(parent);
+        auto x = subsurface->subsurface()->current.x;
+        auto y = subsurface->subsurface()->current.x;
+        box.x = parent_bounds.x - parent_geom.x + x;
+        box.y = parent_bounds.y - parent_geom.y + y;
     } else {
         log_error("Get position not implemented for surface: {}", surface_to_string(surface));
     }
 
     return box;
+}
+
+Surface* surface_get_parent(Surface* surface)
+{
+    if (Subsurface* subsurface = Subsurface::from(surface)) {
+        return subsurface->parent();
+    } else if (Popup* popup = Popup::from(surface)) {
+        return popup->parent();
+    }
+
+    return nullptr;
 }
 
 static

@@ -412,6 +412,7 @@ struct Popup : Surface
     static Popup* from(struct wlr_surface* wlr_surface) { return from(Surface::from(wlr_surface)); }
 
     wlr_xdg_popup* xdg_popup() const { return wlr_xdg_popup_try_from_wlr_surface(wlr_surface); }
+    Surface* parent() const { return Surface::from(xdg_popup()->parent); }
 };
 
 struct LayerSurface : Surface
@@ -580,6 +581,7 @@ void update_focus(     Server*);
 wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);
 wlr_box surface_get_coord_system(Surface*);
+Surface* surface_get_parent(     Surface*);
 
 bool surface_is_mapped(    Surface* surface);
 bool surface_accepts_focus(Surface* surface);

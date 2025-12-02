@@ -85,6 +85,7 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/bind.cpp
     src/watchdog.cpp
     src/scene.cpp
+    src/region.cpp
     )
 if(USE_ASAN)
     target_link_libraries(${PROJECT_NAME} PUBLIC asan)
