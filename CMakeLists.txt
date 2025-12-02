@@ -61,6 +61,7 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-gnu-conditional-omitted-operand
     -Wno-zero-length-array
     -Wno-unused-parameter
+    -Wno-unused-function
     -Wimplicit-fallthrough
     -Wshadow
     )

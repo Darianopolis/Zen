@@ -53,18 +53,21 @@ def run(cmd, cwd: Path = None):
 # -----------------------------------------------------------------------------
 
 def git_fetch(dir, repo, branch, dumb=False, patches: list[Path]=[]):
+    do_apply = False
     if not dir.exists():
         cmd  = ["git", "clone", repo, "--branch", branch]
         if not dumb:
             cmd += ["--depth", "1"]
         cmd += [dir]
         run(cmd)
+        do_apply = True
     elif args.update:
         run(["git", "reset", "--hard"], cwd = dir)
         run(["git", "checkout", branch], cwd = dir)
         run(["git", "pull", "origin", branch], cwd = dir)
+        do_apply = True
 
-    if args.update or not dir.exists():
+    if do_apply:
         for patch in patches:
             run(["git", "apply", patch], cwd = dir)
 

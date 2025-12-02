@@ -128,6 +128,10 @@ struct ColorRect
 {
     wlr_box box;
     fvec4 color;
+
+    // NOTE: Do NOT set this blindly, small/thin opaque geometry (e.g. window borders) should
+    //       be treated as transparent to avoid clip region explosions.
+    bool opaque;
 };
 
 struct Server

@@ -2,7 +2,7 @@
 
 using RenderEntryOptions = std::variant<wlr_render_rect_options, wlr_render_texture_options>;
 
-struct TransparentEntry
+struct RenderEntry
 {
     pixman_region32 clip;
     float opacity = 1.f;
@@ -20,7 +20,8 @@ struct SceneFrame
     pixman_region32 scratch_clipped_opaque;
     pixman_region32 scratch_clipped_opaque_transparent;
 
-    std::vector<TransparentEntry> transparent_entries;
+    std::vector<RenderEntry> opaque_entries;
+    std::vector<RenderEntry> transparent_entries;
 };
 
 static
@@ -72,14 +73,18 @@ void scene_clip_opaque_region(SceneFrame* frame, const pixman_region32* clipped_
     pixman_region32_subtract(&frame->clip_region, &frame->clip_region, clipped_opaque);
 }
 
-void scene_render_transparent_entry(SceneFrame* frame, const TransparentEntry& entry, wlr_render_rect_options options)
+// -----------------------------------------------------------------------------
+
+static
+void scene_render_transparent_entry(SceneFrame* frame, const RenderEntry& entry, wlr_render_rect_options options)
 {
     options.clip = &entry.clip;
     options.blend_mode = WLR_RENDER_BLEND_MODE_PREMULTIPLIED;
     wlr_render_pass_add_rect(frame->renderpass, &options);
 }
 
-void scene_render_transparent_entry(SceneFrame* frame, const TransparentEntry& entry, wlr_render_texture_options options)
+static
+void scene_render_transparent_entry(SceneFrame* frame, const RenderEntry& entry, wlr_render_texture_options options)
 {
     options.clip = &entry.clip;
     options.alpha = &entry.opacity;
@@ -90,12 +95,43 @@ void scene_render_transparent_entry(SceneFrame* frame, const TransparentEntry& e
 static
 void scene_render_transparent_entries(SceneFrame* frame)
 {
-    for (auto& entry : iterate<TransparentEntry>(frame->transparent_entries, true)) {
+    for (auto& entry : iterate<RenderEntry>(frame->transparent_entries, true)) {
         std::visit([&](auto& options) {
             scene_render_transparent_entry(frame, entry, options);
         }, entry.options);
     }
 }
+
+// -----------------------------------------------------------------------------
+
+static
+void scene_render_opaque_entry(SceneFrame* frame, const RenderEntry& entry, wlr_render_rect_options options)
+{
+    options.clip = &entry.clip;
+    options.blend_mode = WLR_RENDER_BLEND_MODE_NONE;
+    wlr_render_pass_add_rect(frame->renderpass, &options);
+}
+
+static
+void scene_render_opaque_entry(SceneFrame* frame, const RenderEntry& entry, wlr_render_texture_options options)
+{
+    options.clip = &entry.clip;
+    options.alpha = nullptr;
+    options.blend_mode = WLR_RENDER_BLEND_MODE_NONE;
+    wlr_render_pass_add_texture(frame->renderpass, &options);
+}
+
+static
+void scene_render_opaque_entries(SceneFrame* frame)
+{
+    for (auto& entry : frame->opaque_entries) {
+        std::visit([&](auto& options) {
+            scene_render_opaque_entry(frame, entry, options);
+        }, entry.options);
+    }
+}
+
+// -----------------------------------------------------------------------------
 
 static
 void scene_render_color_rect(SceneFrame* frame, ColorRect rect)
@@ -108,7 +144,7 @@ void scene_render_color_rect(SceneFrame* frame, ColorRect rect)
     dst_box.y -= layer_output->y;
 
     pixman_region32 opaque_region = {};
-    if (rect.color.a == 1.f) {
+    if (rect.color.a == 1.f && rect.opaque) {
         pixman_region32_init_rect(&opaque_region, dst_box.x, dst_box.y, dst_box.width, dst_box.height);
     } else {
         pixman_region32_init(&opaque_region);
@@ -127,12 +163,16 @@ void scene_render_color_rect(SceneFrame* frame, ColorRect rect)
     };
 
     if (!pixman_region32_empty(&frame->scratch_clipped_opaque)) {
-        wlr_render_pass_add_rect(frame->renderpass, &options);
+        auto& entry = frame->opaque_entries.emplace_back(RenderEntry{
+            .options = options,
+        });
+        pixman_region32_init(&entry.clip);
+        pixman_region32_copy(&entry.clip, &frame->scratch_clipped_opaque);
     }
 
     if (!pixman_region32_empty(&frame->scratch_clipped_opaque_transparent))
     {
-        auto& entry = frame->transparent_entries.emplace_back(TransparentEntry{
+        auto& entry = frame->transparent_entries.emplace_back(RenderEntry{
             .options = options,
         });
         pixman_region32_init(&entry.clip);
@@ -146,7 +186,7 @@ static
 void scene_render_subsurfaces(SceneFrame* frame, wl_list* subsurfaces, float opacity, ivec2 parent_pos);
 
 static
-void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, ivec2 position, bool force_opaque = false)
+void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, ivec2 position)
 {
     auto* wlr_surface = surface->wlr_surface;
     auto x = position.x;
@@ -178,12 +218,8 @@ void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, iv
                 pixman_region32_fini(&opaque_region);
             };
             if (opacity == 1.f) {
-                if (force_opaque) {
-                    pixman_region32_init_rect(&opaque_region, dst_box.x, dst_box.y, dst_box.width, dst_box.height);
-                } else {
-                    pixman_region32_copy(&opaque_region, &wlr_surface->opaque_region);
-                    pixman_region32_translate(&opaque_region, dst_box.x, dst_box.y);
-                }
+                pixman_region32_copy(&opaque_region, &wlr_surface->opaque_region);
+                pixman_region32_translate(&opaque_region, dst_box.x, dst_box.y);
             }
 
             scene_compute_clip_regions(frame, dst_box, &opaque_region);
@@ -206,12 +242,16 @@ void scene_render_surface(SceneFrame* frame, Surface* surface, float opacity, iv
             }
 
             if (!pixman_region32_empty(&frame->scratch_clipped_opaque)) {
-                wlr_render_pass_add_texture(frame->renderpass, &options);
+                auto& entry = frame->opaque_entries.emplace_back(RenderEntry{
+                    .options = options,
+                });
+                pixman_region32_init(&entry.clip);
+                pixman_region32_copy(&entry.clip, &frame->scratch_clipped_opaque);
             }
 
             if (!pixman_region32_empty(&frame->scratch_clipped_opaque_transparent))
             {
-                auto& entry = frame->transparent_entries.emplace_back(TransparentEntry{
+                auto& entry = frame->transparent_entries.emplace_back(RenderEntry{
                     .opacity = opacity,
                     .options = options,
                 });
@@ -386,8 +426,7 @@ void scene_render_toplevel(SceneFrame* frame, Toplevel* toplevel)
 
     // Surface texture
 
-    bool force_opaque = fullscreen;
-    scene_render_surface(frame, toplevel, opacity, {x, y}, force_opaque);
+    scene_render_surface(frame, toplevel, opacity, {x, y});
 
     // Fullscreen backing rectangle
 
@@ -397,6 +436,7 @@ void scene_render_toplevel(SceneFrame* frame, Toplevel* toplevel)
         scene_render_color_rect(frame, ColorRect {
             .box = { lo->x, lo->y, o->width, o->height },
             .color = {0, 0, 0, 1},
+            .opaque = true,
         });
     }
 }
@@ -420,33 +460,30 @@ void scene_list_toplevels(Server* server, std::vector<Toplevel*>& lower_toplevel
     }
 }
 
+#define NOISY_FRAMES 0
+
 void scene_output_frame(Output* output, timespec now)
 {
     Server* server = output->server;
 
+#if NOISY_FRAMES
+    auto time_start = std::chrono::steady_clock::now();
+#endif
+
     bool contains_cursor = wlr_output_layout_contains_point(server->output_layout, output->wlr_output, server->cursor->x, server->cursor->y);
     if (contains_cursor) {
-        log_debug("scene output {} contains cursor", output->wlr_output->name);
+        // log_debug("scene output {} contains cursor", output->wlr_output->name);
         server->toplevel_under_cursor.reset();
         server->surface_under_cursor.reset();
     }
 
     // log_debug("Output frame [{}]", now.tv_sec * 1000 + now.tv_nsec / 1000'000);
 
-    wlr_output_state output_state;
-    wlr_output_state_init(&output_state);
-    auto* renderpass = wlr_output_begin_render_pass(output->wlr_output, &output_state, nullptr);
-    if (!renderpass) {
-        log_error("Failed to create renderpass, skipping frame...");
-        return;
-    }
-
     auto& c = server->config.layout;
 
     SceneFrame frame {
         .output = output,
         .contains_cursor = contains_cursor,
-        .renderpass = renderpass,
     };
 
     pixman_region32_init_rect(&frame.clip_region, 0, 0, output->wlr_output->width, output->wlr_output->height);
@@ -516,13 +553,31 @@ void scene_output_frame(Output* output, timespec now)
     scene_render_color_rect(&frame, ColorRect {
         .box = { lo->x, lo->y, output->wlr_output->width, output->wlr_output->height },
         .color = c.background_color,
+        .opaque = true,
     });
 
-    // Render transparent entries back-to-front
+#if NOISY_FRAMES
+    auto time_submit = std::chrono::steady_clock::now();
+#endif
 
+    // Initialize render pass
+
+    wlr_output_state output_state;
+    wlr_output_state_init(&output_state);
+    auto* renderpass = wlr_output_begin_render_pass(output->wlr_output, &output_state, nullptr);
+    if (!renderpass) {
+        log_error("Failed to create renderpass, skipping frame...");
+        return;
+    }
+
+    frame.renderpass = renderpass;
+
+    // Render entries
+
+    scene_render_opaque_entries(&frame);
     scene_render_transparent_entries(&frame);
 
-    // ---- Submit ----
+    // Submit
 
     wlr_render_pass_submit(renderpass);
     wlr_output_commit_state(output->wlr_output, &output_state);
@@ -533,4 +588,34 @@ void scene_output_frame(Output* output, timespec now)
     for (Surface* surface : frame.renderered) {
         wlr_surface_send_frame_done(surface->wlr_surface, &now);
     }
+
+#if NOISY_FRAMES
+    auto time_end = std::chrono::steady_clock::now();
+
+    // Debug output
+
+    int opaque_clip_rects = 0;
+    for (auto& entry : frame.opaque_entries) {
+        int count;
+        pixman_region32_rectangles(&entry.clip, &count);
+        opaque_clip_rects += count;
+    }
+
+    int transparent_clip_rects = 0;
+    for (auto& entry : frame.transparent_entries) {
+        int count;
+        pixman_region32_rectangles(&entry.clip, &count);
+        transparent_clip_rects += count;
+    }
+
+    log_debug("frame (toplevels = {:3}, opaque = {:3} (clips = {:3}), transparent = {:3} (clips = {:3}), prep = {:6}, submit = {:6}, total = {:6})",
+        lower_toplevels.size() + (topmost ? 1 : 0),
+        frame.opaque_entries.size(),
+        opaque_clip_rects,
+        frame.transparent_entries.size(),
+        transparent_clip_rects,
+        duration_to_string(time_submit - time_start),
+        duration_to_string(time_end - time_submit),
+        duration_to_string(time_end - time_start));
+#endif
 }
