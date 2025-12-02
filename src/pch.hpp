@@ -31,6 +31,8 @@
 #include <sys/un.h>
 #include <fcntl.h>
 
+#include <drm/drm_fourcc.h>
+
 #include <magic_enum/magic_enum.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -40,5 +42,7 @@
 
 #define SOL_PRINT_ERRORS 0
 #include <sol/sol.hpp>
+
+#include <stb_image.h>
 
 using namespace std::literals;

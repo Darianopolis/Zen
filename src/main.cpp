@@ -247,6 +247,8 @@ void run(Server* server, const startup_options& options)
 
 void cleanup(Server* server)
 {
+    background_destroy(server);
+
     wl_display_destroy_clients(server->display);
 
     server->listeners.clear();

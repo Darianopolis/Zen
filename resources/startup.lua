@@ -2,7 +2,6 @@ source("config.lua")
 
 -- Clients ---------------------------------------------------------------------
 
-spawn("swaybg", "-m", "fill", "-i", env.WALLPAPER)
 spawn("swaync")
 spawn("blueman-applet")
 spawn("1password", "--silent")
@@ -11,6 +10,8 @@ spawn("waybar")
 config.grid.pad.bottom = 4 + config.border.width
 
 -- Outputs ---------------------------------------------------------------------
+
+config.background.image = env.WALLPAPER
 
 config.output.on_add_or_remove = function(output, added)
     spawn("wlr-randr", "--output", "DP-1", "--adaptive-sync", "disabled", "--output", "DP-2", "--left-of", "DP-1")

@@ -179,6 +179,11 @@ void script_env_set_globals(Server* server)
                     wlr_scene_rect_set_color(output->background_color, color_to_wlroots(server->config.layout.background_color));
                 }
             }, [] { return sol::nil; /* TODO */ });
+
+            background.add_property("image", [server](const char* path) {
+                log_info("Setting background.image = {}", path);
+                background_set(server, path);
+            }, [] { return sol::nil; });
         }
 
         {

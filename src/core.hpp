@@ -235,6 +235,8 @@ struct Server
 
     wlr_scene_tree* drag_icon_parent;
 
+    wlr_buffer* background;
+
     struct {
         Weak<Toplevel> toplevel;
         wlr_box selection;
@@ -324,6 +326,7 @@ struct Output
 
     wlr_scene_rect* background_base;
     wlr_scene_rect* background_color;
+    wlr_scene_buffer* background_image;
 
     wlr_box workarea;
 
@@ -509,6 +512,12 @@ bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 
 Modifiers get_modifiers(Server*);
 bool      check_mods(   Server*, Modifiers);
+
+void background_set(Server*, const char* path);
+void background_destroy(Server*);
+void background_output_set(Output*);
+void background_output_destroy(Output*);
+void background_output_position(Output*);
 
 // ---- Scene ------------------------------------------------------------------
 

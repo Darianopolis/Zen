@@ -27,6 +27,7 @@ extern "C" {
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/render/vulkan.h>
+#include <wlr/render/drm_syncobj.h>
 
 // utils
 #include <wlr/util/edges.h>
