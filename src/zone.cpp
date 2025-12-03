@@ -39,7 +39,7 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
         } else if (server->interaction_mode == InteractionMode::zone) {
             if (server->zone.selecting) {
                 if (Toplevel* toplevel = server->zone.toplevel.get()) {
-                    toplevel_set_bounds(toplevel, server->zone.final_zone);
+                    toplevel_set_bounds(toplevel, server->zone.final_zone, BoundsType::normal);
                     surface_try_focus(server, toplevel);
                 }
             }

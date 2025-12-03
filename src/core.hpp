@@ -146,6 +146,12 @@ enum class InteractionMode : uint32_t
     focus_cycle,
 };
 
+enum class BoundsType : uint32_t
+{
+    normal,
+    fullscreen,
+};
+
 struct Toplevel;
 struct LayerSurface;
 struct CursorSurface;
@@ -438,6 +444,12 @@ struct Subsurface : Surface
     Surface* parent() const { return Surface::from(subsurface()->parent); }
 };
 
+struct Bounds
+{
+    wlr_box box;
+    BoundsType type;
+};
+
 struct Toplevel : Surface
 {
     static Toplevel* from(Surface* surface)
@@ -455,7 +467,7 @@ struct Toplevel : Surface
         ListenerSet listeners;
     } decoration;
 
-    wlr_box prev_bounds;
+    Bounds prev_bounds;
 
     ivec2     anchor;
     wlr_edges anchor_edges;
@@ -466,6 +478,7 @@ struct Toplevel : Surface
         bool any_pending = false;
         int pending_width;
         int pending_height;
+        BoundsType pending_type;
 
         uint32_t last_resize_serial = 0;
         uint32_t last_commited_serial = 0;
@@ -713,7 +726,7 @@ void toplevel_update_opacity(   Toplevel*);
 
 float toplevel_get_opacity(Toplevel* toplevel);
 
-void toplevel_set_bounds(       Toplevel*, wlr_box, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
+void toplevel_set_bounds(       Toplevel*, wlr_box, BoundsType type, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);
 bool toplevel_is_fullscreen(    Toplevel*);
 void toplevel_set_fullscreen(   Toplevel*, bool fullscreen, Output* output);

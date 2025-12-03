@@ -113,19 +113,24 @@ wlr_box surface_get_bounds(Surface* surface)
 }
 
 static
-void toplevel_resize(Toplevel* toplevel, int width, int height, bool force)
+void toplevel_resize(Toplevel* toplevel, int width, int height, BoundsType type)
 {
     if (toplevel->resize.enable_throttle_resize && toplevel->resize.last_resize_serial > toplevel->resize.last_commited_serial) {
-        if (!toplevel->resize.any_pending || width != toplevel->resize.pending_width || height != toplevel->resize.pending_height) {
-            toplevel->resize.any_pending = true;
-            toplevel->resize.pending_width = width;
-            toplevel->resize.pending_height = height;
-        }
+        toplevel->resize.any_pending = true;
+        toplevel->resize.pending_width = width;
+        toplevel->resize.pending_height = height;
+        toplevel->resize.pending_type = type;
     } else {
         toplevel->resize.any_pending = false;
 
-        if (force || toplevel->xdg_toplevel()->pending.width != width || toplevel->xdg_toplevel()->pending.height != height) {
+        bool fullscreen = type == BoundsType::fullscreen;
+
+        if (toplevel->xdg_toplevel()->pending.width != width || toplevel->xdg_toplevel()->pending.height != height) {
             toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), width, height);
+        }
+
+        if (toplevel->xdg_toplevel()->pending.fullscreen != fullscreen) {
+            toplevel->resize.last_resize_serial = wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), fullscreen);
         }
     }
 }
@@ -144,7 +149,7 @@ void toplevel_resize_handle_commit(Toplevel* toplevel)
 
     if (toplevel->resize.any_pending) {
         toplevel->resize.any_pending = false;
-        toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height, false);
+        toplevel_resize(toplevel, toplevel->resize.pending_width, toplevel->resize.pending_height, toplevel->resize.pending_type);
     }
 }
 
@@ -159,12 +164,8 @@ void toplevel_update_position_for_anchor(Toplevel* toplevel)
     surface_update_scale(toplevel);
 }
 
-void toplevel_set_bounds(Toplevel* toplevel, wlr_box box, wlr_edges locked_edges)
+void toplevel_set_bounds(Toplevel* toplevel, wlr_box box, BoundsType type, wlr_edges locked_edges)
 {
-    if (toplevel->xdg_toplevel()->current.maximized) {
-        wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), false);
-    }
-
     // NOTE: Bounds are set with parent node relative positions, unlike get_bounds which returns layout relative positions
     //       Thus you must be careful when setting/getting bounds with positioned parents
     // TODO: Tidy up this API and make it clear what is relative to what.
@@ -173,8 +174,13 @@ void toplevel_set_bounds(Toplevel* toplevel, wlr_box box, wlr_edges locked_edges
     toplevel->anchor.x = (locked_edges & WLR_EDGE_RIGHT)  ? box.x + box.width  : box.x;
     toplevel->anchor.y = (locked_edges & WLR_EDGE_BOTTOM) ? box.y + box.height : box.y;
 
+    if (type == BoundsType::fullscreen && !toplevel->xdg_toplevel()->current.fullscreen) {
+        toplevel->prev_bounds.box = surface_get_bounds(toplevel);
+        toplevel->prev_bounds.type = BoundsType::normal;
+    }
+
     toplevel_update_position_for_anchor(toplevel);
-    toplevel_resize(toplevel, box.width, box.height, false);
+    toplevel_resize(toplevel, box.width, box.height, type);
 }
 
 bool toplevel_is_fullscreen(Toplevel* toplevel)
@@ -185,23 +191,18 @@ bool toplevel_is_fullscreen(Toplevel* toplevel)
 void toplevel_set_fullscreen(Toplevel* toplevel, bool fullscreen, Output* output)
 {
     if (fullscreen) {
-        wlr_box prev = surface_get_bounds(toplevel);
-        if (!output) output = get_output_for_surface(toplevel);
+        if (!output) output = get_nearest_output_to_point(toplevel->server, get_cursor_pos(toplevel->server));
         if (output) {
             wlr_box b = output_get_bounds(output);
-            wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), true);
-            toplevel_set_bounds(toplevel, b);
-            toplevel->prev_bounds = prev;
+            toplevel_set_bounds(toplevel, b, BoundsType::fullscreen);
         }
     } else {
-        wlr_xdg_toplevel_set_fullscreen(toplevel->xdg_toplevel(), false);
-
         // Constrain prev bounds to output when exiting fullscreen to avoid the case
         // where the window is still full size and the borders are now hidden.
-        if (Output* prev_output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-            toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, prev_output->workarea);
+        if (Output* prev_output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds.box)) {
+            toplevel->prev_bounds.box = constrain_box(toplevel->prev_bounds.box, prev_output->workarea);
         }
-        toplevel_set_bounds(toplevel, toplevel->prev_bounds);
+        toplevel_set_bounds(toplevel, toplevel->prev_bounds.box, toplevel->prev_bounds.type);
     }
 }
 
@@ -506,41 +507,48 @@ void toplevel_unmap(wl_listener* listener, void*)
     wlr_xdg_foreign_exported_finish(&toplevel->foreign_exported);
 }
 
+static
+void toplevel_handle_initial_commit_response(Toplevel* toplevel)
+{
+    if (toplevel->xdg_toplevel()->pending.fullscreen || toplevel->resize.pending_type == BoundsType::fullscreen) {
+        log_warn("Initial commit response receieved while toplevel has pending fullscreen change");
+        return;
+    }
+
+    wlr_box bounds = surface_get_bounds(toplevel);
+
+    if (toplevel->xdg_toplevel()->parent) {
+        // Child, position at center of parent.
+        wlr_box parent_bounds = surface_get_bounds(Surface::from(toplevel->xdg_toplevel()->parent->base->surface));
+        bounds.x = parent_bounds.x + (parent_bounds.width  - bounds.width)  / 2;
+        bounds.y = parent_bounds.y + (parent_bounds.height - bounds.height) / 2;
+    } else {
+        // Non-child, spawn under mouse
+        bounds.x = get_cursor_pos(toplevel->server).x - bounds.width  / 2.0;
+        bounds.y = get_cursor_pos(toplevel->server).y - bounds.height / 2.0;
+    }
+
+    // Constrain to output (respecting external padding)
+    Output* output = get_nearest_output_to_box(toplevel->server, bounds);
+    if (output) {
+        bounds = constrain_box(bounds, output->workarea);
+    }
+
+    // Update toplevel bounds
+
+    toplevel_set_bounds(toplevel, bounds, BoundsType::normal);
+}
+
 void toplevel_commit(wl_listener* listener, void*)
 {
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel()->base->initial_commit) {
-
-        log_info("Toplevel initial commit: {}", surface_to_string(toplevel));
-
         decoration_set_mode(toplevel);
         wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel(), 0, 0);
     } else {
         if (toplevel->xdg_toplevel()->current.width == 0) {
-            // Toplevel initial commit response
-
-            wlr_box bounds = surface_get_bounds(toplevel);
-
-            if (toplevel->xdg_toplevel()->parent) {
-                // Child, position at center of parent.
-                wlr_box parent_bounds = surface_get_bounds(Surface::from(toplevel->xdg_toplevel()->parent->base->surface));
-                bounds.x = parent_bounds.x + (parent_bounds.width  - bounds.width)  / 2;
-                bounds.y = parent_bounds.y + (parent_bounds.height - bounds.height) / 2;
-            } else {
-                // Non-child, spawn under mouse
-                bounds.x = get_cursor_pos(toplevel->server).x - bounds.width  / 2.0;
-                bounds.y = get_cursor_pos(toplevel->server).y - bounds.height / 2.0;
-            }
-
-            // Constrain to output (respecting external padding)
-            Output* output = get_nearest_output_to_box(toplevel->server, bounds);
-            if (output) {
-                bounds = constrain_box(bounds, output->workarea);
-            }
-
-            // Update toplevel bounds
-            toplevel_set_bounds(toplevel, bounds);
+            toplevel_handle_initial_commit_response(toplevel);
         }
 
         if (wlr_box geom = surface_get_geometry(toplevel); !geom.width || !geom.height) {
@@ -626,18 +634,8 @@ void toplevel_request_maximize(wl_listener* listener, void*)
     Toplevel* toplevel = listener_userdata<Toplevel*>(listener);
 
     if (toplevel->xdg_toplevel()->base->initialized) {
-        if (toplevel->xdg_toplevel()->requested.maximized) {
-            toplevel->prev_bounds = surface_get_bounds(toplevel);
-            if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-                toplevel_set_bounds(toplevel, output->workarea);
-                wlr_xdg_toplevel_set_maximized(toplevel->xdg_toplevel(), true);
-            }
-        } else {
-            if (Output* output = get_nearest_output_to_box(toplevel->server, toplevel->prev_bounds)) {
-                toplevel->prev_bounds = constrain_box(toplevel->prev_bounds, output->workarea);
-            }
-            toplevel_set_bounds(toplevel, toplevel->prev_bounds);
-        }
+        // We don't support maximize, send empty configure
+        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel()->base);
     }
 }
 
@@ -650,6 +648,7 @@ void toplevel_request_fullscreen(wl_listener* listener, void*)
             log_debug("Toplevel {} requested fullscreen on {}", surface_to_string(toplevel), output_to_string(Output::from(toplevel->xdg_toplevel()->requested.fullscreen_output)));
         }
         toplevel_set_fullscreen(toplevel, toplevel->xdg_toplevel()->requested.fullscreen, nullptr);
+        wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel()->base);
     }
 }
 
@@ -788,7 +787,7 @@ void layer_surface_exclusive_zone(Server* server, const wlr_layer_surface_v1_sta
     // Extend exclusive zone by internal padding
     auto exclusive_zone = state.exclusive_zone + server->config.layout.zone_internal_padding;
 
-	switch (state.anchor) {
+    switch (state.anchor) {
         case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP:
         case ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT:
             // Anchor top
@@ -811,7 +810,7 @@ void layer_surface_exclusive_zone(Server* server, const wlr_layer_surface_v1_sta
             // Anchor right
             usable_area.width -= exclusive_zone + state.margin.right;
             break;
-	}
+    }
 
     if (usable_area.width  < 0) usable_area.width  = 0;
     if (usable_area.height < 0) usable_area.height = 0;

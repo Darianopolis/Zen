@@ -22,7 +22,7 @@ struct MetatableBuilder
             if (prop.is<sol::table>()) {
                 prop["set"](value);
             } else {
-                script_error("no property with name :{}", field);
+                script_error("no property with name: {}", field);
             }
         };
         metatable["__index"] = [](sol::table table, const char* field) -> sol::object {
@@ -30,7 +30,7 @@ struct MetatableBuilder
             if (prop.is<sol::table>()) {
                 return prop["get"]();
             } else {
-                script_error("no property with name :{}", field);
+                script_error("no property with name: {}", field);
             }
         };
 

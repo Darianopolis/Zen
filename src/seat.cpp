@@ -490,7 +490,7 @@ void process_cursor_move(Server* server)
     wlr_box bounds = surface_get_bounds(toplevel);
     bounds.x = server->movesize.grab_bounds.x + int(get_cursor_pos(server).x - server->movesize.grab.x);
     bounds.y = server->movesize.grab_bounds.y + int(get_cursor_pos(server).y - server->movesize.grab.y);
-    toplevel_set_bounds(toplevel, bounds);
+    toplevel_set_bounds(toplevel, bounds, BoundsType::normal);
 }
 
 void process_cursor_resize(Server* server)
@@ -523,7 +523,7 @@ void process_cursor_resize(Server* server)
         .y = top,
         .width  = right  - left,
         .height = bottom - top,
-    }, locked_edges);
+    }, BoundsType::normal, locked_edges);
 }
 
 void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, vec2 delta, vec2 rel, vec2 rel_unaccel)
