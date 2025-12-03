@@ -19,11 +19,9 @@ void surface_check_output_coverage(Surface* surface)
         if (wlr_output_layout_intersects(surface->server->output_layout, output->wlr_output, &bounds)) {
             if (!std::ranges::contains(surface->current_outputs, output)) {
                 surface->current_outputs.emplace_back(output);
-                log_warn("surface entered output: {}", output_to_string(output));
                 scene_reconfigure(surface->server);
             }
         } else if (std::erase(surface->current_outputs, output)) {
-            log_warn("surface left output: {}", output_to_string(output));
             scene_reconfigure(surface->server);
         }
     }

@@ -349,5 +349,4 @@ wlr_buffer* buffer_from_pixels(wlr_allocator*, wlr_renderer*, uint32_t format, u
 
 // -----------------------------------------------------------------------------
 
-wlr_box rect_fit( ivec2 source_extent, ivec2 target_extent);
-wlr_box rect_fill(ivec2 source_extent, ivec2 target_extent);
+wlr_fbox rect_fill_compute_source_box(ivec2 source_extent, ivec2 target_extent);

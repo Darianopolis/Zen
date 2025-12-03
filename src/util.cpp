@@ -107,29 +107,25 @@ wlr_buffer* buffer_from_pixels(wlr_allocator* allocator, wlr_renderer* renderer,
 
 // -----------------------------------------------------------------------------
 
-wlr_box rect_adjust(ivec2 source_extent, ivec2 target_extent, auto compare_op)
+wlr_fbox rect_fill_compute_source_box(ivec2 source_extent, ivec2 target_extent)
 {
-    // First try to adjust vertical
-    double scale = double(target_extent.y) / source_extent.y;
-    ivec2 new_size = ivec2(vec2(source_extent) * scale);
-    if (compare_op(new_size.x, target_extent.x)) {
-        int offset = (new_size.x - target_extent.x) / 2;
-        return { -offset, 0, new_size.x, new_size.y };
+    double source_aspect = double(source_extent.x) / source_extent.y;
+    double dest_aspect = double(target_extent.x) / target_extent.y;
+
+    if (source_aspect >= dest_aspect) {
+        // Horizontal will be clipped
+
+        double new_horizontal = source_extent.y * dest_aspect;
+        double offset = (source_extent.x - new_horizontal) / 2;
+
+        return { offset, 0, new_horizontal, double(source_extent.y) };
+
+    } else {
+        // Vertical will be clipped
+
+        double new_vertical = source_extent.x / dest_aspect;
+        double offset = (source_extent.y - new_vertical) / 2;
+
+        return { 0, offset, double(source_extent.x), new_vertical };
     }
-
-    // ... then fallback to horizontal
-    scale = double(target_extent.x) / source_extent.x;
-    new_size = ivec2(vec2(source_extent) * scale);
-    int offset = (new_size.y - target_extent.y) / 2;
-    return { 0, -offset, new_size.x, new_size.y };
-}
-
-wlr_box rect_fit(ivec2 source_extent, ivec2 target_extent)
-{
-    return rect_adjust(source_extent, target_extent, std::less_equal<int>{});
-}
-
-wlr_box rect_fill(ivec2 source_extent, ivec2 target_extent)
-{
-    return rect_adjust(source_extent, target_extent, std::greater_equal<int>{});
 }

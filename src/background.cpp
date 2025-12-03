@@ -56,8 +56,11 @@ void background_output_position(Output* output)
 
     if (output->background_image) {
         auto bg = output->server->background;
-        auto background_box = rect_fill({bg->width, bg->height}, {o->width, o->height});
-        wlr_scene_node_set_position(&output->background_image->node, lo->x + background_box.x, lo->y + background_box.y);
-        wlr_scene_buffer_set_dest_size(output->background_image, background_box.width, background_box.height);
+
+        wlr_scene_node_set_position(&output->background_image->node, lo->x, lo->y);
+        wlr_scene_buffer_set_dest_size(output->background_image, o->width, o->height);
+
+        auto source_box = rect_fill_compute_source_box({bg->width, bg->height}, {o->width, o->height});
+        wlr_scene_buffer_set_source_box(output->background_image, &source_box);
     }
 }

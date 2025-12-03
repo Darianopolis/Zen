@@ -182,7 +182,6 @@ struct Server
     wlr_allocator* allocator;
 
     std::vector<Client*> clients;
-
     std::vector<Surface*> surfaces;
     std::vector<Toplevel*> toplevels;
 
@@ -550,7 +549,7 @@ bool                bind_trigger(    Server*, Bind);
 void ipc_server_init(   Server*);
 void ipc_server_cleanup(Server*);
 
-int ipc_client_run(std::span<const std::string_view>);
+int ipc_client_run(std::span<const std::string_view> args);
 
 void ipc_send_string(int fd, MessageType type, std::string_view str);
 
@@ -599,7 +598,7 @@ void borders_update(Surface*);
 
 // ---- Scene ------------------------------------------------------------------
 
-void scene_reconfigure(Server* server);
+void scene_reconfigure(Server*);
 
 // ---- Client -----------------------------------------------------------------
 
@@ -702,8 +701,8 @@ wlr_box surface_get_bounds(      Surface*);
 wlr_box surface_get_geometry(    Surface*);
 wlr_box surface_get_coord_system(Surface*);
 
-bool surface_is_mapped(    Surface* surface);
-bool surface_accepts_focus(Surface* surface);
+bool surface_is_mapped(    Surface*);
+bool surface_accepts_focus(Surface*);
 
 void surface_init(Surface*, Server*, SurfaceRole, wlr_surface*);
 void surface_cleanup(Surface*);
@@ -730,7 +729,7 @@ void layer_surface_new(    wl_listener*, void*);
 
 void toplevel_update_opacity(   Toplevel*);
 
-float toplevel_get_opacity(Toplevel* toplevel);
+float toplevel_get_opacity(Toplevel*);
 
 void toplevel_set_bounds(       Toplevel*, wlr_box, BoundsType type, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);
