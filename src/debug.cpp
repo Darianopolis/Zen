@@ -3,10 +3,10 @@
 std::string toplevel_to_string(Toplevel* toplevel)
 {
     return toplevel
-        ? std::format("Toplevel<{}>({}, {})",
+        ? std::format("Toplevel<{}>(appid = \"{}\", title = \"{}\")",
             (void*)toplevel,
-            toplevel->xdg_toplevel()->app_id ?: "?",
-            toplevel->xdg_toplevel()->title ?: "?")
+            toplevel->app_id(),
+            toplevel->xdg_toplevel()->title ?: "")
         : "nullptr";
 }
 
@@ -73,8 +73,7 @@ std::string output_to_string(Output* output)
         layout_output ? layout_output->y : -1,
         output->wlr_output->width,
         output->wlr_output->height,
-        output->wlr_output->refresh / 1000.0
-        );
+        output->wlr_output->refresh / 1000.0);
 }
 
 // -----------------------------------------------------------------------------

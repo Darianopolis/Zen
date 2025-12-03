@@ -461,6 +461,7 @@ struct Toplevel : Surface
     static Toplevel* from(wlr_xdg_toplevel*   xdg_toplevel) { return xdg_toplevel ? Toplevel::from(xdg_toplevel->base->surface) : nullptr; }
 
     wlr_xdg_toplevel* xdg_toplevel() const { return wlr_xdg_toplevel_try_from_wlr_surface(wlr_surface); }
+    std::string_view app_id() const { return xdg_toplevel()->app_id ?: ""; }
 
     struct {
         wlr_xdg_toplevel_decoration_v1* xdg_decoration;

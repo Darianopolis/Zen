@@ -20,7 +20,14 @@ void server_request_quit(Server* server, bool force)
     if (server->clients.empty()) {
         wl_display_terminate(server->display);
     } else {
+        ankerl::unordered_dense::set<Client*> keep_clients;
         for (auto* toplevel : server->toplevels) {
+
+            // We want firefox to open all windows on relaunch
+            // TODO: This should be configurable on a per-client basis
+            if (toplevel->app_id() == "firefox") continue;
+
+            keep_clients.emplace(Client::from(server, wl_resource_get_client(toplevel->xdg_toplevel()->resource)));
             log_info("Requesting toplevel close: {}", surface_to_string(toplevel));
             wlr_xdg_toplevel_send_close(toplevel->xdg_toplevel());
         }
@@ -32,8 +39,12 @@ void server_request_quit(Server* server, bool force)
             wl_display_terminate(server->display);
         } else {
             for (Client* client : server->clients) {
-                log_info("Waiting for client to quit: {}", client_to_string(client));
-                kill(client->pid, SIGTERM);
+                if (keep_clients.contains(client)) {
+                    log_info("Waiting for client toplevels to close");
+                } else {
+                    log_info("Waiting for client to close: {}", client_to_string(client));
+                    kill(client->pid, SIGTERM);
+                }
             }
         }
     }

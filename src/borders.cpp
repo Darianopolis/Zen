@@ -109,9 +109,7 @@ void border_apply_rules(Surface* surface)
 
     if (Toplevel* toplevel = Toplevel::from(surface)) {
         surface->border.show = true;
-        std::string_view app_id = toplevel->xdg_toplevel()->app_id ?: "";
-
-        auto radius_rules = m->corner_radius_rules.find(app_id);
+        auto radius_rules = m->corner_radius_rules.find(toplevel->app_id());
         if (radius_rules != m->corner_radius_rules.end()) {
             surface->border.radius = radius_rules->second;
             for (auto& e : surface->border.radius._data) {
