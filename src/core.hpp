@@ -120,8 +120,6 @@ enum class Strata : uint32_t
 {
     background,
     floating,
-    bottom,
-    focused,
     top,
     overlay,
     debug,
@@ -131,7 +129,7 @@ constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
 {
     switch (layer) {
         case ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND: return Strata::background;
-        case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:     return Strata::bottom;
+        case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:     return Strata::floating;
         case ZWLR_LAYER_SHELL_V1_LAYER_TOP:        return Strata::top;
         case ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY:    return Strata::overlay;
     }
@@ -152,6 +150,7 @@ enum class BoundsType : uint32_t
     fullscreen,
 };
 
+struct Surface;
 struct Toplevel;
 struct LayerSurface;
 struct CursorSurface;
@@ -184,6 +183,7 @@ struct Server
 
     std::vector<Client*> clients;
 
+    std::vector<Surface*> surfaces;
     std::vector<Toplevel*> toplevels;
 
     struct {
@@ -387,6 +387,8 @@ struct Output
     wlr_box workarea;
 
     EnumMap<std::vector<LayerSurface*>, zwlr_layer_shell_v1_layer> layers;
+
+    Weak<Surface> topmost;
 };
 
 // -----------------------------------------------------------------------------
@@ -412,6 +414,8 @@ struct Surface : WeaklyReferenceable
     struct wlr_surface* wlr_surface;
 
     Border border;
+
+    std::vector<Output*> current_outputs;
 
     float last_scale = 0.f;
 
@@ -701,6 +705,7 @@ wlr_box surface_get_coord_system(Surface*);
 bool surface_is_mapped(    Surface* surface);
 bool surface_accepts_focus(Surface* surface);
 
+void surface_init(Surface*, Server*, SurfaceRole, wlr_surface*);
 void surface_cleanup(Surface*);
 
 void request_activate(wl_listener*, void*);

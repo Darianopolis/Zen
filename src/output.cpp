@@ -125,9 +125,15 @@ void output_destroy(wl_listener* listener, void*)
 
     output->wlr_output->data = nullptr;
 
+    for (Surface* surface : output->server->surfaces) {
+        std::erase(surface->current_outputs, output);
+    }
+
     std::erase(output->server->outputs, output);
 
     output->server->script.on_output_add_or_remove(output, false);
+
+    scene_reconfigure(output->server);
 
     delete output;
 }

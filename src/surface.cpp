@@ -11,8 +11,28 @@ Surface* get_focused_surface(Server* server)
     return Surface::from(server->seat->keyboard_state.focused_surface);
 }
 
+static
+void surface_check_output_coverage(Surface* surface)
+{
+    auto bounds = surface_get_bounds(surface);
+    for (Output* output : surface->server->outputs) {
+        if (wlr_output_layout_intersects(surface->server->output_layout, output->wlr_output, &bounds)) {
+            if (!std::ranges::contains(surface->current_outputs, output)) {
+                surface->current_outputs.emplace_back(output);
+                log_warn("surface entered output: {}", output_to_string(output));
+                scene_reconfigure(surface->server);
+            }
+        } else if (std::erase(surface->current_outputs, output)) {
+            log_warn("surface left output: {}", output_to_string(output));
+            scene_reconfigure(surface->server);
+        }
+    }
+}
+
 void surface_update_scale(Surface* surface)
 {
+    surface_check_output_coverage(surface);
+
     float scale = 0.f;
 
     wlr_surface_output* surface_output;
@@ -447,9 +467,19 @@ Surface* get_surface_accepting_input_at(Server* server, vec2 layout_pos, wlr_sur
     return surface;
 }
 
+void surface_init(Surface* surface, Server* server, SurfaceRole role, struct wlr_surface* wlr_surface)
+{
+    surface->server = server;
+    surface->role = role;
+    surface->server->surfaces.emplace_back(surface);
+    surface->wlr_surface = wlr_surface;
+    surface->wlr_surface->data = surface;
+}
+
 void surface_cleanup(Surface* surface)
 {
     surface->wlr_surface->data = nullptr;
+    std::erase(surface->server->surfaces, surface);
 }
 
 // -----------------------------------------------------------------------------
@@ -658,10 +688,7 @@ void toplevel_new(wl_listener* listener, void* data)
     wlr_xdg_toplevel* xdg_toplevel = static_cast<wlr_xdg_toplevel*>(data);
 
     Toplevel* toplevel = new Toplevel{};
-    toplevel->role = SurfaceRole::toplevel;
-    toplevel->server = server;
-    toplevel->wlr_surface = xdg_toplevel->base->surface;
-    toplevel->wlr_surface->data = toplevel;
+    surface_init(toplevel, server, SurfaceRole::toplevel, xdg_toplevel->base->surface);
 
     toplevel->scene_tree = wlr_scene_xdg_surface_create(toplevel->server->layers[Strata::floating], xdg_toplevel->base);
     toplevel->scene_tree->node.data = toplevel;
@@ -699,10 +726,7 @@ void subsurface_new(wl_listener* listener, void* data)
     wlr_subsurface* surface = static_cast<wlr_subsurface*>(data);
 
     Subsurface* subsurface = new Subsurface{};
-    subsurface->role = SurfaceRole::subsurface;
-    subsurface->server = server;
-    subsurface->wlr_surface = surface->surface;
-    subsurface->wlr_surface->data = subsurface;
+    surface_init(subsurface, server, SurfaceRole::subsurface, surface->surface);
 
     // log_debug("Subsurface created: {}", surface_to_string(subsurface));
 
@@ -951,10 +975,7 @@ void layer_surface_new(wl_listener* listener, void* data)
     }
 
     LayerSurface* layer_surface = new LayerSurface{};
-    layer_surface->role = SurfaceRole::layer_surface;
-    layer_surface->server = server;
-    layer_surface->wlr_surface = wlr_layer_surface->surface;
-    layer_surface->wlr_surface->data = layer_surface;
+    surface_init(layer_surface, server, SurfaceRole::layer_surface, wlr_layer_surface->surface);
 
     layer_surface->listeners.listen(&wlr_layer_surface->surface->events.commit,  layer_surface, layer_surface_commit);
     layer_surface->listeners.listen(&wlr_layer_surface->surface->events.unmap,   layer_surface, layer_surface_unmap);
@@ -1026,10 +1047,7 @@ void popup_new(wl_listener* listener, void* data)
     wlr_xdg_popup* xdg_popup = static_cast<wlr_xdg_popup*>(data);
 
     Popup* popup = new Popup{};
-    popup->role = SurfaceRole::popup;
-    popup->server = server;
-    popup->wlr_surface = xdg_popup->base->surface;
-    popup->wlr_surface->data = popup;
+    surface_init(popup, server, SurfaceRole::popup, xdg_popup->base->surface);
 
     popup->listeners.listen(&xdg_popup->base->surface->events.commit,  popup, popup_commit);
     popup->listeners.listen(&               xdg_popup->events.destroy, popup, popup_destroy);
@@ -1041,28 +1059,27 @@ void scene_reconfigure(Server* server)
 {
     std::unordered_multimap<Toplevel*, Toplevel*> parent_child;
 
-    auto raise_with_children = [&](this auto&& raise_with_children, Toplevel* toplevel, wlr_scene_tree* layer) -> void {
-        wlr_scene_node_reparent(&toplevel->scene_tree->node, layer);
+    auto raise_with_children = [&](this auto&& raise_with_children, Toplevel* toplevel) -> void {
         wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
+
+        wlr_surface_output* surface_output;
+        wl_list_for_each(surface_output, &toplevel->wlr_surface->current_outputs, link) {
+            if (Output* output = Output::from(surface_output->output)) {
+                output->topmost = weak_from(toplevel);
+            }
+        }
 
         auto[b, e] = parent_child.equal_range(toplevel);
         for (auto i = b; i != e; ++i) {
-            raise_with_children(i->second, layer);
+            raise_with_children(i->second);
         }
     };
 
-    auto raise = [&](this auto&& raise, Toplevel* toplevel, wlr_scene_tree* layer) -> void {
+    auto raise = [&](this auto&& raise, Toplevel* toplevel) -> void {
         if (Toplevel* parent = Toplevel::from(toplevel->xdg_toplevel()->parent)) {
-            raise(parent, layer);
+            raise(parent);
         }
-        raise_with_children(toplevel, layer);
-    };
-
-    auto get_layer_for = [&](Toplevel* toplevel) {
-        bool ontop = (server->interaction_mode == InteractionMode::focus_cycle)
-            ? toplevel == server->focus_cycle.current.get()
-            : toplevel == get_focused_surface(server);
-        return server->layers[ontop ? Strata::focused : Strata::floating];
+        raise_with_children(toplevel);
     };
 
     for (Toplevel* toplevel : server->toplevels) {
@@ -1070,13 +1087,27 @@ void scene_reconfigure(Server* server)
             parent_child.insert({ parent, toplevel });
         }
 
-        raise(toplevel, get_layer_for(toplevel));
+        raise(toplevel);
         borders_update(toplevel);
         toplevel_update_opacity(toplevel);
     }
 
     if (Toplevel* toplevel  = server->focus_cycle.current.get()) {
-        raise(toplevel, server->layers[Strata::focused]);
+        raise(toplevel);
+    }
+
+    // Now move all BOTTOM layer surfaces to be placed below the topmost window for their respective output
+
+    for (Output* output : server->outputs) {
+        if (!output->topmost.get()) continue;
+
+        for (LayerSurface* layer_surface : output->layers[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]) {
+            if (!layer_surface->wlr_layer_surface()->initialized) continue;
+
+            wlr_scene_node_place_below(
+                &layer_surface->scene_layer_surface->tree->node,
+                &output->topmost.get()->scene_tree->node);
+        }
     }
 
     outputs_reconfigure_all(server);
