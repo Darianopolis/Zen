@@ -65,6 +65,8 @@ void spawn(Server* server, std::string_view file, std::span<const std::string_vi
         }
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
+        int _ = openat(STDOUT_FILENO, "/dev/null", O_RDWR);
+        int _ = openat(STDERR_FILENO, "/dev/null", O_RDWR);
         execv(path.c_str(), argv_cstr.data());
         _Exit(0);
     }
