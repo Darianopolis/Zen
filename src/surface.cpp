@@ -1060,11 +1060,8 @@ void scene_reconfigure(Server* server)
     auto raise_with_children = [&](this auto&& raise_with_children, Toplevel* toplevel) -> void {
         wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
 
-        wlr_surface_output* surface_output;
-        wl_list_for_each(surface_output, &toplevel->wlr_surface->current_outputs, link) {
-            if (Output* output = Output::from(surface_output->output)) {
-                output->topmost = weak_from(toplevel);
-            }
+        for (Output* output : toplevel->current_outputs) {
+            output->topmost = weak_from(toplevel);
         }
 
         auto[b, e] = parent_child.equal_range(toplevel);
