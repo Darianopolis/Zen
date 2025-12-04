@@ -28,16 +28,21 @@ config.bind["XF86AudioMute"]        = function() spawn("wpctl", "set-volume", "@
 
 -- playerctl -------------------------------------------------------------------
 
-local player = "spotify"
-config.bind["XF86AudioPlay"] = function() spawn("playerctl", "-p", player, "play-pause") end
-config.bind["XF86AudioPrev"] = function() spawn("playerctl", "-p", player, "previous")   end
-config.bind["XF86AudioNext"] = function() spawn("playerctl", "-p", player, "next")       end
+config.bind["XF86AudioPlay"] = function() spawn("playerctl", "play-pause") end
+config.bind["XF86AudioPrev"] = function() spawn("playerctl", "previous")   end
+config.bind["XF86AudioNext"] = function() spawn("playerctl", "next")       end
 
 -- launcher --------------------------------------------------------------------
 
 config.bind["Mod+d"]       = function() spawn("rofi", "-show-icons", "-show", "drun")   end
 config.bind["Mod+Shift+D"] = function() spawn("rofi", "-show-icons", "-show", "run")    end
 config.bind["Mod+Ctrl+d"]  = function() spawn("rofi", "-show-icons", "-show", "window") end
+
+-- clipboard -------------------------------------------------------------------
+
+config.bind["Mod+x"]       = function() spawn("sh", "-c", "cliphist list | rofi -dmenu | cliphist decode | wl-copy") end
+config.bind["Mod+Ctrl+x"]  = function() spawn("sh", "-c", "cliphist list | rofi -dmenu | cliphist delete -") end
+config.bind["Mod+Shift+X"] = function() spawn("cliphist", "wipe") end
 
 -- applications ----------------------------------------------------------------
 

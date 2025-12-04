@@ -6,6 +6,8 @@ spawn("dunst")
 spawn("blueman-applet")
 spawn("1password", "--silent")
 spawn("waybar")
+spawn("playerctld")
+spawn("wl-paste", "--watch", "cliphist", "store")
 
 -- Outputs ---------------------------------------------------------------------
 

@@ -21,7 +21,7 @@ program_name = "zen"
 
 # -----------------------------------------------------------------------------
 
-def ensure_dir(path: Path | str):
+def ensure_dir(path: Path|str):
     os.makedirs(path, exist_ok=True)
     return Path(path)
 
@@ -40,7 +40,7 @@ def check_process(returncode: int):
 
     return ok
 
-def run(cmd, cwd: Path = None):
+def run(cmd, cwd: Path|None = None):
     if cwd:
         print(f"{cmd} @ {cwd}")
     else:
@@ -52,7 +52,7 @@ def run(cmd, cwd: Path = None):
 
 # -----------------------------------------------------------------------------
 
-def git_fetch(dir, repo, branch, dumb=False, patches: list[Path]=[]):
+def git_fetch(dir, repo, branch, dumb = False, patches: list[Path] = []):
     do_apply = False
     if not dir.exists():
         cmd  = ["git", "clone", repo, "--branch", branch]
@@ -213,7 +213,7 @@ linker_type  = "MOLD"
 cmake_dir = build_dir / build_type.lower()
 
 if ((args.build or args.install) and not cmake_dir.exists()) or args.configure:
-    cmd  = ["cmake", "-B", cmake_dir, "-G", "Ninja", f"-DVENDOR_DIR={vendor_dir}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
+    cmd  = ["cmake", "-B", cmake_dir, "--fresh", "-G", "Ninja", f"-DVENDOR_DIR={vendor_dir}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
     cmd += [f"-DCMAKE_C_COMPILER={c_compiler}", f"-DCMAKE_CXX_COMPILER={cxx_compiler}", f"-DCMAKE_LINKER_TYPE={linker_type}"]
     cmd += [f"-DCMAKE_BUILD_TYPE={build_type}"]
     cmd += [f"-DPROJECT_NAME={program_name}"]

@@ -71,8 +71,7 @@ python build.py -I
 
 - `pavucontrol` - Audio
 - `blueman` - Bluetooth
-- `swaync` - Notifications
-- `swaybg` - Background
+- `dunst` - Notifications
 - `waybar` - System bar
 - `wlr-randr` - Output management
 - `kanshi` - Dynamic profile-based output management
@@ -81,3 +80,5 @@ python build.py -I
 - `slurp` - Region selection
 - `xdg-desktop-portal-wlr` - Screenshare
 - `gnome-keyring` - Secret Service
+- `cliphist` - Clipboard history
+- `playerctl` - Media player controls
