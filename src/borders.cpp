@@ -50,11 +50,11 @@ void borders_update_corner_buffer(Server* server, int radius, fvec4 color, Borde
 
             alpha *= color.a;
 
-            data[i] = Pixel{
+            data[i] = Pixel {
                 uint8_t(color.r * alpha * 255.0),
                 uint8_t(color.g * alpha * 255.0),
                 uint8_t(color.b * alpha * 255.0),
-                uint8_t(          alpha * 255.0)
+                uint8_t(          alpha * 255.0),
             };
         }
     }
@@ -177,47 +177,48 @@ void borders_update(Surface* surface)
     auto br = surface->border.radius[BorderCorners::BottomRight];
 
     if (tl != BorderSharp) {
-        positions[BorderEdges::Left].y += tl;
+        positions[BorderEdges::Left].y      += tl;
         positions[BorderEdges::Left].height -= tl;
-        positions[BorderEdges::Top].x += tl;
-        positions[BorderEdges::Top].width -= tl;
+        positions[BorderEdges::Top].x       += tl;
+        positions[BorderEdges::Top].width   -= tl;
     } else {
-        positions[BorderEdges::Left].y -= border_width;
+        positions[BorderEdges::Left].y      -= border_width;
         positions[BorderEdges::Left].height += border_width;
     }
 
     if (tr != BorderSharp) {
-        positions[BorderEdges::Right].y += tr;
+        positions[BorderEdges::Right].y      += tr;
         positions[BorderEdges::Right].height -= tr;
-        positions[BorderEdges::Top].width -= tr;
+        positions[BorderEdges::Top].width    -= tr;
     } else {
-        positions[BorderEdges::Right].y -= border_width;
+        positions[BorderEdges::Right].y      -= border_width;
         positions[BorderEdges::Right].height += border_width;
     }
 
     if (bl != BorderSharp) {
-        positions[BorderEdges::Left].height -= bl;
-        positions[BorderEdges::Bottom].x += bl;
+        positions[BorderEdges::Left].height  -= bl;
+        positions[BorderEdges::Bottom].x     += bl;
         positions[BorderEdges::Bottom].width -= bl;
     } else {
-        positions[BorderEdges::Left].height += border_width;
+        positions[BorderEdges::Left].height  += border_width;
     }
 
     if (br != BorderSharp) {
-        positions[BorderEdges::Right].height -= br;
+        positions[BorderEdges::Right].height -= br;\
         positions[BorderEdges::Bottom].width -= br;
     } else {
         positions[BorderEdges::Right].height += border_width;
     }
 
     for (BorderEdges edge : surface->border.edges.enum_values) {
+        auto* e = surface->border.edges[edge];
         if (show) {
-            wlr_scene_node_set_enabled(&surface->border.edges[edge]->node, true);
-            wlr_scene_node_set_position(&surface->border.edges[edge]->node, positions[edge].x, positions[edge].y);
-            wlr_scene_rect_set_size(surface->border.edges[edge], positions[edge].width, positions[edge].height);
-            wlr_scene_rect_set_color(surface->border.edges[edge], color_to_wlroots(color));
+            wlr_scene_node_set_enabled( &e->node, true);
+            wlr_scene_node_set_position(&e->node, positions[edge].x, positions[edge].y);
+            wlr_scene_rect_set_size(     e, positions[edge].width, positions[edge].height);
+            wlr_scene_rect_set_color(    e, color_to_wlroots(color));
         } else {
-            wlr_scene_node_set_enabled(&surface->border.edges[edge]->node, false);
+            wlr_scene_node_set_enabled(&e->node, false);
         }
     }
 
@@ -237,24 +238,25 @@ void borders_update(Surface* surface)
 
     for (BorderCorners corner : surface->border.corners.enum_values) {
         auto r = surface->border.radius[corner];
+        auto* c = surface->border.corners[corner];
         if (show && r != BorderSharp) {
             auto outer_radius = r + border_width;
 
             auto& cbs = borders_get_corner_buffers(surface->server, outer_radius);
             auto& cb = focused ? cbs.focused : cbs.unfocused;
 
-            wlr_scene_node_set_enabled(    &surface->border.corners[corner]->node, true);
-            wlr_scene_node_set_position(   &surface->border.corners[corner]->node, dst[corner].x, dst[corner].y);
-            wlr_scene_buffer_set_buffer(    surface->border.corners[corner], cb.buffer);
-            wlr_scene_buffer_set_dest_size( surface->border.corners[corner], outer_radius, outer_radius);
-            wlr_scene_buffer_set_source_box(surface->border.corners[corner], ptr(wlr_fbox {
+            wlr_scene_node_set_enabled(    &c->node, true);
+            wlr_scene_node_set_position(   &c->node, dst[corner].x, dst[corner].y);
+            wlr_scene_buffer_set_buffer(    c, cb.buffer);
+            wlr_scene_buffer_set_dest_size( c, outer_radius, outer_radius);
+            wlr_scene_buffer_set_source_box(c, ptr(wlr_fbox {
                 .x = float(src[corner].x),
                 .y = float(src[corner].y),
-                .width = float(outer_radius),
+                .width  = float(outer_radius),
                 .height = float(outer_radius),
             }));
         } else {
-            wlr_scene_node_set_enabled(&surface->border.corners[corner]->node, false);
+            wlr_scene_node_set_enabled(&c->node, false);
         }
     }
 }

@@ -57,10 +57,6 @@ Run with `--help` to see command line options
 - mold
 - clang (C++26 capable version at minimum)
 
-#### System dependencies (runtime)
-
-- xwayland-satellite (if `--xwayland` flag passed)
-
 #### Quickstart
 
 ```

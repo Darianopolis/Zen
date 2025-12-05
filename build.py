@@ -205,6 +205,20 @@ generate_wayland_protocols()
 
 # -----------------------------------------------------------------------------
 
+xwayland_satellite_dir = vendor_dir / "xwayland-satellite"
+xwayland_satellite_bin = xwayland_satellite_dir / "target/release/xwayland-satellite"
+
+def build_xwayland_satellite():
+
+    git_fetch(xwayland_satellite_dir, "https://github.com/Supreeeme/xwayland-satellite.git", "main")
+
+    if not xwayland_satellite_bin.exists() or args.update:
+        run(["cargo", "build", "--release"], cwd=xwayland_satellite_dir)
+
+build_xwayland_satellite()
+
+# -----------------------------------------------------------------------------
+
 build_type   = "Debug" if not args.release else "Release"
 c_compiler   = "clang"
 cxx_compiler = "clang++"
@@ -239,3 +253,4 @@ if args.install:
 
     install_file(cmake_dir / program_name, local_bin_dir / program_name)
     install_file(current_dir / "resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
+    install_file(xwayland_satellite_bin, local_bin_dir / "xwayland-satellite")
