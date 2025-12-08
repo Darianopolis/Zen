@@ -38,11 +38,6 @@ Modifiers get_modifiers(Server* server)
     return mods;
 }
 
-bool check_mods(Server* server, Modifiers required_mods)
-{
-    return get_modifiers(server) >= required_mods;
-}
-
 // -----------------------------------------------------------------------------
 
 void keyboard_handle_modifiers(wl_listener* listener, void*)
@@ -775,13 +770,33 @@ void cursor_frame(wl_listener* listener, void*)
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+static
+void binds_toplevel_close_or_kill_client(Toplevel* toplevel)
+{
+    Modifiers mods = get_modifiers(toplevel->server);
+    if (mods >= Modifiers::Shift) {
+        Client* client = Client::from(toplevel->server, wl_resource_get_client(toplevel->wlr_surface->resource));
+        if (client) {
+            auto[name, signal] = mods >= Modifiers::Ctrl ? std::make_pair("SIGKILL", SIGKILL) : std::make_pair("SIGTERM", SIGTERM);
+
+            log_warn("Sending {} to {}\n  triggered from closing toplevel: {}", name, client_to_string(client), surface_to_string(toplevel));
+            ::kill(client->pid, signal);
+            return;
+        }
+    }
+
+    toplevel_close(toplevel);
+}
+
 bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_keysym_t sym)
 {
     wl_keyboard_key_state state = event.state;
 
     // log_trace("Key {:#6x} -> {}", sym, magic_enum::enum_name(state));
 
-    Bind input_action = { get_modifiers(server), sym, event.state == WL_KEYBOARD_KEY_STATE_RELEASED };
+    Modifiers mods = get_modifiers(server);
+
+    Bind input_action = { mods, sym, event.state == WL_KEYBOARD_KEY_STATE_RELEASED };
 
     // VT Switching
 
@@ -797,14 +812,14 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
         return state == WL_KEYBOARD_KEY_STATE_PRESSED;
     }
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && check_mods(server, Modifiers::Mod)) {
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && mods >= Modifiers::Mod) {
 
         // Core binds
 
         switch (sym)
         {
             case XKB_KEY_Escape:
-                server_request_quit(server, check_mods(server, Modifiers::Shift));
+                server_request_quit(server, mods >= Modifiers::Shift);
                 break;
             case XKB_KEY_Tab:
             case XKB_KEY_ISO_Left_Tab: {
@@ -822,8 +837,9 @@ bool input_handle_key(Server* server, const wlr_keyboard_key_event& event, xkb_k
                 surface_try_focus(server, nullptr);
                 return true;
             case XKB_KEY_q:
+            case XKB_KEY_Q:
                 if (Toplevel* focused = Toplevel::from(get_focused_surface(server))) {
-                    toplevel_close(focused);
+                    binds_toplevel_close_or_kill_client(focused);
                 }
                 return true;
             case XKB_KEY_f:
@@ -860,7 +876,7 @@ bool input_handle_axis(Server* server, const wlr_pointer_axis_event& event)
         if (bind_trigger(server, Bind { get_modifiers(server), dir })) return true;
     }
 
-    if (check_mods(server, Modifiers::Mod) && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+    if (get_modifiers(server) >= Modifiers::Mod && event.orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         if (server->interaction_mode ==  InteractionMode::passthrough) {
             focus_cycle_begin(server, server->cursor);
         }
@@ -924,13 +940,15 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
 
     // Check for move/size interaction begin, or close-under-cursor
 
-    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && check_mods(server, Modifiers::Mod) && server->interaction_mode == InteractionMode::passthrough) {
-        if (event.button == BTN_LEFT && check_mods(server, Modifiers::Shift)) {
+    Modifiers mods = get_modifiers(server);
+
+    if (Toplevel* toplevel = Toplevel::from(surface_under_cursor); toplevel && mods >= Modifiers::Mod && server->interaction_mode == InteractionMode::passthrough) {
+        if (event.button == BTN_LEFT && mods >= Modifiers::Shift) {
             toplevel_begin_interactive(toplevel, InteractionMode::move);
         } else if (event.button == BTN_RIGHT) {
             toplevel_begin_interactive(toplevel, InteractionMode::resize);
         } else if (event.button == BTN_MIDDLE) {
-            toplevel_close(toplevel);
+            binds_toplevel_close_or_kill_client(toplevel);
         }
         return true;
     }

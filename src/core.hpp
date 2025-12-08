@@ -579,7 +579,6 @@ bool input_handle_button(Server*, const wlr_pointer_button_event&);
 bool input_handle_axis(  Server*, const wlr_pointer_axis_event&);
 
 Modifiers get_modifiers(Server*);
-bool      check_mods(   Server*, Modifiers);
 
 // ---- Background -------------------------------------------------------------
 

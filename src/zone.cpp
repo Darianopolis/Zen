@@ -16,8 +16,10 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
 
     auto& c = server->config.layout;
 
+    Modifiers mods = get_modifiers(server);
+
     if (event.button == BTN_LEFT) {
-        if (pressed && check_mods(server, Modifiers::Mod) && !check_mods(server, Modifiers::Shift)) {
+        if (pressed && mods >= Modifiers::Mod && !(mods >= Modifiers::Shift)) {
             if (is_cursor_visible(server)) {
                 vec2 surface_pos;
                 wlr_surface* surface = nullptr;
