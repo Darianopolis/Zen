@@ -6,7 +6,7 @@
 static
 void update_seat_caps(Server* server)
 {
-    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+    u32 caps = WL_SEAT_CAPABILITY_POINTER;
     if (!server->keyboards.empty()) {
         caps |= WL_SEAT_CAPABILITY_KEYBOARD;
     }
@@ -17,7 +17,7 @@ void update_seat_caps(Server* server)
 Modifiers get_modifiers(Server* server)
 {
     wlr_keyboard* keyboard = wlr_seat_get_keyboard(server->seat);
-    uint32_t key_mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+    u32 key_mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
 
     Modifiers mods = {};
     if (key_mods & WLR_MODIFIER_LOGO)     mods |= Modifiers::Super;
@@ -27,7 +27,7 @@ Modifiers get_modifiers(Server* server)
     if (key_mods & server->main_modifier) mods |= Modifiers::Mod;
 
     for (Pointer* pointer : server->pointers) {
-        for (uint32_t i = 0; i < pointer->wlr_pointer->button_count; ++i) {
+        for (u32 i = 0; i < pointer->wlr_pointer->button_count; ++i) {
             if (pointer->wlr_pointer->buttons[i] == pointer_modifier_button) {
                 mods |= Modifiers::Mod;
                 break;
@@ -69,12 +69,12 @@ void keyboard_handle_key(wl_listener* listener, void* data)
     if (event->state != WL_KEYBOARD_KEY_STATE_REPEATED) {
 
         // Translate libinput keycode -> xkbcommon
-        uint32_t keycode = event->keycode + 8;
+        u32 keycode = event->keycode + 8;
 
         const xkb_keysym_t* syms;
-        int nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
+        i32 nsyms = xkb_state_key_get_syms(keyboard->wlr_keyboard->xkb_state, keycode, &syms);
 
-        for (int i = 0; i < nsyms; ++i) {
+        for (i32 i = 0; i < nsyms; ++i) {
             xkb_keysym_t sym = syms[i];
             if (input_handle_key(server, *event, sym)) {
                 return;
@@ -157,11 +157,11 @@ void pointer_destroy(wl_listener* listener, void*)
     delete pointer;
 }
 
-uint32_t get_num_pointer_buttons_down(Server* server)
+u32 get_num_pointer_buttons_down(Server* server)
 {
-    uint32_t count = 0;
+    u32 count = 0;
     for (Pointer* pointer : server->pointers) {
-        for (uint32_t i = 0; i < pointer->wlr_pointer->button_count; ++i) {
+        for (u32 i = 0; i < pointer->wlr_pointer->button_count; ++i) {
             if (pointer->wlr_pointer->buttons[i] != pointer_modifier_button) {
                 count++;
             }
@@ -255,7 +255,7 @@ void update_cursor_debug_visual_position(Server* server)
 {
     if (!server->pointer.debug_visual_enabled) return;
 
-    int32_t he = server->pointer.debug_visual_half_extent;
+    i32 he = server->pointer.debug_visual_half_extent;
     wlr_scene_node_set_position(&server->pointer.debug_visual->node,
         get_cursor_pos(server).x + (server->session.is_nested ? 0 : -he*2),
         get_cursor_pos(server).y - he*2);
@@ -488,8 +488,8 @@ void process_cursor_move(Server* server)
     }
 
     wlr_box bounds = surface_get_bounds(toplevel);
-    bounds.x = server->movesize.grab_bounds.x + int(get_cursor_pos(server).x - server->movesize.grab.x);
-    bounds.y = server->movesize.grab_bounds.y + int(get_cursor_pos(server).y - server->movesize.grab.y);
+    bounds.x = server->movesize.grab_bounds.x + i32(get_cursor_pos(server).x - server->movesize.grab.x);
+    bounds.y = server->movesize.grab_bounds.y + i32(get_cursor_pos(server).y - server->movesize.grab.y);
     toplevel_set_bounds(toplevel, bounds, BoundsType::normal);
 }
 
@@ -505,10 +505,10 @@ void process_cursor_resize(Server* server)
 
     ivec2 delta = vec2(get_cursor_pos(server)) - movesize.grab;
 
-    int left   = movesize.grab_bounds.x;
-    int top    = movesize.grab_bounds.y;
-    int right  = movesize.grab_bounds.x + movesize.grab_bounds.width;
-    int bottom = movesize.grab_bounds.y + movesize.grab_bounds.height;
+    i32 left   = movesize.grab_bounds.x;
+    i32 top    = movesize.grab_bounds.y;
+    i32 right  = movesize.grab_bounds.x + movesize.grab_bounds.width;
+    i32 bottom = movesize.grab_bounds.y + movesize.grab_bounds.height;
 
     if      (movesize.resize_edges & WLR_EDGE_TOP)    top    = std::min(top    + delta.y, bottom - 1);
     else if (movesize.resize_edges & WLR_EDGE_BOTTOM) bottom = std::max(bottom + delta.y, top    + 1);
@@ -526,7 +526,7 @@ void process_cursor_resize(Server* server)
     }, BoundsType::normal, locked_edges);
 }
 
-void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device* device, vec2 delta, vec2 rel, vec2 rel_unaccel)
+void process_cursor_motion(Server* server, u32 time_msecs, wlr_input_device* device, vec2 delta, vec2 rel, vec2 rel_unaccel)
 {
     defer {
         update_cursor_debug_visual_position(server);
@@ -679,7 +679,7 @@ void process_cursor_motion(Server* server, uint32_t time_msecs, wlr_input_device
 static
 vec2 pointer_acceleration_apply(Pointer* pointer, const PointerAccelConfig& config, vec2* remainder, vec2 delta)
 {
-    double speed = glm::length(delta);
+    f64 speed = glm::length(delta);
     vec2 sens = vec2(config.multiplier * (1 + (std::max(speed, config.offset) - config.offset) * config.rate));
 
     vec2 new_delta = sens * delta;

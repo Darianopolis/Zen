@@ -11,7 +11,7 @@ void background_set(Server* server, const char* path)
 {
     background_destroy(server);
 
-    int w, h, num_channels;
+    i32 w, h, num_channels;
     stbi_uc* data = stbi_load(path, &w, &h, &num_channels, STBI_rgb_alpha);
     defer { stbi_image_free(data); };
 

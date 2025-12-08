@@ -31,7 +31,7 @@ void surface_update_scale(Surface* surface)
 {
     surface_check_output_coverage(surface);
 
-    float scale = 0.f;
+    f32 scale = 0.f;
 
     wlr_surface_output* surface_output;
     wl_list_for_each(surface_output, &surface->wlr_surface->current_outputs, link) {
@@ -44,11 +44,11 @@ void surface_update_scale(Surface* surface)
         surface->last_scale = scale;
         log_debug("Setting preferred scale ({:.2f}) for: {}", scale, surface_to_string(surface));
         wlr_fractional_scale_v1_notify_scale(surface->wlr_surface, scale);
-        wlr_surface_set_preferred_buffer_scale(surface->wlr_surface, int32_t(std::ceil(scale)));
+        wlr_surface_set_preferred_buffer_scale(surface->wlr_surface, i32(std::ceil(scale)));
     }
 }
 
-float toplevel_get_opacity(Toplevel* toplevel)
+f32 toplevel_get_opacity(Toplevel* toplevel)
 {
     return (toplevel->server->interaction_mode != InteractionMode::focus_cycle
             || toplevel == toplevel->server->focus_cycle.current.get())
@@ -58,7 +58,7 @@ float toplevel_get_opacity(Toplevel* toplevel)
 
 void toplevel_update_opacity(Toplevel* toplevel)
 {
-    float opacity = toplevel_get_opacity(toplevel);
+    f32 opacity = toplevel_get_opacity(toplevel);
     auto set_opacity = [&](wlr_scene_node* node, ivec2) -> bool {
         if (node->type == WLR_SCENE_NODE_BUFFER) wlr_scene_buffer_set_opacity(wlr_scene_buffer_from_node(node), opacity);
         return true;
@@ -131,7 +131,7 @@ wlr_box surface_get_bounds(Surface* surface)
 }
 
 static
-void toplevel_resize(Toplevel* toplevel, int width, int height, BoundsType type)
+void toplevel_resize(Toplevel* toplevel, i32 width, i32 height, BoundsType type)
 {
     if (toplevel->resize.enable_throttle_resize && toplevel->resize.last_resize_serial > toplevel->resize.last_commited_serial) {
         toplevel->resize.any_pending = true;
@@ -175,8 +175,8 @@ static
 void toplevel_update_position_for_anchor(Toplevel* toplevel)
 {
     wlr_box geom = surface_get_geometry(toplevel);
-    int x = (toplevel->anchor_edges & WLR_EDGE_RIGHT)  ? toplevel->anchor.x - geom.width  : toplevel->anchor.x;
-    int y = (toplevel->anchor_edges & WLR_EDGE_BOTTOM) ? toplevel->anchor.y - geom.height : toplevel->anchor.y;
+    i32 x = (toplevel->anchor_edges & WLR_EDGE_RIGHT)  ? toplevel->anchor.x - geom.width  : toplevel->anchor.x;
+    i32 y = (toplevel->anchor_edges & WLR_EDGE_BOTTOM) ? toplevel->anchor.y - geom.height : toplevel->anchor.y;
     wlr_scene_node_set_position(&toplevel->scene_tree->node, x, y);
 
     surface_update_scale(toplevel);
@@ -618,11 +618,11 @@ void toplevel_begin_interactive(Toplevel* toplevel, InteractionMode mode)
 
     Server* server = toplevel->server;
 
-    uint32_t edges = 0;
+    u32 edges = 0;
     if (mode == InteractionMode::resize) {
         wlr_box bounds = surface_get_bounds(toplevel);
-        int nine_slice_x = ((get_cursor_pos(server).x - bounds.x) * 3) / bounds.width;
-        int nine_slice_y = ((get_cursor_pos(server).y - bounds.y) * 3) / bounds.height;
+        i32 nine_slice_x = ((get_cursor_pos(server).x - bounds.x) * 3) / bounds.width;
+        i32 nine_slice_y = ((get_cursor_pos(server).y - bounds.y) * 3) / bounds.height;
 
         if      (nine_slice_x < 1) edges |= WLR_EDGE_LEFT;
         else if (nine_slice_x > 1) edges |= WLR_EDGE_RIGHT;
@@ -855,8 +855,8 @@ void layer_surface_configure(LayerSurface* surface, wlr_box full_area, wlr_box& 
     }
 
     wlr_box box = {
-        .width = int(state.desired_width),
-        .height = int(state.desired_height),
+        .width = i32(state.desired_width),
+        .height = i32(state.desired_height),
     };
 
     // Horizontal positioning

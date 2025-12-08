@@ -29,9 +29,9 @@ void ipc_reap_dead_socket_files()
 }
 
 static
-int ipc_open_socket(std::string* name)
+i32 ipc_open_socket(std::string* name)
 {
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    i32 fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
     std::string socket_name = std::to_string(getpid());
     sockaddr_un addr = ipc_socket_path_from_name(socket_name);
@@ -48,7 +48,7 @@ int ipc_open_socket(std::string* name)
 }
 
 static
-std::optional<MessageHeader> ipd_read_message_header(int fd, int flags)
+std::optional<MessageHeader> ipd_read_message_header(i32 fd, i32 flags)
 {
     MessageHeader header;
     ssize_t read = recv(fd, &header, sizeof(header), flags | MSG_NOSIGNAL);
@@ -57,25 +57,25 @@ std::optional<MessageHeader> ipd_read_message_header(int fd, int flags)
 }
 
 static
-bool ipc_read_string(int fd, const MessageHeader& header, std::string& out)
+bool ipc_read_string(i32 fd, const MessageHeader& header, std::string& out)
 {
     out.resize(header.size);
     ssize_t read = recv(fd, out.data(), out.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
     return read == header.size;
 }
 
-void ipc_send_string(int fd, MessageType type, std::string_view str)
+void ipc_send_string(i32 fd, MessageType type, std::string_view str)
 {
     MessageHeader header {
         .type = type,
-        .size = uint32_t(str.size()),
+        .size = u32(str.size()),
     };
     send(fd, &header, sizeof(header), MSG_NOSIGNAL);
     send(fd, str.data(), str.size(),  MSG_NOSIGNAL);
 }
 
 static
-int ipc_handle_client_read(int fd, uint32_t /* mask */, void* data)
+i32 ipc_handle_client_read(i32 fd, u32 /* mask */, void* data)
 {
     MessageConnection* conn = static_cast<MessageConnection*>(data);
 
@@ -99,11 +99,11 @@ int ipc_handle_client_read(int fd, uint32_t /* mask */, void* data)
 }
 
 static
-int ipc_handle_socket_accept(int fd, uint32_t /* mask */, void* data)
+i32 ipc_handle_socket_accept(i32 fd, u32 /* mask */, void* data)
 {
     Server* server = static_cast<Server*>(data);
 
-    int client_fd = accept(fd, nullptr, nullptr);
+    i32 client_fd = accept(fd, nullptr, nullptr);
     if (client_fd < 0) return 0;
 
     MessageConnection* conn = new MessageConnection {};
@@ -118,7 +118,7 @@ int ipc_handle_socket_accept(int fd, uint32_t /* mask */, void* data)
         if (getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &cred, &len) >= 0) {
 
             char buf[8192] = {};
-            int count = readlink(std::format("/proc/{}/cwd", cred.pid).c_str(), buf, sizeof(buf));
+            i32 count = readlink(std::format("/proc/{}/cwd", cred.pid).c_str(), buf, sizeof(buf));
             if (count >= 0) {
                 conn->cwd = std::string_view(buf, count);
             }
@@ -141,7 +141,7 @@ void ipc_server_init(Server* server)
     std::string name;
     std::filesystem::create_directories(ipc_socket_dir);
     ipc_reap_dead_socket_files();
-    int fd = ipc_open_socket(&name);
+    i32 fd = ipc_open_socket(&name);
     if (fd >= 0) {
         log_info("Opened IPC socket, setting {}={}", ipc_socket_env, name);
         env_set(server, ipc_socket_env, name);
@@ -155,12 +155,12 @@ void ipc_server_cleanup(Server* server)
         wl_event_source_remove(server->ipc_connection_event_source);
 }
 
-int ipc_client_run(std::span<const std::string_view> args)
+i32 ipc_client_run(std::span<const std::string_view> args)
 {
     const char* socket_name = getenv(ipc_socket_env.c_str());
     auto addr = ipc_socket_path_from_name(socket_name);
 
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    i32 fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
         perror("connect");
         return EXIT_FAILURE;

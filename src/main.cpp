@@ -308,7 +308,7 @@ Usage: {0} msg [script]...
 
 )";
 
-int main(int argc, char* argv[])
+i32 main(i32 argc, char* argv[])
 {
     std::vector<std::string_view> args(argv + 1, argv + argc);
     CommandParser cmd{args};

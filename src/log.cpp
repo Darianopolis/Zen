@@ -69,7 +69,7 @@ void log_wlr_callback(wlr_log_importance importance, const char* fmt, va_list ar
     std::string_view fmtv = fmt;
     if (fmtv.starts_with("[%s:%d]")) {
         va_arg(args, const char*);
-        va_arg(args, int);
+        va_arg(args, i32);
         fmt += "[%s:%d] "sv.length();
     }
     else if (fmtv.starts_with("[wayland]")) {
@@ -79,8 +79,8 @@ void log_wlr_callback(wlr_log_importance importance, const char* fmt, va_list ar
     // Format and print
 
     char buffer[65'536];
-    int len = vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
-    buffer[std::min(len, int(sizeof(buffer)) - 1)] = '\0';
+    i32 len = vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+    buffer[std::min(len, i32(sizeof(buffer)) - 1)] = '\0';
 
     log(level, buffer);
 }
@@ -89,7 +89,7 @@ void init_log(LogLevel log_level, wlr_log_importance importance, const char* log
 {
     log_state.log_level = log_level;
     if (log_file) {
-        int fd = open(log_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        i32 fd = open(log_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         dup2(fd, STDOUT_FILENO);
         dup2(fd, STDERR_FILENO);
         close(fd);

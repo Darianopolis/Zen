@@ -14,7 +14,7 @@ void border_manager_create(Server* server)
 
     rules["zenity"] = {{18, 18, 18, 18}};
 
-    rules["firefox"] = EnumMap<int, BorderCorners>::make({
+    rules["firefox"] = EnumMap<i32, BorderCorners>::make({
         {BorderCorners::TopLeft,  5},
         {BorderCorners::TopRight, 5},
         {BorderCorners::BottomLeft,  BorderUnset},
@@ -23,38 +23,38 @@ void border_manager_create(Server* server)
 }
 
 static
-void borders_update_corner_buffer(Server* server, int radius, fvec4 color, BorderManager::CornerBuffer& cb)
+void borders_update_corner_buffer(Server* server, i32 radius, fvec4 color, BorderManager::CornerBuffer& cb)
 {
     auto* m = server->border_manager;
 
     if (cb.buffer && color == cb.color && m->border_width == cb.width) return;
 
-    struct Pixel { uint8_t r, g, b, a; };
-    int border_width = m->border_width;
+    struct Pixel { u8 r, g, b, a; };
+    i32 border_width = m->border_width;
 
-    int width = radius * 2;
-    int height = radius * 2;
+    i32 width = radius * 2;
+    i32 height = radius * 2;
 
     std::vector<Pixel> data;
     data.resize(width * height);
 
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int i = x + y * width;
+    for (i32 y = 0; y < height; ++y) {
+        for (i32 x = 0; x < width; ++x) {
+            i32 i = x + y * width;
 
             vec2 pos = vec2(x, y) + vec2(0.5);
 
-            double dist = glm::length(pos - vec2(radius, radius));
-            double dist_from_border_center = std::abs(dist - (radius - (border_width / 2.0)));
-            double alpha = 1.0 - std::clamp((dist_from_border_center - (border_width / 2.0)) + 0.5, 0.0, 1.0);
+            f64 dist = glm::length(pos - vec2(radius, radius));
+            f64 dist_from_border_center = std::abs(dist - (radius - (border_width / 2.0)));
+            f64 alpha = 1.0 - std::clamp((dist_from_border_center - (border_width / 2.0)) + 0.5, 0.0, 1.0);
 
             alpha *= color.a;
 
             data[i] = Pixel {
-                uint8_t(color.r * alpha * 255.0),
-                uint8_t(color.g * alpha * 255.0),
-                uint8_t(color.b * alpha * 255.0),
-                uint8_t(          alpha * 255.0),
+                u8(color.r * alpha * 255.0),
+                u8(color.g * alpha * 255.0),
+                u8(color.b * alpha * 255.0),
+                u8(          alpha * 255.0),
             };
         }
     }
@@ -73,7 +73,7 @@ void borders_update_corner_buffer(Server* server, int radius, fvec4 color, Borde
 }
 
 static
-const BorderManager::CornerBuffers& borders_get_corner_buffers(Server* server, int radius)
+const BorderManager::CornerBuffers& borders_get_corner_buffers(Server* server, i32 radius)
 {
     auto* m = server->border_manager;
 
@@ -161,7 +161,7 @@ void borders_update(Surface* surface)
         color.a *= toplevel_get_opacity(toplevel);
     }
 
-    int border_width = m->border_width;
+    i32 border_width = m->border_width;
 
     EnumMap<wlr_box, BorderEdges> positions;
     positions[BorderEdges::Left]   = { -border_width, 0,  border_width, geom.height  };
@@ -250,10 +250,10 @@ void borders_update(Surface* surface)
             wlr_scene_buffer_set_buffer(    c, cb.buffer);
             wlr_scene_buffer_set_dest_size( c, outer_radius, outer_radius);
             wlr_scene_buffer_set_source_box(c, ptr(wlr_fbox {
-                .x = float(src[corner].x),
-                .y = float(src[corner].y),
-                .width  = float(outer_radius),
-                .height = float(outer_radius),
+                .x = f32(src[corner].x),
+                .y = f32(src[corner].y),
+                .width  = f32(outer_radius),
+                .height = f32(outer_radius),
             }));
         } else {
             wlr_scene_node_set_enabled(&c->node, false);

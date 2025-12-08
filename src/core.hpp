@@ -6,21 +6,21 @@
 
 // -----------------------------------------------------------------------------
 
-static constexpr uint32_t cursor_size = 24;
+static constexpr u32 cursor_size = 24;
 
 struct LayoutConfig
 {
     fvec4 background_color = { 0, 0, 0, 1 };
 
-    float focus_cycle_unselected_opacity = 0.0;
+    f32 focus_cycle_unselected_opacity = 0.0;
 
-    uint32_t zone_horizontal_zones = 2;
-    uint32_t zone_vertical_zones = 2;
+    u32 zone_horizontal_zones = 2;
+    u32 zone_vertical_zones = 2;
     ivec2 zone_selection_leeway = { 1, 1 };
     struct {
-        int left = 1, top = 1, right = 1, bottom = 1;
+        i32 left = 1, top = 1, right = 1, bottom = 1;
     } zone_external_padding;
-    int zone_internal_padding = 1;
+    i32 zone_internal_padding = 1;
 
     fvec4 zone_color_inital = { 1, 0, 1, 0.3 };
     fvec4 zone_color_select = { 1, 0, 1, 0.6 };
@@ -31,26 +31,26 @@ struct LayoutConfig
 static constexpr bool keyboard_default_numlock_state = true;
 
 static constexpr const char* keyboard_layout       = "gb";
-static constexpr int32_t     keyboard_repeat_rate  =  25;
-static constexpr int32_t     keyboard_repeat_delay = 600;
+static constexpr i32         keyboard_repeat_rate  =  25;
+static constexpr i32         keyboard_repeat_delay = 600;
 
 struct PointerAccelConfig
 {
-    double offset;
-    double rate;
-    double multiplier;
+    f64 offset;
+    f64 rate;
+    f64 multiplier;
 };
 
 static constexpr PointerAccelConfig pointer_accel     = { 2.0, 0.05, 0.3 };
 static constexpr PointerAccelConfig pointer_rel_accel = { 2.0, 0.05, 1.0 };
 
-static constexpr double pointer_abs_to_rel_speed_multiplier = 5;
+static constexpr f64 pointer_abs_to_rel_speed_multiplier = 5;
 
-static constexpr uint32_t pointer_modifier_button = BTN_SIDE;
+static constexpr u32 pointer_modifier_button = BTN_SIDE;
 
 // -----------------------------------------------------------------------------
 
-enum class Modifiers : uint32_t
+enum class Modifiers : u32
 {
     Mod   = 1 << 0,
     Super = 1 << 1,
@@ -62,7 +62,7 @@ DECORATE_FLAG_ENUM(Modifiers)
 
 // -----------------------------------------------------------------------------
 
-enum class MouseButton : uint32_t
+enum class MouseButton : u32
 {
     Left    = BTN_LEFT,
     Right   = BTN_RIGHT,
@@ -74,7 +74,7 @@ enum class MouseButton : uint32_t
     Task    = BTN_TASK,
 };
 
-enum class ScrollDirection : uint32_t
+enum class ScrollDirection : u32
 {
     Up,
     Down,
@@ -100,7 +100,7 @@ struct CommandBind
     std::function<void()> function;
 };
 
-enum class BorderEdges : uint32_t
+enum class BorderEdges : u32
 {
     Left,
     Right,
@@ -108,7 +108,7 @@ enum class BorderEdges : uint32_t
     Bottom,
 };
 
-enum class BorderCorners : uint32_t
+enum class BorderCorners : u32
 {
     TopLeft,
     TopRight,
@@ -116,7 +116,7 @@ enum class BorderCorners : uint32_t
     BottomRight,
 };
 
-enum class Strata : uint32_t
+enum class Strata : u32
 {
     background,
     floating,
@@ -135,7 +135,7 @@ constexpr Strata strata_from_wlr(zwlr_layer_shell_v1_layer layer)
     }
 }
 
-enum class InteractionMode : uint32_t
+enum class InteractionMode : u32
 {
     passthrough,
     move,
@@ -144,7 +144,7 @@ enum class InteractionMode : uint32_t
     focus_cycle,
 };
 
-enum class BoundsType : uint32_t
+enum class BoundsType : u32
 {
     normal,
     fullscreen,
@@ -227,7 +227,7 @@ struct Server
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
         bool            debug_visual_enabled = false;
         wlr_scene_rect* debug_visual;
-        uint32_t        debug_visual_half_extent;
+        u32        debug_visual_half_extent;
         bool            cursor_is_visible;
         bool            debug_accel_rate = false;
     } pointer;
@@ -239,14 +239,14 @@ struct Server
         Weak<Toplevel> grabbed_toplevel;
         vec2 grab;
         wlr_box grab_bounds;
-        uint32_t resize_edges;
+        u32 resize_edges;
     } movesize;
 
     struct {
         Weak<Toplevel> current;
     } focus_cycle;
 
-    uint32_t main_modifier;
+    u32 main_modifier;
     xkb_keysym_t main_modifier_keysym_left;
     xkb_keysym_t main_modifier_keysym_right;
 
@@ -266,13 +266,13 @@ struct Server
     } zone;
 };
 
-static constexpr int BorderSharp = -1;
-static constexpr int BorderUnset = -2;
+static constexpr i32 BorderSharp = -1;
+static constexpr i32 BorderUnset = -2;
 
 struct BorderManager
 {
-    int border_width = 1;
-    int border_radius = BorderSharp;
+    i32 border_width = 1;
+    i32 border_radius = BorderSharp;
 
     fvec4 border_color_unfocused = { 1, 0, 1, 0.3 };
     fvec4 border_color_focused   = { 1, 0, 1, 1.0 };
@@ -280,7 +280,7 @@ struct BorderManager
     struct CornerBuffer
     {
         fvec4 color;
-        int width;
+        i32 width;
         wlr_buffer* buffer;
     };
 
@@ -290,8 +290,8 @@ struct BorderManager
         CornerBuffer unfocused;
     };
 
-    ankerl::unordered_dense::map<int, CornerBuffers> corner_cache;
-    ankerl::unordered_dense::map<std::string_view, EnumMap<int, BorderCorners>> corner_radius_rules;
+    ankerl::unordered_dense::map<i32, CornerBuffers> corner_cache;
+    ankerl::unordered_dense::map<std::string_view, EnumMap<i32, BorderCorners>> corner_radius_rules;
 };
 
 struct Border
@@ -299,7 +299,7 @@ struct Border
     bool show = false;
     EnumMap<wlr_scene_rect*, BorderEdges> edges;
     EnumMap<wlr_scene_buffer*, BorderCorners> corners;
-    EnumMap<int, BorderCorners> radius;
+    EnumMap<i32, BorderCorners> radius;
 };
 
 struct MessageConnection
@@ -307,10 +307,10 @@ struct MessageConnection
     Server* server;
     wl_event_source* source;
     std::filesystem::path cwd;
-    int fd;
+    i32 fd;
 };
 
-enum class MessageType : uint32_t
+enum class MessageType : u32
 {
     Argument = 1,
     StdOut   = 2,
@@ -320,7 +320,7 @@ enum class MessageType : uint32_t
 struct MessageHeader
 {
     MessageType type;
-    uint32_t    size;
+    u32    size;
 };
 
 #define GET_WL_CLIENT_CMDLINE 0
@@ -392,7 +392,7 @@ struct Output
 
 // -----------------------------------------------------------------------------
 
-enum class SurfaceRole : uint32_t
+enum class SurfaceRole : u32
 {
     invalid,
     toplevel,
@@ -416,13 +416,13 @@ struct Surface : WeaklyReferenceable
 
     std::vector<Output*> current_outputs;
 
-    float last_scale = 0.f;
+    f32 last_scale = 0.f;
 
     struct {
         bool surface_set;
         Weak<CursorSurface> surface;
-        int32_t hotspot_x;
-        int32_t hotspot_y;
+        i32 hotspot_x;
+        i32 hotspot_y;
     } cursor;
 
     static Surface* from_data(void* data)
@@ -480,12 +480,12 @@ struct Toplevel : Surface
         bool enable_throttle_resize = true;
 
         bool any_pending = false;
-        int pending_width;
-        int pending_height;
+        i32 pending_width;
+        i32 pending_height;
         BoundsType pending_type;
 
-        uint32_t last_resize_serial = 0;
-        uint32_t last_commited_serial = 0;
+        u32 last_resize_serial = 0;
+        u32 last_commited_serial = 0;
     } resize;
 
     wlr_foreign_toplevel_handle_v1* foreign_handle;
@@ -549,9 +549,9 @@ bool                bind_trigger(    Server*, Bind);
 void ipc_server_init(   Server*);
 void ipc_server_cleanup(Server*);
 
-int ipc_client_run(std::span<const std::string_view> args);
+i32 ipc_client_run(std::span<const std::string_view> args);
 
-void ipc_send_string(int fd, MessageType type, std::string_view str);
+void ipc_send_string(i32 fd, MessageType type, std::string_view str);
 
 // ---- Process ----------------------------------------------------------------
 
@@ -629,10 +629,10 @@ bool cursor_surface_is_visible(CursorSurface*);
 
 vec2 get_cursor_pos(Server*);
 
-uint32_t get_num_pointer_buttons_down(Server*);
+u32 get_num_pointer_buttons_down(Server*);
 
 void process_cursor_resize(Server*);
-void process_cursor_motion(Server*, uint32_t time_msecs, wlr_input_device*, vec2 delta, vec2 rel, vec2 rel_unaccel);
+void process_cursor_motion(Server*, u32 time_msecs, wlr_input_device*, vec2 delta, vec2 rel, vec2 rel_unaccel);
 
 void seat_request_set_cursor(  wl_listener*, void*);
 void seat_pointer_focus_change(wl_listener*, void*);
@@ -729,7 +729,7 @@ void layer_surface_new(    wl_listener*, void*);
 
 void toplevel_update_opacity(   Toplevel*);
 
-float toplevel_get_opacity(Toplevel*);
+f32 toplevel_get_opacity(Toplevel*);
 
 void toplevel_set_bounds(       Toplevel*, wlr_box, BoundsType type, wlr_edges locked_edges = wlr_edges(WLR_EDGE_LEFT | WLR_EDGE_TOP));
 void toplevel_set_activated(    Toplevel*, bool active);

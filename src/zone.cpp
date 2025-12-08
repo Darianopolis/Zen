@@ -61,16 +61,16 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
     return false;
 }
 
-void get_zone_axis(int start, int total_length, int inner_pad, int num_zones, int i, int* offset, int* size)
+void get_zone_axis(i32 start, i32 total_length, i32 inner_pad, i32 num_zones, i32 i, i32* offset, i32* size)
 {
-    int usable_length = total_length - (inner_pad * (num_zones - 1));
-    double ideal_zone_size = double(usable_length) / num_zones;
+    i32 usable_length = total_length - (inner_pad * (num_zones - 1));
+    f64 ideal_zone_size = f64(usable_length) / num_zones;
     *offset  = std::round(ideal_zone_size *  i     );
     *size    = std::round(ideal_zone_size * (i + 1)) - *offset;
     *offset += start + inner_pad * i;
 }
 
-wlr_box get_zone_box(Server* server, wlr_box workarea, int zone_x, int zone_y)
+wlr_box get_zone_box(Server* server, wlr_box workarea, i32 zone_x, i32 zone_y)
 {
     auto& c = server->config.layout;
 
@@ -91,8 +91,8 @@ void zone_process_cursor_motion(Server* server)
 
     auto& c = server->config.layout;
 
-    for (uint32_t zone_x = 0; zone_x < c.zone_horizontal_zones; ++zone_x) {
-        for (uint32_t zone_y = 0; zone_y < c.zone_vertical_zones; ++zone_y) {
+    for (u32 zone_x = 0; zone_x < c.zone_horizontal_zones; ++zone_x) {
+        for (u32 zone_y = 0; zone_y < c.zone_vertical_zones; ++zone_y) {
             wlr_box rect = get_zone_box(server, workarea, zone_x, zone_y);
             wlr_box check_rect {
                 .x      = rect.x      - c.zone_selection_leeway.x,

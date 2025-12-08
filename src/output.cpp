@@ -35,7 +35,7 @@ Output* get_output_at(Server* server, vec2 point)
 
 Output* get_nearest_output_to_point(Server* server, vec2 point)
 {
-    double closest_distance = INFINITY;
+    f64 closest_distance = INFINITY;
     wlr_output* closest = nullptr;
 
     wlr_output_layout_output* layout_output;
@@ -45,7 +45,7 @@ Output* get_nearest_output_to_point(Server* server, vec2 point)
         vec2 on_output;
         wlr_box_closest_point(&box, point.x, point.y, &on_output.x, &on_output.y);
 
-        double distance = glm::distance(point, on_output);
+        f64 distance = glm::distance(point, on_output);
         if (distance < closest_distance) {
             closest_distance = distance;
             closest = layout_output->output;

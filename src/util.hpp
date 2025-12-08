@@ -89,7 +89,7 @@ constexpr vec2 round_to_zero(vec2 v)         { return copysign(glm::floor(glm::a
 
 // -----------------------------------------------------------------------------
 
-constexpr const float* color_to_wlroots(fvec4 v, fvec4&& temp = {})
+constexpr const f32* color_to_wlroots(fvec4 v, fvec4&& temp = {})
 {
     return glm::value_ptr(temp = {glm::fvec3{v} * v.w, v.w});
 }
@@ -111,7 +111,7 @@ wlr_box box_outer(wlr_box a, wlr_box b)
 constexpr
 wlr_box constrain_box(wlr_box box, wlr_box bounds)
 {
-    static constexpr auto constrain_axis = [](int start, int length, int& origin, int& extent) {
+    static constexpr auto constrain_axis = [](i32 start, i32 length, i32& origin, i32& extent) {
         if (extent > length) {
             origin = start;
             extent = length;
@@ -274,7 +274,7 @@ auto iterate(std::span<T> view, bool reverse = false)
     struct Iterator
     {
         std::span<T> view;
-        int64_t cur, end, step;
+        i64 cur, end, step;
 
         bool operator==(std::default_sentinel_t) const { return cur == end; }
         void operator++() { cur += step; }
@@ -288,8 +288,8 @@ auto iterate(std::span<T> view, bool reverse = false)
 
         Iterator begin() {
             return backward
-                ? Iterator { view, int64_t(view.size()) - 1, -1, -1 }
-                : Iterator { view, 0, int64_t(view.size()), 1 };
+                ? Iterator { view, i64(view.size()) - 1, -1, -1 }
+                : Iterator { view, 0, i64(view.size()), 1 };
         }
 
         std::default_sentinel_t end() { return {}; }
@@ -303,7 +303,7 @@ auto iterate(std::span<T> view, bool reverse = false)
 struct CommandParser
 {
     std::span<const std::string_view> args;
-    uint32_t index;
+    u32 index;
 
     operator bool() const { return index < args.size(); }
 
@@ -335,17 +335,17 @@ struct CommandParser
         return value;
     }
 
-    std::optional<int> get_int()    { return get_from_chars<int>(); }
-    std::optional<int> get_double() { return get_from_chars<double>(); }
+    std::optional<i32> get_i32() { return get_from_chars<i32>(); }
+    std::optional<i32> get_f64() { return get_from_chars<f64>(); }
 };
 
 // -----------------------------------------------------------------------------
 
-std::string duration_to_string(std::chrono::duration<double, std::nano> dur);
+std::string duration_to_string(std::chrono::duration<f64, std::nano> dur);
 
 // -----------------------------------------------------------------------------
 
-wlr_buffer* buffer_from_pixels(wlr_allocator*, wlr_renderer*, uint32_t format, uint32_t stride, uint32_t width, uint32_t height, const void* data);
+wlr_buffer* buffer_from_pixels(wlr_allocator*, wlr_renderer*, u32 format, u32 stride, u32 width, u32 height, const void* data);
 
 // -----------------------------------------------------------------------------
 

@@ -48,21 +48,21 @@ vec2 constrain_to_region(const pixman_region32_t* region, vec2 p1, vec2 p2, bool
         return constrained;
     }
 
-    int nrects;
+    i32 nrects;
     const pixman_box32_t* rects = pixman_region32_rectangles(region, &nrects);
 
-    double best_dist = INFINITY;
+    f64 best_dist = INFINITY;
     vec2 best = p2;
 
-    for (int i = 0; i < nrects; ++i) {
+    for (i32 i = 0; i < nrects; ++i) {
         pixman_box32_t rect = rects[i];
 
         vec2 inside = vec2(
-            std::clamp(p2.x, double(rect.x1), double(std::max(rect.x1, rect.x2 - 1))),
-            std::clamp(p2.y, double(rect.y1), double(std::max(rect.y1, rect.y2 - 1)))
+            std::clamp(p2.x, f64(rect.x1), f64(std::max(rect.x1, rect.x2 - 1))),
+            std::clamp(p2.y, f64(rect.y1), f64(std::max(rect.y1, rect.y2 - 1)))
         );
 
-        double dist = glm::distance(p2, inside);
+        f64 dist = glm::distance(p2, inside);
         if (dist < best_dist) {
             best = inside;
             best_dist = dist;
@@ -74,7 +74,7 @@ vec2 constrain_to_region(const pixman_region32_t* region, vec2 p1, vec2 p2, bool
 
 // -----------------------------------------------------------------------------
 
-wlr_buffer* buffer_from_pixels(wlr_allocator* allocator, wlr_renderer* renderer, uint32_t upload_format, uint32_t stride, uint32_t width, uint32_t height, const void* data)
+wlr_buffer* buffer_from_pixels(wlr_allocator* allocator, wlr_renderer* renderer, u32 upload_format, u32 stride, u32 width, u32 height, const void* data)
 {
     auto* upload_texture = wlr_texture_from_pixels(renderer, upload_format, stride, width, height, data);
     defer { wlr_texture_destroy(upload_texture); };
@@ -109,23 +109,23 @@ wlr_buffer* buffer_from_pixels(wlr_allocator* allocator, wlr_renderer* renderer,
 
 wlr_fbox rect_fill_compute_source_box(ivec2 source_extent, ivec2 target_extent)
 {
-    double source_aspect = double(source_extent.x) / source_extent.y;
-    double dest_aspect = double(target_extent.x) / target_extent.y;
+    f64 source_aspect = f64(source_extent.x) / source_extent.y;
+    f64 dest_aspect = f64(target_extent.x) / target_extent.y;
 
     if (source_aspect >= dest_aspect) {
         // Horizontal will be clipped
 
-        double new_horizontal = source_extent.y * dest_aspect;
-        double offset = (source_extent.x - new_horizontal) / 2;
+        f64 new_horizontal = source_extent.y * dest_aspect;
+        f64 offset = (source_extent.x - new_horizontal) / 2;
 
-        return { offset, 0, new_horizontal, double(source_extent.y) };
+        return { offset, 0, new_horizontal, f64(source_extent.y) };
 
     } else {
         // Vertical will be clipped
 
-        double new_vertical = source_extent.x / dest_aspect;
-        double offset = (source_extent.y - new_vertical) / 2;
+        f64 new_vertical = source_extent.x / dest_aspect;
+        f64 offset = (source_extent.y - new_vertical) / 2;
 
-        return { 0, offset, double(source_extent.x), new_vertical };
+        return { 0, offset, f64(source_extent.x), new_vertical };
     }
 }

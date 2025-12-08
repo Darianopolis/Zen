@@ -7,9 +7,9 @@ std::filesystem::path find_on_path(std::string_view in)
 {
     std::string_view path = getenv("PATH");
 
-    size_t b = 0;
+    usz b = 0;
     for (;;) {
-        size_t n = path.find_first_of(":", b);
+        usz n = path.find_first_of(":", b);
         auto part = path.substr(b, n - b);
 
         auto test_path = std::filesystem::path(part) / in;
@@ -65,8 +65,8 @@ void spawn(Server* server, std::string_view file, std::span<const std::string_vi
         }
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
-        int _ = openat(STDOUT_FILENO, "/dev/null", O_RDWR);
-        int _ = openat(STDERR_FILENO, "/dev/null", O_RDWR);
+        i32 _ = openat(STDOUT_FILENO, "/dev/null", O_RDWR);
+        i32 _ = openat(STDERR_FILENO, "/dev/null", O_RDWR);
         execv(path.c_str(), argv_cstr.data());
         _Exit(0);
     }

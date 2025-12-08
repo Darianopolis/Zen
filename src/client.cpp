@@ -39,7 +39,7 @@ void client_new(wl_listener* listener, void* data)
 
     {
         char buf[8192] = {};
-        int count = readlink(std::format("/proc/{}/exe", client->pid).c_str(), buf, sizeof(buf));
+        i32 count = readlink(std::format("/proc/{}/exe", client->pid).c_str(), buf, sizeof(buf));
         if (count >= 0) {
             client->path = std::string_view(buf, count);
         }

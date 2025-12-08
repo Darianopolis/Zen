@@ -74,11 +74,11 @@ fvec4 script_object_to_color(sol::object obj)
     if (obj.is<sol::table>()) {
 
         sol::table table = obj.as<sol::table>();
-        for (int i = 0; i < 4; ++i) {
-            if (table[i + 1].is<float>()) {
-                color[i] = table[i + 1].get<float>();
+        for (i32 i = 0; i < 4; ++i) {
+            if (table[i + 1].is<f32>()) {
+                color[i] = table[i + 1].get<f32>();
             } else {
-                script_error("Error parsing color table, expected float at [{}] got: {}",
+                script_error("Error parsing color table, expected f32 at [{}] got: {}",
                     i + 1, magic_enum::enum_name(table[i + 1].get_type()));
             }
         }
@@ -93,7 +93,7 @@ fvec4 script_object_to_color(sol::object obj)
             script_error("Error parsing hex color: Expected 6 or 8 hex digits, got: {}", s.size());
         }
 
-        auto hex_to_digit = [](char c) -> int {
+        auto hex_to_digit = [](char c) -> i32 {
             if (c >= 'a' && c <= 'f') return 10 + c - 'a';
             if (c >= 'A' && c <= 'F') return 10 + c - 'A';
             if (c >= '0' && c <= '9') return c - '0';
@@ -159,7 +159,7 @@ void script_env_set_globals(Server* server)
     {
         MetatableBuilder focus_cycle(lua, config["focus_cycle"]);
 
-        focus_cycle.add_property("opacity", [server](float opacity) {
+        focus_cycle.add_property("opacity", [server](f32 opacity) {
             server->config.layout.focus_cycle_unselected_opacity = opacity;
             log_info("Setting focus_cycle.opacity = {}", opacity);
             scene_reconfigure(server);
@@ -189,13 +189,13 @@ void script_env_set_globals(Server* server)
         {
             MetatableBuilder border(lua, config["border"]);
 
-            border.add_property("width", [server](int width) {
+            border.add_property("width", [server](i32 width) {
                 log_info("Setting border width: {}", width);
                 server->border_manager->border_width = width;
                 scene_reconfigure(server);
             }, [server] { return server->border_manager->border_width; });
 
-            border.add_property("radius", [server](int radius) {
+            border.add_property("radius", [server](i32 radius) {
                 log_info("Setting border radius: {}", radius);
                 server->border_manager->border_radius = radius;
                 scene_reconfigure(server);
@@ -226,12 +226,12 @@ void script_env_set_globals(Server* server)
             {
                 MetatableBuilder leeway(lua, grid.table["leeway"]);
 
-                leeway.add_property("horizontal", [server](int amount) {
+                leeway.add_property("horizontal", [server](i32 amount) {
                     log_info("Setting grid.leeway.horizontal = {}", amount);
                     server->config.layout.zone_selection_leeway.x = amount;
                 }, [server] { return server->config.layout.zone_selection_leeway.x; });
 
-                leeway.add_property("vertical", [server](int amount) {
+                leeway.add_property("vertical", [server](i32 amount) {
                     log_info("Setting grid.leeway.vertical = {}", amount);
                     server->config.layout.zone_selection_leeway.y = amount;
                 }, [server] { return server->config.layout.zone_selection_leeway.y; });
@@ -251,12 +251,12 @@ void script_env_set_globals(Server* server)
                 }, [] { return sol::nil; /* TODO */ });
             }
 
-            grid.add_property("width", [server](int width) {
+            grid.add_property("width", [server](i32 width) {
                 log_info("Setting grid.width = {}", width);
                 server->config.layout.zone_horizontal_zones = width;
             }, [server] { return server->config.layout.zone_horizontal_zones; });
 
-            grid.add_property("height", [server](int height) {
+            grid.add_property("height", [server](i32 height) {
                 log_info("Setting grid.height = {}", height);
                 server->config.layout.zone_vertical_zones = height;
             }, [server] { return server->config.layout.zone_vertical_zones; });
@@ -264,14 +264,14 @@ void script_env_set_globals(Server* server)
             {
                 MetatableBuilder padding(lua, grid.table["pad"]);
 
-                padding.add_property("inner", [server](uint32_t size) {
+                padding.add_property("inner", [server](u32 size) {
                     log_info("Setting grid.pad.inner = {}", size);
                     server->config.layout.zone_internal_padding = size;
                     scene_reconfigure(server);
                 }, [server] { return server->config.layout.zone_internal_padding; });
 
 #define DIRECTIONAL_PADDING(Name) \
-                    padding.add_property(#Name, [server](uint32_t size) { \
+                    padding.add_property(#Name, [server](u32 size) { \
                         log_info("Setting grid.pad."#Name" = {}", size); \
                         server->config.layout.zone_external_padding.Name = size; \
                         scene_reconfigure(server); \

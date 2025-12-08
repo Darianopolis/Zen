@@ -13,13 +13,13 @@ namespace {
     void watchdog_dump(std::chrono::steady_clock::duration dur)
     {
         try {
-            int id;
+            i32 id;
             std::filesystem::path path;
             for (id = 1; id <= 99; ++id) {
                 path = std::filesystem::path(std::format(PROGRAM_NAME "-watchdog-crash-{}.dump", id));
                 if (!std::filesystem::exists(path)) break;
             }
-            int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            i32 fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
             dup2(fd, STDOUT_FILENO);
             dup2(fd, STDERR_FILENO);
             close(fd);

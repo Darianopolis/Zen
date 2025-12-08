@@ -2,7 +2,7 @@
 
 #include "pch.hpp"
 
-enum class LogLevel : uint32_t
+enum class LogLevel : u32
 {
     trace,
     debug,
