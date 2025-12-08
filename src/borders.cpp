@@ -204,7 +204,7 @@ void borders_update(Surface* surface)
     }
 
     if (br != BorderSharp) {
-        positions[BorderEdges::Right].height -= br;\
+        positions[BorderEdges::Right].height -= br;
         positions[BorderEdges::Bottom].width -= br;
     } else {
         positions[BorderEdges::Right].height += border_width;
@@ -212,7 +212,7 @@ void borders_update(Surface* surface)
 
     for (BorderEdges edge : surface->border.edges.enum_values) {
         auto* e = surface->border.edges[edge];
-        if (show) {
+        if (show && positions[edge].width > 0 && positions[edge].height > 0) {
             wlr_scene_node_set_enabled( &e->node, true);
             wlr_scene_node_set_position(&e->node, positions[edge].x, positions[edge].y);
             wlr_scene_rect_set_size(     e, positions[edge].width, positions[edge].height);
