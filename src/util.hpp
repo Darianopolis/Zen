@@ -295,6 +295,8 @@ struct Weak
     T*     get() { return weak_state ? static_cast<T*>(weak_state->value) : nullptr; }
     void reset() { weak_state = {}; }
 
+    constexpr bool operator==(const Weak&) const = default;
+
     template<typename T2>
         requires std::derived_from<std::remove_cvref_t<T>, std::remove_cvref_t<T2>>
     operator Weak<T2>() { return Weak<T2>{weak_state}; }
@@ -393,6 +395,7 @@ std::string duration_to_string(std::chrono::duration<f64, std::nano> dur);
 
 // -----------------------------------------------------------------------------
 
+wlr_buffer* buffer_from_pixels_scaled(wlr_allocator* allocator, wlr_renderer* renderer, u32 upload_format, u32 stride, u32 width, u32 height, const void* data, u32 dst_width, u32 dst_height);
 wlr_buffer* buffer_from_pixels(wlr_allocator*, wlr_renderer*, u32 format, u32 stride, u32 width, u32 height, const void* data);
 
 // -----------------------------------------------------------------------------

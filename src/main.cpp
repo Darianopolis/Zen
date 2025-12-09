@@ -209,7 +209,7 @@ void init(Server* server, const startup_options& options)
     server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, color_to_wlroots(fvec4{}));
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
-    update_cursor_state(server);
+    init_cursor_state(server);
 
     // Zone window management
 

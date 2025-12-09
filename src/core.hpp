@@ -216,6 +216,14 @@ struct Server
     wlr_cursor*           cursor;
     wlr_xcursor_manager*  cursor_manager;
     std::vector<Pointer*> pointers;
+    struct {
+        bool surface_set;
+        Weak<CursorSurface> surface;
+    } cursor_surface;
+    struct {
+        wlr_scene_buffer* scene_buffer;
+        ivec2 hotspot;
+    } fallback_cursor;
 
     wlr_seat* seat;
     std::vector<Keyboard*> keyboards;
@@ -423,13 +431,6 @@ struct Surface : WeaklyReferenceable
 
     f32 last_scale = 0.f;
 
-    struct {
-        bool surface_set;
-        Weak<CursorSurface> surface;
-        i32 hotspot_x;
-        i32 hotspot_y;
-    } cursor;
-
     static Surface* from_data(void* data)
     {
         Surface* surface = static_cast<Surface*>(data);
@@ -634,6 +635,7 @@ void keyboard_handle_destroy(  wl_listener*, void*);
 // ---- Pointer ----------------------------------------------------------------
 
 bool is_cursor_visible(  Server*);
+void init_cursor_state(  Server*);
 void update_cursor_state(Server*);
 
 void cursor_surface_commit( wl_listener*, void*);
