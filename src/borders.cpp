@@ -62,10 +62,10 @@ void borders_update_corner_buffer(Server* server, i32 radius, fvec4 color, Borde
     cb.color = color;
     cb.width = border_width;
 
-    log_warn("Creating new corner buffer with: radius = {}, width = {}, color = {}", radius, border_width, glm::to_string(color));
+    log_debug("Creating new corner buffer with: radius = {}, width = {}, color = {}", radius, border_width, glm::to_string(color));
 
     if (cb.buffer) {
-        log_warn("Destroying old buffer");
+        log_debug("Destroying old buffer");
         wlr_buffer_drop(cb.buffer);
     }
 

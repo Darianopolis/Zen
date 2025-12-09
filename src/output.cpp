@@ -65,6 +65,7 @@ Output* get_output_for_surface(Surface* surface)
 {
     if (surface->role == SurfaceRole::layer_surface) {
         for (Output* output : surface->server->outputs) {
+            if (output->destroyed) continue;
             for (zwlr_layer_shell_v1_layer layer : output->layers.enum_values) {
                 for (LayerSurface* ls : output->layers[layer]) {
                     if (ls == surface) return output;
@@ -110,6 +111,8 @@ void output_request_state(wl_listener* listener, void* data)
 void output_destroy(wl_listener* listener, void*)
 {
     Output* output = listener_userdata<Output*>(listener);
+
+    output->destroyed = true;
 
     log_info("Output [{}] destroyed", output->wlr_output->name);
 
@@ -193,12 +196,12 @@ void output_layout_change(wl_listener* listener, void*)
     for (Output* output : server->outputs) {
         if (auto* layout_output = output->layout_output()) {
             if (!output->scene_output()) {
-                log_warn("Adding output [{}] to scene", output->wlr_output->name);
+                log_debug("Adding output [{}] to scene", output->wlr_output->name);
                 auto scene_output = wlr_scene_output_create(server->scene, output->wlr_output);
                 wlr_scene_output_layout_add_output(server->scene_output_layout, layout_output, scene_output);
             }
         } else if (wlr_scene_output* scene_output = output->scene_output()) {
-            log_warn("Removing output [{}] from scene", output->wlr_output->name);
+            log_debug("Removing output [{}] from scene", output->wlr_output->name);
             wlr_scene_output_destroy(scene_output);
         }
         output_reconfigure(output);

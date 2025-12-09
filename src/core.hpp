@@ -391,6 +391,8 @@ struct Output
     EnumMap<std::vector<LayerSurface*>, zwlr_layer_shell_v1_layer> layers;
 
     Weak<Surface> topmost;
+
+    bool destroyed = false;
 };
 
 // -----------------------------------------------------------------------------
