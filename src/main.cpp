@@ -257,6 +257,8 @@ void run(Server* server, const startup_options& options)
 
     log_info("Running Wayland compositor on WAYLAND_DISPLAY={}", socket);
 
+    dbus_init(server);
+
     watchdog_init(server);
 
     wl_display_run(server->display);
@@ -266,6 +268,8 @@ void run(Server* server, const startup_options& options)
 
 void cleanup(Server* server)
 {
+    dbus_cleanup(server);
+
     border_manager_destroy(server);
     background_destroy(server);
 

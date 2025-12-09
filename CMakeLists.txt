@@ -57,8 +57,14 @@ target_include_directories(luajit INTERFACE ${VENDOR_DIR}/luajit/src)
 # ------------------------------------------------------------------------------
 
 add_executable(            ${PROJECT_NAME})
+if(USE_ASAN)
+    target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
+    target_link_libraries(${PROJECT_NAME} PUBLIC asan)
+endif()
 target_precompile_headers( ${PROJECT_NAME} PUBLIC src/pch.hpp)
 target_compile_definitions(${PROJECT_NAME} PUBLIC "PROGRAM_NAME=\"${PROJECT_NAME}\"")
+target_compile_definitions(${PROJECT_NAME} PUBLIC "DBUS_NAME=\"darianopolis\"")
+target_compile_definitions(${PROJECT_NAME} PUBLIC "DBUS_TLD=\"com\"")
 target_compile_options(    ${PROJECT_NAME} PUBLIC
     -std=c++26
     -Wall
@@ -72,12 +78,10 @@ target_compile_options(    ${PROJECT_NAME} PUBLIC
     -Wno-gnu-conditional-omitted-operand
     -Wno-zero-length-array
     -Wno-unused-function
+    -Wno-unused-parameter
     -Wimplicit-fallthrough
     -Wshadow
     )
-if(USE_ASAN)
-    target_compile_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
-endif()
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 target_sources(            ${PROJECT_NAME} PUBLIC
     src/surface.cpp
@@ -96,10 +100,8 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/watchdog.cpp
     src/background.cpp
     src/borders.cpp
+    src/dbus.cpp
     )
-if(USE_ASAN)
-    target_link_libraries(${PROJECT_NAME} PUBLIC asan)
-endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC
     wayland-server
     wayland-header

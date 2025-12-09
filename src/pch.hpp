@@ -47,4 +47,6 @@
 
 #include <ankerl/unordered_dense.h>
 
+#include <systemd/sd-bus.h>
+
 #include "types.hpp"

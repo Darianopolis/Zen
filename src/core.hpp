@@ -175,6 +175,9 @@ struct Server
         std::function<void(Output*, bool)> on_output_add_or_remove = [](Output*, bool){};
     } script;
 
+    sd_bus* dbus;
+    wl_event_source* dbus_source;
+
     wl_display* display;
     struct wlr_session* wlr_session;
     wlr_backend* backend;
@@ -543,6 +546,11 @@ std::optional<Bind> bind_from_string(Server*, std::string_view bind_string);
 void                bind_erase(      Server*, Bind);
 void                bind_register(   Server*, const CommandBind&);
 bool                bind_trigger(    Server*, Bind);
+
+// ---- D-Bus ------------------------------------------------------------------
+
+void dbus_cleanup(Server*);
+void dbus_init(Server*);
 
 // ---- IPC --------------------------------------------------------------------
 

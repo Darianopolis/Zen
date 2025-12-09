@@ -5,6 +5,54 @@
 
 // -----------------------------------------------------------------------------
 
+inline
+void log_unix_error(std::string_view message, i32 err = 0)
+{
+    err = err ?: errno;
+
+    if (message.empty()) { log_error("({}) {}",              err, strerror(err)); }
+    else                 { log_error("{}: ({}) {}", message, err, strerror(err)); }
+}
+
+enum class unix_error_behavior : u32
+{
+    ret_null,
+    ret_neg1,
+    ret_neg_errno,
+    check_errno,
+};
+
+template<unix_error_behavior B>
+struct unix_check_helper
+{
+    template<typename T>
+    static constexpr
+    T check(std::source_location loc, T res, auto... allowed)
+    {
+        bool error_occured = false;
+        i32 error_code = 0;
+
+        if constexpr (B == unix_error_behavior::ret_null)     if (!res)      { error_occured = true; error_code = errno; }
+        if constexpr (B == unix_error_behavior::ret_neg1)     if (res == -1) { error_occured = true; error_code = errno; }
+        if constexpr (B == unix_error_behavior::ret_neg_errno) if (res < 0)   { error_occured = true; error_code = -res;  }
+        if constexpr (B == unix_error_behavior::check_errno)  if (errno)     { error_occured = true; error_code = errno; }
+
+        if (!error_occured || (... || (error_code == allowed))) return res;
+
+        log_unix_error(std::format("unix_check {}@{}", loc.file_name(), loc.line()), error_code);
+
+        return res;
+    }
+};
+
+#define unix_check_null(func, ...)                       unix_check_helper<unix_error_behavior::ret_null     >::check(std::source_location::current(), (func) __VA_OPT__(,) __VA_ARGS__)
+#define unix_check_n1(func, ...)                         unix_check_helper<unix_error_behavior::ret_neg1     >::check(std::source_location::current(), (func) __VA_OPT__(,) __VA_ARGS__)
+#define unix_check_ne(func, ...)                         unix_check_helper<unix_error_behavior::ret_neg_errno>::check(std::source_location::current(), (func) __VA_OPT__(,) __VA_ARGS__)
+#define unix_check_ce(func, ...) [&] { errno = 0; return unix_check_helper<unix_error_behavior::check_errno  >::check(std::source_location::current(), (func) __VA_OPT__(,) __VA_ARGS__); }()
+
+
+// -----------------------------------------------------------------------------
+
 template<typename Fn>
 struct Defer
 {
