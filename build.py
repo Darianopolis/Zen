@@ -13,6 +13,7 @@ parser.add_argument("-C", "--configure", action="store_true", help="Force config
 parser.add_argument("-B", "--build",     action="store_true", help="Build")
 parser.add_argument("-R", "--release",   action="store_true", help="Release")
 parser.add_argument("-I", "--install",   action="store_true", help="Install")
+parser.add_argument("--asan", action="store_true", help="Enable Address Sanitizer")
 args = parser.parse_args()
 
 # -----------------------------------------------------------------------------
@@ -231,6 +232,8 @@ if ((args.build or args.install) and not cmake_dir.exists()) or args.configure:
     cmd += [f"-DCMAKE_C_COMPILER={c_compiler}", f"-DCMAKE_CXX_COMPILER={cxx_compiler}", f"-DCMAKE_LINKER_TYPE={linker_type}"]
     cmd += [f"-DCMAKE_BUILD_TYPE={build_type}"]
     cmd += [f"-DPROJECT_NAME={program_name}"]
+    if args.asan:
+        cmd += ["-DUSE_ASAN=1"]
 
     run(cmd)
 
