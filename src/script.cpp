@@ -133,6 +133,12 @@ void script_env_set_globals(Server* server)
         spawn(server, argview.front(), argview);
     });
 
+    lua.set_function("xwayland", [server](const char* requested_socket, sol::protected_function callback) {
+        xwayland_satellite_spawn(server, requested_socket, [callback = std::move(callback)](std::string_view socket) {
+            script_invoke_safe([&] { return callback(socket); });
+        });
+    });
+
     sol::table config = lua["config"].get_or_create<sol::table>();
 
     // Output

@@ -26,7 +26,7 @@ std::filesystem::path find_on_path(std::string_view in)
 
 // -----------------------------------------------------------------------------
 
-void spawn(Server* server, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions, const char* wd)
+pid_t spawn(Server* server, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions, const char* wd)
 {
     std::vector<std::string> argv_str;
     for (std::string_view a : argv) argv_str.emplace_back(a);
@@ -40,21 +40,22 @@ void spawn(Server* server, std::string_view file, std::span<const std::string_vi
     auto path = find_on_path(file);
     if (path.empty()) {
         log_error("  Could not find on path");
-        return;
+        return 0;
     }
 
     log_debug("  Full path: {}", path.c_str());
 
     if (access(path.c_str(), X_OK) != 0) {
         log_error("  File is not executable");
-        return;
+        return 0;
     }
 
     if (!wd) {
         wd = server->session.home_dir.c_str();
     }
 
-    if (fork() == 0) {
+    int pid = fork();
+    if (pid == 0) {
         chdir(wd);
         for (const SpawnEnvAction& env_action : env_actions) {
             if (env_action.value) {
@@ -69,6 +70,8 @@ void spawn(Server* server, std::string_view file, std::span<const std::string_vi
         i32 _ = openat(STDERR_FILENO, "/dev/null", O_RDWR);
         execv(path.c_str(), argv_cstr.data());
         _Exit(0);
+    } else {
+        return pid;
     }
 }
 

@@ -101,6 +101,7 @@ target_sources(            ${PROJECT_NAME} PUBLIC
     src/background.cpp
     src/borders.cpp
     src/dbus.cpp
+    src/xwayland.cpp
     )
 target_link_libraries(${PROJECT_NAME} PUBLIC
     wayland-server

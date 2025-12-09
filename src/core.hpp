@@ -554,6 +554,11 @@ bool                bind_trigger(    Server*, Bind);
 void dbus_cleanup(Server*);
 void dbus_init(Server*);
 
+// ---- XWayland ---------------------------------------------------------------
+
+bool client_is_xwayland_satellite(Client*);
+void xwayland_satellite_spawn(Server*, const char* socket, std::function<void(std::string_view)> callback);
+
 // ---- IPC --------------------------------------------------------------------
 
 void ipc_server_init(   Server*);
@@ -568,7 +573,7 @@ void ipc_send_string(i32 fd, MessageType type, std::string_view str);
 void env_set(Server*, std::string_view name, std::optional<std::string_view> value);
 
 struct SpawnEnvAction { const char* name; const char* value; };
-void spawn(Server*, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {}, const char* wd = nullptr);
+pid_t spawn(Server*, std::string_view file, std::span<const std::string_view> argv, std::span<const SpawnEnvAction> env_actions = {}, const char* wd = nullptr);
 
 // ---- Script -----------------------------------------------------------------
 

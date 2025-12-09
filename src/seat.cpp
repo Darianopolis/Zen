@@ -777,11 +777,15 @@ void binds_toplevel_close_or_kill_client(Toplevel* toplevel)
     if (mods >= Modifiers::Shift) {
         Client* client = Client::from(toplevel->server, wl_resource_get_client(toplevel->wlr_surface->resource));
         if (client) {
-            auto[name, signal] = mods >= Modifiers::Ctrl ? std::make_pair("SIGKILL", SIGKILL) : std::make_pair("SIGTERM", SIGTERM);
+            if (client_is_xwayland_satellite(client)) {
+                log_warn("Toplevel {} is running under xwayland-satellite, can't terminate source client", surface_to_string(toplevel));
+            } else {
+                auto[name, signal] = mods >= Modifiers::Ctrl ? std::make_pair("SIGKILL", SIGKILL) : std::make_pair("SIGTERM", SIGTERM);
 
-            log_warn("Sending {} to {}\n  triggered from closing toplevel: {}", name, client_to_string(client), surface_to_string(toplevel));
-            ::kill(client->pid, signal);
-            return;
+                log_warn("Sending {} to {}\n  triggered from closing toplevel: {}", name, client_to_string(client), surface_to_string(toplevel));
+                ::kill(client->pid, signal);
+                return;
+            }
         }
     }
 

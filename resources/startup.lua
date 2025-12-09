@@ -1,5 +1,10 @@
 source("config.lua")
 
+-- XWayland --------------------------------------------------------------------
+
+xwayland(nil, function(socket) env.DISPLAY     = socket end)
+xwayland(nil, function(socket) env.ALT_DISPLAY = socket end)
+
 -- Clients ---------------------------------------------------------------------
 
 spawn("dunst")

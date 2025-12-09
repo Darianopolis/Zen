@@ -6,7 +6,6 @@ using namespace std::literals;
 
 struct startup_options
 {
-    std::string xwayland_socket;
     std::string log_file;
     std::vector<std::variant<std::filesystem::path, std::string_view>> startup_scripts;
     bool ctrl_mod;
@@ -233,12 +232,7 @@ void run(Server* server, const startup_options& options)
     env_set(server, "WAYLAND_DISPLAY", socket);
     env_set(server, "XDG_CURRENT_DESKTOP", PROGRAM_NAME);
 
-    if (!options.xwayland_socket.empty()) {
-        env_set(server, "DISPLAY", options.xwayland_socket);
-        spawn(server, "xwayland-satellite", {"xwayland-satellite", options.xwayland_socket});
-    } else {
-        env_set(server, "DISPLAY", std::nullopt);
-    }
+    env_set(server, "DISPLAY", std::nullopt);
 
     // Config server
 
@@ -295,14 +289,13 @@ Usage: {0} [options]...
 
   Launch a new instance of the compositor.
 
-    --xwayland [socket]   Launch xwayland-satellite with given socket
     --log-file [path]     Log to file
     --ctrl-mod            Use CTRL instead of ALT in nested mode
      -s        [script]   Either a path to a Lua script file or
                           inline Lua code to be executed on startup.
                           Multiple entries are allowed and will be run in order.
 
-  E.g. {0} --xwayland :0 --log-file {0}.log -s resources/startup.lua
+  E.g. {0} --log-file {0}.log -s resources/startup.lua
 
 Usage: {0} msg [script]...
 
@@ -331,8 +324,6 @@ i32 main(i32 argc, char* argv[])
     while (cmd) {
         if (cmd.match("--log-file")) {
             options.log_file = cmd.get_string();
-        } else if (cmd.match("--xwayland")) {
-            options.xwayland_socket = cmd.get_string();
         } else if (cmd.match("--ctrl-mod")) {
             options.ctrl_mod = true;
         } else if (cmd.match("-s") || cmd.match("--script")) {
