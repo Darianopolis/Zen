@@ -6,7 +6,8 @@
 
 // -----------------------------------------------------------------------------
 
-static constexpr u32 cursor_size = 24;
+static constexpr u32 cursor_theme_size = 24;
+static constexpr u32 cursor_size = 32;
 
 struct LayoutConfig
 {
@@ -238,7 +239,7 @@ struct Server
         wlr_relative_pointer_manager_v1* relative_pointer_manager;
         bool            debug_visual_enabled = false;
         wlr_scene_rect* debug_visual;
-        u32        debug_visual_half_extent;
+        u32             debug_visual_half_extent;
         bool            cursor_is_visible;
         bool            debug_accel_rate = false;
     } pointer;
@@ -743,7 +744,7 @@ void layer_surface_new(    wl_listener*, void*);
 
 // ---- Surface.Toplevel -------------------------------------------------------
 
-void toplevel_update_opacity(   Toplevel*);
+void toplevel_update_opacity(Toplevel*);
 
 f32 toplevel_get_opacity(Toplevel*);
 

@@ -260,13 +260,15 @@ void update_cursor_visual_position(Server* server)
 
 void init_cursor_state(Server* server)
 {
-    wlr_xcursor_manager_load(server->cursor_manager, cursor_size);
-    auto cursor = wlr_xcursor_manager_get_xcursor(server->cursor_manager, "default", cursor_size);
+    wlr_xcursor_manager_load(server->cursor_manager, cursor_theme_size);
+    auto cursor = wlr_xcursor_manager_get_xcursor(server->cursor_manager, "default", cursor_theme_size);
 
     assert(cursor);
     assert(cursor->image_count > 0);
 
     auto i = cursor->images[0];
+
+    log_error("Cursor image size ({}, {}), image count = {}, target = {}", i->width, i->height, cursor->image_count, cursor_size);
 
     auto buffer = buffer_from_pixels_scaled(server->allocator, server->renderer, DRM_FORMAT_ABGR8888, i->width * 4, i->width, i->height, i->buffer, cursor_size, cursor_size);
     server->fallback_cursor.scene_buffer = wlr_scene_buffer_create(&server->scene->tree, buffer);
@@ -719,7 +721,7 @@ void cursor_motion(wl_listener* listener, void* data)
     vec2 accel     = pointer_acceleration_apply(pointer, pointer_accel,     &pointer->accel_remainder,     base);
     vec2 rel_accel = pointer_acceleration_apply(pointer, pointer_rel_accel, &pointer->rel_accel_remainder, base);
 
-    process_cursor_motion(server, event->time_msec, &event->pointer->base, accel, rel_accel, rel_accel);
+    process_cursor_motion(server, event->time_msec, &event->pointer->base, accel, rel_accel, base);
 }
 
 void cursor_motion_absolute(wl_listener* listener, void* data)
@@ -922,6 +924,13 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
         return true;
     }
 
+    if (event.button == BTN_EXTRA) {
+        if (event.state == WL_POINTER_BUTTON_STATE_PRESSED) {
+            surface_try_focus(server, nullptr);
+        }
+        return true;
+    }
+
     // Handle interrupt focus cycle
 
     if (event.state == WL_POINTER_BUTTON_STATE_PRESSED && server->interaction_mode == InteractionMode::focus_cycle) {
@@ -981,10 +990,6 @@ bool input_handle_button(Server* server, const wlr_pointer_button_event& event)
             Surface* prev_focus = get_focused_surface(server);
             if (prev_focus != surface_under_cursor && server->seat->pointer_state.grab == server->seat->pointer_state.default_grab) {
                 surface_try_focus(server, surface_under_cursor);
-                if (!is_cursor_visible(server)) {
-                    log_warn("Button press event suppressed (reason: pointer hidden after moving focus to new window)");
-                    return true;
-                }
             }
         } else {
             surface_try_focus(server, nullptr);

@@ -20,22 +20,18 @@ bool zone_process_cursor_button(Server* server, const wlr_pointer_button_event& 
 
     if (event.button == BTN_LEFT) {
         if (pressed && mods >= Modifiers::Mod && !(mods >= Modifiers::Shift)) {
-            if (is_cursor_visible(server)) {
-                vec2 surface_pos;
-                wlr_surface* surface = nullptr;
-                if (Toplevel* toplevel = Toplevel::from(get_surface_accepting_input_at(server, get_cursor_pos(server), &surface, &surface_pos))) {
-                    server->zone.toplevel = weak_from(toplevel);
+            vec2 surface_pos;
+            wlr_surface* surface = nullptr;
+            if (Toplevel* toplevel = Toplevel::from(get_surface_accepting_input_at(server, get_cursor_pos(server), &surface, &surface_pos))) {
+                server->zone.toplevel = weak_from(toplevel);
 
-                    if (toplevel_is_interactable(toplevel)) {
-                        wlr_scene_rect_set_color(server->zone.selector, color_to_wlroots(c.zone_color_inital));
-                        wlr_scene_node_set_enabled(&server->zone.selector->node, true);
-                        server->zone.selecting = false;
-                        set_interaction_mode(server, InteractionMode::zone);
-                        zone_process_cursor_motion(server);
-                    }
+                if (toplevel_is_interactable(toplevel)) {
+                    wlr_scene_rect_set_color(server->zone.selector, color_to_wlroots(c.zone_color_inital));
+                    wlr_scene_node_set_enabled(&server->zone.selector->node, true);
+                    server->zone.selecting = false;
+                    set_interaction_mode(server, InteractionMode::zone);
+                    zone_process_cursor_motion(server);
                 }
-            } else {
-                log_warn("Tried to initiate zone interaction but cursor not visible");
             }
             return true;
         } else if (server->interaction_mode == InteractionMode::zone) {

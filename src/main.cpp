@@ -195,8 +195,8 @@ void init(Server* server, const startup_options& options)
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
-    server->cursor_manager = wlr_xcursor_manager_create(nullptr, cursor_size);
-	env_set(server, "XCURSOR_SIZE", std::to_string(cursor_size));
+    server->cursor_manager = wlr_xcursor_manager_create(getenv("XCURSOR_THEME"), cursor_theme_size);
+	env_set(server, "XCURSOR_SIZE", std::to_string(cursor_theme_size));
 
     server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, cursor_motion);
