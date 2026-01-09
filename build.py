@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import argparse
 import filecmp
+import json
+import copy
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-U", "--update",    action="store_true", help="Update")
@@ -26,6 +28,7 @@ def ensure_dir(path: Path|str):
     os.makedirs(path, exist_ok=True)
     return Path(path)
 
+cwd = Path(".")
 user_dir    = Path(os.path.expanduser("~"))
 current_dir = Path(os.curdir).absolute()
 build_dir   = ensure_dir(".build")
@@ -33,13 +36,22 @@ vendor_dir  = ensure_dir(build_dir / "3rdparty")
 
 # -----------------------------------------------------------------------------
 
-def check_process(returncode: int):
-    ok = returncode == 0
+def write_file_lazy(path: Path, data: str | bytes):
+    match data:
+        case bytes(b):
+            if not path.exists() or b != path.read_bytes():
+                path.write_bytes(b)
+        case str(t):
+            if not path.exists() or t != path.read_text():
+                path.write_text(t)
 
-    if not ok:
-        raise RuntimeError(f"cmd failed with code: {returncode}")
+# -----------------------------------------------------------------------------
 
-    return ok
+def check_process(res: subprocess.CompletedProcess[bytes]) -> subprocess.CompletedProcess[bytes]:
+    if res.returncode != 0:
+        raise RuntimeError(f"cmd failed with code: {res.returncode}")
+
+    return res
 
 def run(cmd, cwd: Path|None = None):
     if cwd:
@@ -47,59 +59,81 @@ def run(cmd, cwd: Path|None = None):
     else:
         print(f"{cmd}")
 
-    res = subprocess.run(cmd, cwd=cwd)
-
-    return check_process(res.returncode)
+    return check_process(subprocess.run(cmd, cwd=cwd))
 
 # -----------------------------------------------------------------------------
 
-def git_fetch(dir, repo, branch, dumb = False, patches: list[Path] = []):
+build_data_path = cwd / "build.json"
+
+def load_build_data():
+    with build_data_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_build_data(data):
+    write_file_lazy(build_data_path, json.dumps(data, indent=4, sort_keys=True))
+
+build_data = load_build_data()
+
+# -----------------------------------------------------------------------------
+
+def fetch_dep(dir: Path, entry) -> Path:
+    repo    = entry["repo"]
+    branch  = entry["branch"]
+    commit  = entry.get("commit", None)
+    dumb    = entry.get("dumb", False)
+    patches = entry.get("patches", [])
+    tag     = entry.get("tag", None)
+
     do_apply = False
     if not dir.exists():
-        cmd  = ["git", "clone", repo, "--branch", branch]
+        cmds = ["git", "clone", repo, "--branch", branch]
         if not dumb:
-            cmd += ["--depth", "1"]
-        cmd += [dir]
-        run(cmd)
+            cmds += ["--depth", "1", "--recursive"]
+        cmds += [str(dir)]
+        run(cmds)
+        run(["git", "fetch", "origin", branch], cwd=dir)
+        if tag is not None:
+            run(["git", "checkout", tag], cwd=dir)
+        elif commit is not None:
+            run(["git", "checkout", commit], cwd=dir)
         do_apply = True
     elif args.update:
-        run(["git", "reset", "--hard"], cwd = dir)
-        run(["git", "checkout", branch], cwd = dir)
-        run(["git", "pull", "origin", branch], cwd = dir)
+        print(f"Updating [{repo}]")
+        run(["git", "fetch", "origin", branch], cwd=dir)
+        run(["git", "reset", "--hard"], cwd=dir)
+        if tag is not None:
+            run(["git", "checkout", tag], cwd=dir)
+        else:
+            run(["git", "checkout", branch], cwd=dir)
+            run(["git", "pull", "--ff-only"], cwd=dir)
+        run(["git", "submodule", "update", "--init", "--recursive"], cwd=dir)
         do_apply = True
+
+    entry["commit"] = check_process(subprocess.run(["git", "rev-parse", "HEAD"], cwd=dir, stdout=subprocess.PIPE)).stdout.decode().strip()
 
     if do_apply:
         for patch in patches:
-            run(["git", "apply", patch], cwd = dir)
+            run(["git", "apply", (cwd / patch).absolute()], cwd=dir)
+
+    return dir
+
+deps = {}
+
+def fetch_deps():
+    lock_deps = build_data["dependencies"]
+    for name, entry in lock_deps.items():
+        dir = vendor_dir / name
+        deps[name] = copy.deepcopy(entry)
+        deps[name]["dir"] = dir
+        fetch_dep(dir, entry)
+    save_build_data(build_data)
+
+fetch_deps()
 
 # -----------------------------------------------------------------------------
-
-git_fetch(vendor_dir / "backward-cpp", "https://github.com/bombela/backward-cpp.git", "master")
-
-# -----------------------------------------------------------------------------
-
-git_fetch(vendor_dir / "magic-enum", "https://github.com/Neargye/magic_enum.git", "master")
-
-# -----------------------------------------------------------------------------
-
-git_fetch(vendor_dir / "unordered-dense", "https://github.com/martinus/unordered_dense.git", "main")
-
-# -----------------------------------------------------------------------------
-
-git_fetch(vendor_dir / "stb", "https://github.com/nothings/stb.git", "master")
-
-# -----------------------------------------------------------------------------
-
-git_fetch(vendor_dir / "glm", "https://github.com/g-truc/glm.git", "master")
-
-# -----------------------------------------------------------------------------
-
-git_fetch(vendor_dir / "sol2", "https://github.com/ThePhD/sol2.git", "develop")
 
 def build_luajit():
-    source_dir = vendor_dir / "luajit"
-
-    git_fetch(source_dir, "https://luajit.org/git/luajit.git", "v2.1", dumb=True)
+    source_dir = deps["luajit"]["dir"]
 
     if not (source_dir / "src/libluajit.a").exists() or args.update:
         run(["make", "-j"], cwd = source_dir)
@@ -108,15 +142,10 @@ build_luajit()
 
 # -----------------------------------------------------------------------------
 
-wlroots_src_dir = vendor_dir / "wlroots"
+wlroots_src_dir = deps["wlroots"]["dir"]
 
 def build_wlroots():
-    version = "0.19"   # "0.20"
-    git_ref = "0.19.2" # "master"
-
-    git_fetch(wlroots_src_dir, "https://gitlab.freedesktop.org/wlroots/wlroots.git", git_ref, patches = [
-        current_dir / "patches/wlroots/keyboard_enter.patch"
-    ])
+    version = "0.20"
 
     build_dir   = vendor_dir.absolute() / "wlroots-build"
     install_dir = vendor_dir.absolute() / "wlroots-install"
@@ -135,8 +164,7 @@ def build_wlroots():
             cmd = ["pkg-config", "--static", "--libs", f"wlroots-{version}"]
             env = os.environ.copy()
             env["PKG_CONFIG_PATH"] = str(install_dir / "lib/pkgconfig")
-            res = subprocess.run(cmd, capture_output=True, text=True, env=env)
-            check_process(res.returncode)
+            res = check_process(subprocess.run(cmd, capture_output=True, text=True, env=env))
 
             cmakelists.write(f"target_include_directories(wlroots INTERFACE include/wlroots-{version})\n")
             cmakelists.write(f"target_link_options(       wlroots INTERFACE {res.stdout.strip()})\n")
@@ -206,13 +234,10 @@ generate_wayland_protocols()
 
 # -----------------------------------------------------------------------------
 
-xwayland_satellite_dir = vendor_dir / "xwayland-satellite"
+xwayland_satellite_dir = deps["xwayland-satellite"]["dir"]
 xwayland_satellite_bin = xwayland_satellite_dir / "target/release/xwayland-satellite"
 
 def build_xwayland_satellite():
-
-    git_fetch(xwayland_satellite_dir, "https://github.com/Supreeeme/xwayland-satellite.git", "main")
-
     if not xwayland_satellite_bin.exists() or args.update:
         run(["cargo", "build", "--release"], cwd=xwayland_satellite_dir)
 
@@ -225,7 +250,10 @@ c_compiler   = "clang"
 cxx_compiler = "clang++"
 linker_type  = "MOLD"
 
-cmake_dir = build_dir / build_type.lower()
+build_name = build_type.lower()
+if args.asan:
+    build_name += "-asan"
+cmake_dir = build_dir / build_name
 
 if ((args.build or args.install) and not cmake_dir.exists()) or args.configure:
     cmd  = ["cmake", "-B", cmake_dir, "--fresh", "-G", "Ninja", f"-DVENDOR_DIR={vendor_dir}", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
@@ -257,3 +285,7 @@ if args.install:
     install_file(cmake_dir / program_name, local_bin_dir / program_name)
     install_file(current_dir / "resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
     install_file(xwayland_satellite_bin, local_bin_dir / "xwayland-satellite")
+
+# -----------------------------------------------------------------------------
+
+save_build_data(build_data)

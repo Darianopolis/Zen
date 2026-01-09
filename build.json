@@ -1,0 +1,53 @@
+{
+    "dependencies": {
+        "backward-cpp": {
+            "branch": "master",
+            "commit": "0bfd0a07a61551413ccd2ab9a9099af3bad40681",
+            "repo": "https://github.com/bombela/backward-cpp.git"
+        },
+        "glm": {
+            "branch": "master",
+            "commit": "b1fed407864225653dae04674f04014c92287a26",
+            "repo": "https://github.com/g-truc/glm.git"
+        },
+        "luajit": {
+            "branch": "v2.1",
+            "commit": "707c12bf00dafdfd3899b1a6c36435dbbf6c7022",
+            "dumb": true,
+            "repo": "https://luajit.org/git/luajit.git"
+        },
+        "magic-enum": {
+            "branch": "master",
+            "commit": "2e6e8bfff361c2c40990426c462b44af6c27820b",
+            "repo": "https://github.com/Neargye/magic_enum.git"
+        },
+        "sol2": {
+            "branch": "develop",
+            "commit": "c1f95a773c6f8f4fde8ca3efe872e7286afe4444",
+            "repo": "https://github.com/ThePhD/sol2.git"
+        },
+        "stb": {
+            "branch": "master",
+            "commit": "f1c79c02822848a9bed4315b12c8c8f3761e1296",
+            "repo": "https://github.com/nothings/stb.git"
+        },
+        "unordered-dense": {
+            "branch": "main",
+            "commit": "3234af2c03549bc85656bfd3a86993bf1cd8aef1",
+            "repo": "https://github.com/martinus/unordered_dense.git"
+        },
+        "wlroots": {
+            "branch": "master",
+            "commit": "1f0fb95e3b352a89ed08330d827d3689e055a6fb",
+            "patches": [
+                "patches/wlroots/keyboard_enter.patch"
+            ],
+            "repo": "https://gitlab.freedesktop.org/wlroots/wlroots.git"
+        },
+        "xwayland-satellite": {
+            "branch": "main",
+            "commit": "bc47ef59501556fc2584155ddef76493752dd727",
+            "repo": "https://github.com/Supreeeme/xwayland-satellite.git"
+        }
+    }
+}
