@@ -395,7 +395,6 @@ std::string duration_to_string(std::chrono::duration<f64, std::nano> dur);
 
 // -----------------------------------------------------------------------------
 
-wlr_buffer* buffer_from_pixels_scaled(wlr_allocator* allocator, wlr_renderer* renderer, u32 upload_format, u32 stride, u32 width, u32 height, const void* data, u32 dst_width, u32 dst_height);
 wlr_buffer* buffer_from_pixels(wlr_allocator*, wlr_renderer*, u32 format, u32 stride, u32 width, u32 height, const void* data);
 
 // -----------------------------------------------------------------------------

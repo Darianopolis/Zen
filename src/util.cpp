@@ -74,50 +74,6 @@ vec2 constrain_to_region(const pixman_region32_t* region, vec2 p1, vec2 p2, bool
 
 // -----------------------------------------------------------------------------
 
-static
-std::optional<pixman_format_code_t> convert_drm_to_pixman_format(u32 drm_format)
-{
-    switch (drm_format) {
-        case DRM_FORMAT_ARGB8888: return PIXMAN_a8r8g8b8;
-        case DRM_FORMAT_XBGR8888: return PIXMAN_x8b8g8r8;
-        case DRM_FORMAT_XRGB8888: return PIXMAN_x8r8g8b8;
-        case DRM_FORMAT_ABGR8888: return PIXMAN_a8b8g8r8;
-        case DRM_FORMAT_RGBA8888: return PIXMAN_r8g8b8a8;
-        case DRM_FORMAT_RGBX8888: return PIXMAN_r8g8b8x8;
-        case DRM_FORMAT_BGRA8888: return PIXMAN_b8g8r8a8;
-        case DRM_FORMAT_BGRX8888: return PIXMAN_b8g8r8x8;
-    }
-
-    return std::nullopt;
-}
-
-wlr_buffer* buffer_from_pixels_scaled(wlr_allocator* allocator, wlr_renderer* renderer, u32 upload_format, u32 stride, u32 width, u32 height, const void* data, u32 dst_width, u32 dst_height)
-{
-    auto pixman_fmt = convert_drm_to_pixman_format(upload_format);
-    if (!pixman_fmt) {
-        log_error("DRM format unsupported");
-        return nullptr;
-    }
-
-    std::vector<uint32_t> dst_bits(dst_width * dst_height);
-    auto src = pixman_image_create_bits(*pixman_fmt, width, height, (uint32_t*)data, width * 4);
-    defer { pixman_image_unref(src); };
-    auto dst = pixman_image_create_bits(*pixman_fmt, dst_width, dst_height, dst_bits.data(), dst_width * 4);
-
-    defer { pixman_image_unref(dst); };
-
-    pixman_image_set_filter(src, PIXMAN_FILTER_BEST, nullptr, 0);
-    pixman_transform tform;
-    pixman_transform_init_scale(&tform,
-        pixman_double_to_fixed(f64(width) / dst_width),
-        pixman_double_to_fixed(f64(height) / dst_height));
-    pixman_image_set_transform(src, &tform);
-
-    pixman_image_composite32(PIXMAN_OP_SRC, src, nullptr, dst, 0, 0, 0, 0, 0, 0, dst_width, dst_height);
-
-    return buffer_from_pixels(allocator, renderer, upload_format, dst_width * 4, dst_width, dst_height, pixman_image_get_data(dst));
-}
-
 wlr_buffer* buffer_from_pixels(wlr_allocator* allocator, wlr_renderer* renderer, u32 upload_format, u32 stride, u32 width, u32 height, const void* data)
 {
     auto* upload_texture = wlr_texture_from_pixels(renderer, upload_format, stride, width, height, data);

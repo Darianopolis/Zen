@@ -195,9 +195,6 @@ void init(Server* server, const startup_options& options)
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
-    server->cursor_manager = wlr_xcursor_manager_create(getenv("XCURSOR_THEME"), cursor_theme_size);
-	env_set(server, "XCURSOR_SIZE", std::to_string(cursor_theme_size));
-
     server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, cursor_motion);
     server->listeners.listen(&server->cursor->events.motion_absolute, server, cursor_motion_absolute);
@@ -205,11 +202,23 @@ void init(Server* server, const startup_options& options)
     server->listeners.listen(&server->cursor->events.axis,            server, cursor_axis);
     server->listeners.listen(&server->cursor->events.frame,           server, cursor_frame);
 
+    {
+        auto xcursor_size_env = "XCURSOR_SIZE";
+        auto xcursor_size_str = getenv(xcursor_size_env) ?: "";
+        u32 size;
+        if (xcursor_size_str[0] == '\0' || !std::from_chars(xcursor_size_str, nullptr, size))  {
+            log_warn("Using fallback X-Cursor size: {}", xcursor_size);
+            size = xcursor_size;
+        }
+        server->cursor_manager = wlr_xcursor_manager_create(getenv("XCURSOR_THEME"), size);
+        env_set(server, xcursor_size_env, std::to_string(size));
+    }
+
     server->pointer.debug_visual_half_extent = 4;
     server->pointer.debug_visual = wlr_scene_rect_create(server->layers[Strata::debug], server->pointer.debug_visual_half_extent * 2, server->pointer.debug_visual_half_extent * 2, color_to_wlroots(fvec4{}));
     wlr_scene_node_set_enabled(&server->pointer.debug_visual->node, false);
 
-    init_cursor_state(server);
+    update_cursor_state(server);
 
     // Zone window management
 
