@@ -425,7 +425,7 @@ struct Surface : WeaklyReferenceable
 
     struct {
         bool surface_set;
-        Weak<CursorSurface> surface;
+        std::variant<Weak<CursorSurface>, wp_cursor_shape_device_v1_shape> surface;
     } cursor;
 
     static Surface* from_data(void* data)
@@ -648,8 +648,9 @@ u32 get_num_pointer_buttons_down(Server*);
 void process_cursor_resize(Server*);
 void process_cursor_motion(Server*, u32 time_msecs, wlr_input_device*, vec2 delta, vec2 rel, vec2 rel_unaccel);
 
-void seat_request_set_cursor(  wl_listener*, void*);
-void seat_pointer_focus_change(wl_listener*, void*);
+void seat_request_set_cursor(      wl_listener*, void*);
+void seat_request_set_cursor_shape(wl_listener*, void*);
+void seat_pointer_focus_change(    wl_listener*, void*);
 
 void cursor_motion(         wl_listener*, void*);
 void cursor_motion_absolute(wl_listener*, void*);

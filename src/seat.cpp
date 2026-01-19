@@ -270,22 +270,28 @@ void update_cursor_state(Server* server)
     server->pointer.cursor_is_visible = true;
     if (server->interaction_mode == InteractionMode::passthrough) {
         if (Surface* focused_surface = Surface::from(server->seat->pointer_state.focused_surface); focused_surface && focused_surface->cursor.surface_set) {
-            CursorSurface* cursor_surface = focused_surface->cursor.surface.get();
+            if (std::holds_alternative<Weak<CursorSurface>>(focused_surface->cursor.surface)) {
+                CursorSurface* cursor_surface = std::get<Weak<CursorSurface>>(focused_surface->cursor.surface).get();
 
-            bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
-            if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
-                // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
-                server->pointer.cursor_is_visible = visible;
+                bool visible = cursor_surface && cursor_surface_is_visible(cursor_surface);
+                if (visible || server->seat->pointer_state.focused_client == server->seat->keyboard_state.focused_client) {
+                    // log_debug("Cursor state: Restoring cursor {}", cursor_surface_to_string(cursor_surface));
+                    server->pointer.cursor_is_visible = visible;
 
-                if (cursor_surface) {
-                    wlr_cursor_set_surface(server->cursor, cursor_surface->wlr_surface, cursor_surface->hotspot.x, cursor_surface->hotspot.y);
+                    if (cursor_surface) {
+                        wlr_cursor_set_surface(server->cursor, cursor_surface->wlr_surface, cursor_surface->hotspot.x, cursor_surface->hotspot.y);
+                    } else {
+                        wlr_cursor_set_surface(server->cursor, nullptr, 0, 0);
+                    }
+                    debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
                 } else {
-                    wlr_cursor_set_surface(server->cursor, nullptr, 0, 0);
+                    // log_debug("Cursor state: Client not allowed to hide cursor, using default");
+                    wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+                    debug_visual_color = {1, 1, 0, 0.5};
                 }
-                debug_visual_color = visible ? fvec4{0, 1, 0, 0.5} : fvec4{1, 0, 0, 0.5};
             } else {
-                // log_debug("Cursor state: Client not allowed to hide cursor, using default");
-                wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, "default");
+                wp_cursor_shape_device_v1_shape shape = std::get<wp_cursor_shape_device_v1_shape>(focused_surface->cursor.surface);
+                wlr_cursor_set_xcursor(server->cursor, server->cursor_manager, wlr_cursor_shape_v1_name(shape));
                 debug_visual_color = {1, 1, 0, 0.5};
             }
         } else {
@@ -348,6 +354,25 @@ void seat_request_set_cursor(wl_listener* listener, void* data)
     }
 
     requestee_surface->cursor.surface = weak_from(cursor_surface);
+    requestee_surface->cursor.surface_set = true;
+
+    update_cursor_state(server);
+}
+
+void seat_request_set_cursor_shape(wl_listener* listener, void* data)
+{
+    Server* server = listener_userdata<Server*>(listener);
+    wlr_cursor_shape_manager_v1_request_set_shape_event* event = static_cast<wlr_cursor_shape_manager_v1_request_set_shape_event*>(data);
+
+    Surface* requestee_surface = Surface::from(server->seat->pointer_state.focused_surface);
+    if (server->seat->pointer_state.focused_client != event->seat_client || !requestee_surface) {
+#if NOISY_POINTERS
+        log_warn("Cursor request from unfocused client {}, ignoring...", client_to_string(event->seat_client->client));
+#endif
+        return;
+    }
+
+    requestee_surface->cursor.surface = event->shape;
     requestee_surface->cursor.surface_set = true;
 
     update_cursor_state(server);

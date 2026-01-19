@@ -97,7 +97,7 @@ def fetch_dep(dir: Path, entry) -> Path:
         elif commit is not None:
             run(["git", "checkout", commit], cwd=dir)
         do_apply = True
-    elif args.update:
+    elif args.update or not commit:
         print(f"Updating [{repo}]")
         run(["git", "fetch", "origin", branch], cwd=dir)
         run(["git", "reset", "--hard"], cwd=dir)

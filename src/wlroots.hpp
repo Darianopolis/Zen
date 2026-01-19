@@ -69,6 +69,7 @@ extern "C" {
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/types/wlr_output_management_v1.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
 
 // interface
 #include <wlr/interfaces/wlr_keyboard.h>

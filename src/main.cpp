@@ -195,6 +195,9 @@ void init(Server* server, const startup_options& options)
     server->cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(server->cursor, server->output_layout);
 
+    auto cursor_shape_manager = wlr_cursor_shape_manager_v1_create(server->display, 2);
+    server->listeners.listen(&cursor_shape_manager->events.request_set_shape, server, seat_request_set_cursor_shape);
+
     server->interaction_mode = InteractionMode::passthrough;
     server->listeners.listen(&server->cursor->events.motion,          server, cursor_motion);
     server->listeners.listen(&server->cursor->events.motion_absolute, server, cursor_motion_absolute);

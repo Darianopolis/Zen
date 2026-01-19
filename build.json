@@ -7,7 +7,7 @@
         },
         "glm": {
             "branch": "master",
-            "commit": "b1fed407864225653dae04674f04014c92287a26",
+            "commit": "e7970a8b26732f1b0df9690f7180546f8c30e48e",
             "repo": "https://github.com/g-truc/glm.git"
         },
         "luajit": {
@@ -46,7 +46,7 @@
         },
         "xwayland-satellite": {
             "branch": "main",
-            "commit": "bc47ef59501556fc2584155ddef76493752dd727",
+            "commit": "ed1cef792b4def3321ff9ab5479df09609f17a69",
             "repo": "https://github.com/Supreeeme/xwayland-satellite.git"
         }
     }
