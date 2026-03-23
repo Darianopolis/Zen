@@ -12,13 +12,13 @@
         },
         "luajit": {
             "branch": "v2.1",
-            "commit": "707c12bf00dafdfd3899b1a6c36435dbbf6c7022",
+            "commit": "659a61693aa3b87661864ad0f12eee14c865cd7f",
             "dumb": true,
             "repo": "https://luajit.org/git/luajit.git"
         },
         "magic-enum": {
             "branch": "master",
-            "commit": "2e6e8bfff361c2c40990426c462b44af6c27820b",
+            "commit": "7d87efb4a3dddbbe8caa9ca14eff05ede1102ab8",
             "repo": "https://github.com/Neargye/magic_enum.git"
         },
         "sol2": {
@@ -28,17 +28,17 @@
         },
         "stb": {
             "branch": "master",
-            "commit": "f1c79c02822848a9bed4315b12c8c8f3761e1296",
+            "commit": "28d546d5eb77d4585506a20480f4de2e706dff4c",
             "repo": "https://github.com/nothings/stb.git"
         },
         "unordered-dense": {
             "branch": "main",
-            "commit": "3234af2c03549bc85656bfd3a86993bf1cd8aef1",
+            "commit": "7b55cab8418da1603496462ce3ccdb4cb1dc3368",
             "repo": "https://github.com/martinus/unordered_dense.git"
         },
         "wlroots": {
             "branch": "master",
-            "commit": "1f0fb95e3b352a89ed08330d827d3689e055a6fb",
+            "commit": "fd870f6d27601063bad2219308a80775a9b9a12b",
             "patches": [
                 "patches/wlroots/keyboard_enter.patch"
             ],
@@ -46,7 +46,7 @@
         },
         "xwayland-satellite": {
             "branch": "main",
-            "commit": "ed1cef792b4def3321ff9ab5479df09609f17a69",
+            "commit": "a879e5e0896a326adc79c474bf457b8b99011027",
             "repo": "https://github.com/Supreeeme/xwayland-satellite.git"
         }
     }
