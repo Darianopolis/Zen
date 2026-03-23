@@ -163,8 +163,27 @@ void output_new(wl_listener* listener, void* data)
         wlr_output_state_init(&state);
         wlr_output_state_set_enabled(&state, true);
 
-        if (wlr_output_mode* mode = wlr_output_preferred_mode(wlr_output)) {
-            wlr_output_state_set_mode(&state, mode);
+        wlr_output_mode* best_mode = nullptr;
+        {
+            wlr_output_mode* mode;
+            wl_list_for_each(mode, &wlr_output->modes, link) {
+                log_debug("Available mode: {}x{}@{:.2f}Hz", mode->width, mode->height, mode->refresh / 1000.0);
+                if (!best_mode) {
+                    best_mode = mode;
+                } else if (mode->width >= best_mode->width && mode->height >= best_mode->height) {
+                    if (   mode->width   > best_mode->width
+                        || mode->height  > best_mode->height
+                        || mode->refresh > best_mode->refresh)
+                    {
+                        best_mode = mode;
+                    }
+                }
+            }
+        }
+
+        if (best_mode) {
+            log_info("Selecting mode: {}x{}@{:.2f}Hz", best_mode->width, best_mode->height, best_mode->refresh / 1000.0);
+            wlr_output_state_set_mode(&state, best_mode);
         }
 
         if (wlr_output->adaptive_sync_supported) {
