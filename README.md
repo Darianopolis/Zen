@@ -56,6 +56,7 @@ Run with `--help` to see command line options
 - xcb-util-errors
 - mold
 - clang (C++26 capable version at minimum)
+- xwayland-satellite
 
 #### Quickstart
 
