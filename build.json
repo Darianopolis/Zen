@@ -13,8 +13,7 @@
         "luajit": {
             "branch": "v2.1",
             "commit": "18b087cd2cd4ddc4a79782bf155383a689d5093d",
-            "dumb": true,
-            "repo": "https://luajit.org/git/luajit.git"
+            "repo": "https://github.com/LuaJIT/LuaJIT.git"
         },
         "magic-enum": {
             "branch": "master",
@@ -39,9 +38,6 @@
         "wlroots": {
             "branch": "master",
             "commit": "f053f77dca515c005aabbf6ef4fe86bdb13d37d2",
-            "patches": [
-                "patches/wlroots/keyboard_enter.patch"
-            ],
             "repo": "https://gitlab.freedesktop.org/wlroots/wlroots.git"
         }
     }

@@ -6,8 +6,8 @@ from pathlib import Path
 import subprocess
 import argparse
 import filecmp
-import json
-import copy
+
+from scripts.utils import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-U", "--update",    action="store_true", help="Update")
@@ -24,26 +24,11 @@ program_name = "zen"
 
 # -----------------------------------------------------------------------------
 
-def ensure_dir(path: Path|str):
-    os.makedirs(path, exist_ok=True)
-    return Path(path)
-
 cwd = Path(".")
 user_dir    = Path(os.path.expanduser("~"))
 current_dir = Path(os.curdir).absolute()
 build_dir   = ensure_dir(".build")
 vendor_dir  = ensure_dir(build_dir / "3rdparty")
-
-# -----------------------------------------------------------------------------
-
-def write_file_lazy(path: Path, data: str | bytes):
-    match data:
-        case bytes(b):
-            if not path.exists() or b != path.read_bytes():
-                path.write_bytes(b)
-        case str(t):
-            if not path.exists() or t != path.read_text():
-                path.write_text(t)
 
 # -----------------------------------------------------------------------------
 
@@ -63,77 +48,13 @@ def run(cmd, cwd: Path|None = None):
 
 # -----------------------------------------------------------------------------
 
-build_data_path = cwd / "build.json"
-
-def load_build_data():
-    with build_data_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_build_data(data):
-    write_file_lazy(build_data_path, json.dumps(data, indent=4, sort_keys=True))
-
-build_data = load_build_data()
-
-# -----------------------------------------------------------------------------
-
-def fetch_dep(dir: Path, entry) -> Path:
-    repo    = entry["repo"]
-    branch  = entry["branch"]
-    commit  = entry.get("commit", None)
-    dumb    = entry.get("dumb", False)
-    patches = entry.get("patches", [])
-    tag     = entry.get("tag", None)
-
-    do_apply = False
-    if not dir.exists():
-        cmds = ["git", "clone", repo, "--branch", branch]
-        if not dumb:
-            cmds += ["--depth", "1", "--recursive"]
-        cmds += [str(dir)]
-        run(cmds)
-        run(["git", "fetch", "origin", branch], cwd=dir)
-        if tag is not None:
-            run(["git", "checkout", tag], cwd=dir)
-        elif commit is not None:
-            run(["git", "checkout", commit], cwd=dir)
-        do_apply = True
-    elif args.update or not commit:
-        print(f"Updating [{repo}]")
-        run(["git", "fetch", "origin", branch], cwd=dir)
-        run(["git", "reset", "--hard"], cwd=dir)
-        if tag is not None:
-            run(["git", "checkout", tag], cwd=dir)
-        else:
-            run(["git", "checkout", branch], cwd=dir)
-            run(["git", "pull", "--ff-only"], cwd=dir)
-        run(["git", "submodule", "update", "--init", "--recursive"], cwd=dir)
-        do_apply = True
-
-    entry["commit"] = check_process(subprocess.run(["git", "rev-parse", "HEAD"], cwd=dir, stdout=subprocess.PIPE)).stdout.decode().strip()
-
-    if do_apply:
-        for patch in patches:
-            run(["git", "apply", (cwd / patch).absolute()], cwd=dir)
-
-    return dir
-
-deps = {}
-
-def fetch_deps():
-    lock_deps = build_data["dependencies"]
-    for name, entry in lock_deps.items():
-        dir = vendor_dir / name
-        deps[name] = copy.deepcopy(entry)
-        deps[name]["dir"] = dir
-        fetch_dep(dir, entry)
-    save_build_data(build_data)
-
-fetch_deps()
+import scripts.deps as deps
+dep_dirs = deps.fetch_deps(vendor_dir, cwd / "build.json", args.update)
 
 # -----------------------------------------------------------------------------
 
 def build_luajit():
-    source_dir = deps["luajit"]["dir"]
+    source_dir = dep_dirs["luajit"]
 
     if not (source_dir / "src/libluajit.a").exists() or args.update:
         run(["make", "-j"], cwd = source_dir)
@@ -142,10 +63,10 @@ build_luajit()
 
 # -----------------------------------------------------------------------------
 
-wlroots_src_dir = deps["wlroots"]["dir"]
+wlroots_src_dir = dep_dirs["wlroots"]
 
 def build_wlroots():
-    version = "0.20"
+    version = "0.21"
 
     build_dir   = vendor_dir.absolute() / "wlroots-build"
     install_dir = vendor_dir.absolute() / "wlroots-install"
@@ -273,7 +194,3 @@ if args.install:
 
     install_file(cmake_dir / program_name, local_bin_dir / program_name)
     install_file(current_dir / "resources/portals.conf", xdg_portal_dir / f"{program_name}-portals.conf")
-
-# -----------------------------------------------------------------------------
-
-save_build_data(build_data)
