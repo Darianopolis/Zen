@@ -86,6 +86,6 @@ void env_set(Server* server, std::string_view name, std::optional<std::string_vi
     }
 
     if (!server->session.is_nested) {
-        spawn(server, "systemctl", {"systemctl", "--user", "import-environment", name});
+        spawn(server, "systemctl", {{"systemctl", "--user", "import-environment", name}});
     }
 }
