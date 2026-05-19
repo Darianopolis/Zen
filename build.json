@@ -17,7 +17,7 @@
         },
         "magic-enum": {
             "branch": "master",
-            "commit": "7d87efb4a3dddbbe8caa9ca14eff05ede1102ab8",
+            "commit": "9f19f78a7d726af84761ecd6d8414613507a95e6",
             "repo": "https://github.com/Neargye/magic_enum.git"
         },
         "sol2": {
@@ -37,7 +37,7 @@
         },
         "wlroots": {
             "branch": "master",
-            "commit": "f053f77dca515c005aabbf6ef4fe86bdb13d37d2",
+            "commit": "9ecddaa6734d8602f62b340aa766835dcbfe1358",
             "repo": "https://gitlab.freedesktop.org/wlroots/wlroots.git"
         }
     }
