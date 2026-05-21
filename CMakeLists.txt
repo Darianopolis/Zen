@@ -119,4 +119,5 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     luajit
     stb-image
     unordered_dense::unordered_dense
+    glm::glm
     )
